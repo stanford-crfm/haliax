@@ -8,7 +8,7 @@ version = "1.0"
 authors = [
   { name="David Hall", email="dlwh@cs.stanford.edu" },
 ]
-description = "Named Tensors for legible deep learning in JAX"
+description = "Named Tensors for Legible Deep Learning in JAX"
 readme = "README.md"
 requires-python = ">=3.10"
 classifiers = [
