@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "levanter"
+name = "haliax"
 version = "1.0"
 authors = [
   { name="David Hall", email="dlwh@cs.stanford.edu" },
@@ -24,48 +24,20 @@ dependencies = [
     # we'll require that you install jax yourself, since the extras vary by system.
     # jax = {version = ">=0.4.10,<0.5.0"}
     "equinox~=0.9.0",
-    "transformers>=4.22.0",
-    "optax",
-    "wandb",
-    "pyrallis>=0.3.1",
-    "pyarrow>=11.0.0",
-    "zstandard>=0.20.0",
-    "datasets==2.11.0",
-    "gcsfs==2023.3.0",
-    "braceexpand>=0.1.7",
-    "jmp>=0.0.3",
-    "fsspec==2023.3.0", # pin this to make gcsfs happy
-    "tensorstore>=0.1.36",
-    "pytimeparse>=1.1.8",
-    "humanfriendly==10.0",
-    "requests",
     "safetensors[numpy]",
-    "matplotlib>=3.7.0",
-    "tblib>=1.7.0,<2.0.0",
-    "dataclasses_json",
-    "ray[default]",
-    "rich>=13",
 ]
 
-[tool.hatch.build]
-include = [
-  "config/*.yaml", "config/*/*.yaml"
-]
-dev-mode-dirs = [".", "src"]
 
 [tool.hatch.build.sources]
-"src/levanter" = "levanter"
 "src/haliax" = "haliax"
-"config" = "levanter/config"
-
 
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/levanter", "src/haliax", "config"]
+packages = ["src/haliax"]
 
 [project.urls]
-"Homepage" = "https://github.com/stanford-crfm/levanter"
-"Bug Tracker" = "https://github.com/stanford-crfm/levanter/issues"
+"Homepage" = "https://github.com/stanford-crfm/haliax"
+"Bug Tracker" = "https://github.com/stanford-crfm/haliax/issues/"
 
 
 [tool.black]
