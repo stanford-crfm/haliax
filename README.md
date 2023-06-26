@@ -10,7 +10,7 @@ as in NumPy, PyTorch, etc. Here's a minimal attention module implementation in H
 please see the [Haliax tutorial](https://colab.research.google.com/drive/1TiTcQQ4V5mopbgCu1SVl-oqJtXn7rFnC).
 
 ```python
-# We use the excellent [Equinox](https://github.com/patrick-kidger/equinox) library for its module system and tree transformations.
+
 import equinox as eqx
 import jax
 import jax.numpy as jnp
@@ -70,6 +70,8 @@ class Attention(eqx.Module):
     x = self.proj_answer(answers)
     return x
 ```
+
+(We use the excellent [Equinox](https://github.com/patrick-kidger/equinox) library for its module system and tree transformations.)
 
 Haliax is built to be fast: the generated code (using JAX/XLA) should be as fast as handwritten JAX code. Haliax is also built to be scalable: it
 can support FSDP and Tensor Parallelism with just a few lines of code. Haliax's powers [Levanter](https://gihub.com/stanford-crfm/levanter),
