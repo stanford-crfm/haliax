@@ -1,9 +1,11 @@
-site_name: CRFM Levanter
-repo_url: https://github.com/stanford-crfm/levanter/
+site_name: Haliax
+repo_url: https://github.com/stanford-crfm/haliax/
 edit_uri: blob/main/docs/
 theme:
-  name: readthedocs
+  name: material
   highlightjs: false
+  features:
+    - content.code.copy
 plugins:
   - search
   - mkdocstrings:
@@ -32,23 +34,20 @@ markdown_extensions:
   - pymdownx.details  # Allowing hidden expandable regions denoted by ???
   - pymdownx.snippets: # Include one Markdown file into another
       base_path: docs
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
   - admonition
   - toc:
       permalink: "¤"  # Adds a clickable permalink to each section heading
       toc_depth: 4
 watch:
   - src
-  - scripts
-  - infra
-  - config
+  - docs
 nav:
   - 'Home': 'index.md'
-  - 'User Guide': 'Getting-Started-Training.md'
-  - Haliax: 'Haliax.md'
-  - 'Installation and Setup':
-      - 'Installation.md'
-      - 'Getting-Started-TPU-VM.md'
-      - 'Getting-Started-CUDA.md'
-  - Technical Documentation:
-      - 'Overview.md'
-      - 'design/Data-Loader-Design.md'
+  - Indexing and Slicing: 'indexing.md'

@@ -28,6 +28,18 @@ dependencies = [
     "chex",
 ]
 
+[project.optional-dependencies]
+dev=["pytest >= 7.4.0", "mypy >= 0.910", "mkdocs >= 1.4.3", "mkdocs-material >= 7.3.3", "mkdocstrings >= 0.22.0",
+    "mkdocs-literate-nav >= 0.6.0", "mkdocs-macros-plugin >= 0.7.0", "mkdocstrings-python >= 1.1.2",
+    "mkdocs-include-markdown-plugin",
+    "pymdown-extensions",
+    "pygments",
+    "pymdown-extensions",
+]
+
+
+
+
 
 [tool.hatch.build.sources]
 "src/haliax" = "haliax"

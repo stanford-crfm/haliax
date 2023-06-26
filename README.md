@@ -1,5 +1,5 @@
-# Haliax
 <!--haliax-intro-start-->
+# Haliax
 
 > *Though you don’t seem to be much for listening, it’s best to be careful. If you managed to catch hold of even just a piece of my name, you’d have all manner of power over me.*<br/>
 > — Patrick Rothfuss, *The Name of the Wind*

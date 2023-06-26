@@ -1,17 +1,11 @@
 {%
-   include-markdown "../README.md"
-   start="<!--intro-start-->"
-   end="<!--intro-end-->"
+include-markdown "../README.md"
+start="<!--haliax-intro-start-->"
+end="<!--haliax-intro-end-->"
 %}
 
-The code is released on GitHub: [Levanter Repository](https://github.com/stanford-crfm/levanter/).
 
-To get started, please refer to the User Guide's chapters:
+The code is released on GitHub: [Haliax Repository](https://github.com/stanford-crfm/haliax/).
 
-- [Getting Started with CUDA](Getting-Started-CUDA.md)
-- [Getting Started with TPU](Getting-Started-TPU-VM.md)
-- [Getting Started to launch model training](Getting-Started-Training.md)
 
-For a more detailed dive into how Levanter works, please refer to the [Overview](Overview.md).
-
-To contribute, please refer to the [Contributing Guide](https://github.com/stanford-crfm/levanter/blob/main/CONTRIBUTING.md).
+To contribute, please refer to the [Contributing Guide](https://github.com/stanford-crfm/haliax/blob/main/CONTRIBUTING.md).
