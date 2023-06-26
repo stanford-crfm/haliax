@@ -7,9 +7,8 @@ name = "haliax"
 version = "1.0"
 authors = [
   { name="David Hall", email="dlwh@cs.stanford.edu" },
-  {name="Ivan Zhou", email="ivanz@stanford.edu"}
 ]
-description = "Scalable Training for Foundation Models with Named Tensors and JAX"
+description = "Named Tensors for legible deep learning in JAX"
 readme = "README.md"
 requires-python = ">=3.10"
 classifiers = [
@@ -36,9 +35,6 @@ dev=["pytest >= 7.4.0", "mypy >= 0.910", "mkdocs >= 1.4.3", "mkdocs-material >= 
     "pygments",
     "pymdown-extensions",
 ]
-
-
-
 
 
 [tool.hatch.build.sources]
