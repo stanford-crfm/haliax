@@ -1,0 +1,53 @@
+site_name: Haliax
+repo_url: https://github.com/stanford-crfm/haliax/
+edit_uri: blob/main/docs/
+theme:
+  name: material
+  highlightjs: false
+  features:
+    - content.code.copy
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_root_heading: true
+            show_signature_annotations: true
+            show_bases: false
+            show_source: false
+            show_root_full_path: false
+            show_if_no_docstring: true
+            members_order: source
+            merge_init_into_class: true
+            docstring_options:
+              ignore_init_summary: true
+
+  - include-markdown
+extra_css:
+  - docstrings.css
+markdown_extensions:
+  - pymdownx.magiclink
+  - pymdownx.arithmatex: # Render LaTeX via MathJax
+      generic: true
+  - pymdownx.superfences  # Seems to enable syntax highlighting when used with the Material theme.
+  - pymdownx.details  # Allowing hidden expandable regions denoted by ???
+  - pymdownx.snippets: # Include one Markdown file into another
+      base_path: docs
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - admonition
+  - toc:
+      permalink: "¤"  # Adds a clickable permalink to each section heading
+      toc_depth: 4
+watch:
+  - src
+  - docs
+nav:
+  - 'Home': 'index.md'
+  - Indexing and Slicing: 'indexing.md'

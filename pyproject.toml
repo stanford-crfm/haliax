@@ -1,7 +1,58 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "haliax"
+version = "1.0"
+authors = [
+  { name="David Hall", email="dlwh@cs.stanford.edu" },
+]
+description = "Named Tensors for Legible Deep Learning in JAX"
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS :: MacOS X",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+]
+dependencies = [
+    # we'll require that you install jax yourself, since the extras vary by system.
+    # jax = {version = ">=0.4.10,<0.5.0"}
+    "equinox~=0.9.0",
+    "safetensors[numpy]",
+    "chex",
+]
+
+[project.optional-dependencies]
+dev=["pytest >= 7.4.0", "mypy >= 0.910", "mkdocs >= 1.4.3", "mkdocs-material >= 7.3.3", "mkdocstrings >= 0.22.0",
+    "mkdocs-literate-nav >= 0.6.0", "mkdocs-macros-plugin >= 0.7.0", "mkdocstrings-python >= 1.1.2",
+    "mkdocs-include-markdown-plugin",
+    "pymdown-extensions",
+    "pygments",
+    "pymdown-extensions",
+]
+
+
+[tool.hatch.build.sources]
+"src/haliax" = "haliax"
+
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/haliax"]
+
+[project.urls]
+"Homepage" = "https://github.com/stanford-crfm/haliax"
+"Bug Tracker" = "https://github.com/stanford-crfm/haliax/issues/"
+
+
 [tool.black]
 line-length = 119
-target-version = ["py36", "py37", "py38"]
-experimental_string_processing = true
+target-version = ["py310"]
+preview = true
 
 [tool.isort]
 profile = "black"
