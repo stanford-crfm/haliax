@@ -144,6 +144,17 @@ def causal_mask(QPos: Axis, KPos: Axis) -> NamedArray:
     return haliax.arange(QPos).broadcast_axis(KPos) >= haliax.arange(KPos).broadcast_axis(QPos)
 
 
+def prefix_lm_mask(QSeqLen: Axis, KSeqLen: Axis, prefix_len: int) -> NamedArray:
+    """Mask for the PrefixLM objective: fully connected before prefix_len, then causal after."""
+    assert prefix_len >= 0
+    assert prefix_len <= KSeqLen.size
+
+    causal = causal_mask(QSeqLen, KSeqLen)
+    prefix = haliax.arange(KSeqLen) < prefix_len
+
+    return prefix | causal
+
+
 def dropout_mask(axes: AxisSpec, dropout_rate: float, *, key: PRNGKey) -> NamedArray:
     """
     Really just an alias for haliax.random.bernoulli. You can pass in e.g. Head, QPos and KPos
