@@ -42,6 +42,8 @@ packages = ["haliax", "haliax.*"]
 [options.package_data]
 haliax = ["src/haliax/*"]
 
+[tool.isort]
+profile = "black"
 
 [project.urls]
 "Homepage" = "https://github.com/stanford-crfm/haliax"

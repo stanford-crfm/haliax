@@ -1,10 +1,9 @@
-from typing import Optional, Protocol, Sequence
+from typing import Optional, Sequence
 
 import jax
 import jax.numpy as jnp
 
 import haliax.random as random
-from haliax import nn as nn
 from haliax import tree_util as tree_util
 
 from .core import (
@@ -32,7 +31,14 @@ from .hof import fold, scan, vmap
 from .ops import clip, isclose, pad_left, trace, tril, triu, where
 from .partitioning import auto_sharded, axis_mapping, named_jit, shard_with_axis_mapping
 from .types import Axis, AxisSelection, AxisSelector, AxisSpec
-from .wrap import wrap_axiswise_call, wrap_elemwise_binary, wrap_elemwise_unary, wrap_reduction_call
+from .wrap import (
+    ReductionFunction,
+    SimpleReductionFunction,
+    wrap_axiswise_call,
+    wrap_elemwise_binary,
+    wrap_elemwise_unary,
+    wrap_reduction_call,
+)
 
 
 # creation routines
@@ -53,10 +59,14 @@ def ones(shape: AxisSpec, dtype=None) -> NamedArray:
 def full(shape: AxisSpec, fill_value, dtype=None) -> NamedArray:
     """Creates a NamedArray with all elements set to `fill_value`"""
     if isinstance(shape, Axis):
-        return NamedArray(jnp.full(shape=shape.size, fill_value=fill_value, dtype=dtype), (shape,))
+        return NamedArray(
+            jnp.full(shape=shape.size, fill_value=fill_value, dtype=dtype), (shape,)
+        )
     else:
         x_shape = tuple(x.size for x in shape)
-        return NamedArray(jnp.full(shape=x_shape, fill_value=fill_value, dtype=dtype), tuple(shape))
+        return NamedArray(
+            jnp.full(shape=x_shape, fill_value=fill_value, dtype=dtype), tuple(shape)
+        )
 
 
 def zeros_like(a: NamedArray, dtype=None) -> NamedArray:
@@ -87,7 +97,9 @@ def stack(axis: AxisSelector, arrays: Sequence[NamedArray]) -> NamedArray:
     if len(arrays) == 0:
         return zeros(axis)
     arrays = [a.rearrange(arrays[0].axes) for a in arrays]
-    return NamedArray(jnp.stack([a.array for a in arrays], axis=0), (axis,) + arrays[0].axes)
+    return NamedArray(
+        jnp.stack([a.array for a in arrays], axis=0), (axis,) + arrays[0].axes
+    )
 
 
 def concatenate(axis: AxisSelector, arrays: Sequence[NamedArray]) -> NamedArray:
@@ -110,7 +122,9 @@ def concatenate(axis: AxisSelector, arrays: Sequence[NamedArray]) -> NamedArray:
         raise ValueError(f"Axis {axis.name} not found in 0th array {arrays[0]}")
 
     new_axes = arrays[0].axes[:axis_index] + (axis,) + arrays[0].axes[axis_index + 1 :]
-    return NamedArray(jnp.concatenate([a.array for a in arrays], axis=axis_index), new_axes)
+    return NamedArray(
+        jnp.concatenate([a.array for a in arrays], axis=axis_index), new_axes
+    )
 
 
 # elementwise unary operations
@@ -178,25 +192,15 @@ tanh = wrap_elemwise_unary(jnp.tanh)
 trunc = wrap_elemwise_unary(jnp.trunc)
 
 # Reduction functions
-
-
-class ReductionFunction(Protocol):
-    def __call__(
-        self, array: NamedArray, axis: Optional[AxisSelection] = None, where: Optional[NamedArray] = None, **kwargs
-    ) -> NamedArray:
-        ...
-
-
-class SimpleReductionFunction(Protocol):
-    def __call__(self, array: NamedArray, axis: Optional[AxisSelector] = None, **kwargs) -> NamedArray:
-        ...
-
-
 all: ReductionFunction = wrap_reduction_call(jnp.all)
 amax: ReductionFunction = wrap_reduction_call(jnp.amax)
 any: ReductionFunction = wrap_reduction_call(jnp.any)
-argmax: SimpleReductionFunction = wrap_reduction_call(jnp.argmax, single_axis_only=True, supports_where=False)
-argmin: SimpleReductionFunction = wrap_reduction_call(jnp.argmin, single_axis_only=True, supports_where=False)
+argmax: SimpleReductionFunction = wrap_reduction_call(
+    jnp.argmax, single_axis_only=True, supports_where=False
+)
+argmin: SimpleReductionFunction = wrap_reduction_call(
+    jnp.argmin, single_axis_only=True, supports_where=False
+)
 max: ReductionFunction = wrap_reduction_call(jnp.max)
 mean: ReductionFunction = wrap_reduction_call(jnp.mean)
 min: ReductionFunction = wrap_reduction_call(jnp.min)

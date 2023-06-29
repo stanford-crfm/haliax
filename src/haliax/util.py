@@ -1,7 +1,6 @@
-from typing import Callable, Sequence, Tuple, Type, TypeVar, Union
+from typing import Callable, Sequence, Tuple, Type, TypeAlias, TypeVar, Union
 
 from haliax.jax_utils import is_jax_array_like
-
 
 T = TypeVar("T")
 
@@ -9,6 +8,9 @@ T = TypeVar("T")
 py_slice = slice
 
 slice_t = Type[slice]
+
+Unspecified: TypeAlias = type("NotSpecified", (), {})  # type: ignore
+UNSPECIFIED = Unspecified()
 
 
 def is_named_array(leaf):
@@ -34,7 +36,9 @@ class StringHolderEnum(type):
     def __new__(cls, name, bases, members):
         # this just iterates through the class dict and removes
         # all the dunder methods
-        cls.members = [v for k, v in members.items() if not k.startswith("__") and not callable(v)]
+        cls.members = [
+            v for k, v in members.items() if not k.startswith("__") and not callable(v)
+        ]
         return super().__new__(cls, name, bases, members)
 
     # giving your class an __iter__ method gives you membership checking

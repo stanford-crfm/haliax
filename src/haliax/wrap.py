@@ -1,5 +1,5 @@
 import functools
-from typing import Optional
+from typing import Optional, Protocol
 
 import jax
 import jax.numpy as jnp
@@ -7,7 +7,7 @@ import jax.numpy as jnp
 from haliax.core import NamedArray, _broadcast_order, broadcast_to, selects_axis
 from haliax.util import ensure_tuple
 
-from .types import AxisSelection
+from .types import AxisSelection, AxisSelector
 
 
 def wrap_elemwise_unary(f):
@@ -23,9 +23,13 @@ def wrap_elemwise_unary(f):
     return wrapper
 
 
-def wrap_reduction_call(fn, single_axis_only: bool = False, supports_where: bool = True):
+def wrap_reduction_call(
+    fn, single_axis_only: bool = False, supports_where: bool = True
+):
     @functools.wraps(fn)
-    def wrapper(a, axis: Optional[AxisSelection] = None, where: NamedArray = None, **kwargs):
+    def wrapper(
+        a, axis: Optional[AxisSelection] = None, where: NamedArray = None, **kwargs
+    ):
         kwargs = dict(kwargs)
         if where is not None and not supports_where:
             raise ValueError(f"where is not supported by {fn.__name__}")
@@ -40,7 +44,9 @@ def wrap_reduction_call(fn, single_axis_only: bool = False, supports_where: bool
             if isinstance(a, NamedArray):
                 if where is not None:
                     if not isinstance(where, NamedArray):
-                        raise TypeError("where must be a NamedArray if a is a NamedArray")
+                        raise TypeError(
+                            "where must be a NamedArray if a is a NamedArray"
+                        )
                     where = broadcast_to(where, a.axes)
                     kwargs["where"] = where.array
 
@@ -70,7 +76,9 @@ def wrap_reduction_call(fn, single_axis_only: bool = False, supports_where: bool
                     kwargs["where"] = where
                 return fn(a, axis=axis, **kwargs)
 
-        return jax.tree_util.tree_map(reduce_one_leaf, a, is_leaf=lambda x: isinstance(x, NamedArray))
+        return jax.tree_util.tree_map(
+            reduce_one_leaf, a, is_leaf=lambda x: isinstance(x, NamedArray)
+        )
 
     wrapper.__doc__ = (
         """
@@ -145,3 +153,21 @@ __all__ = [
     "wrap_elemwise_binary",
     "unwrap_namedarrays",
 ]
+
+
+class ReductionFunction(Protocol):
+    def __call__(
+        self,
+        array: NamedArray,
+        axis: Optional[AxisSelection] = None,
+        where: Optional[NamedArray] = None,
+        **kwargs,
+    ) -> NamedArray:
+        ...
+
+
+class SimpleReductionFunction(Protocol):
+    def __call__(
+        self, array: NamedArray, axis: Optional[AxisSelector] = None, **kwargs
+    ) -> NamedArray:
+        ...
