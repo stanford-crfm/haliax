@@ -1,3 +1,4 @@
+import functools
 import math
 from typing import List, Optional
 
@@ -10,7 +11,6 @@ import haliax
 import haliax.random as hrandom
 from haliax.core import NamedArray
 from haliax.types import Axis, AxisSelection, AxisSpec, PrecisionLike
-
 
 # With attention we usually distinguish between the mask and the bias, though the former is just a special case of the
 # latter. In practice, the mask is a boolean array that is applied using `where` to the logits, while the bias is a
@@ -107,7 +107,9 @@ def dot_product_attention(
         key = key.rename({KPos: QPos})
         value = value.rename({KPos: QPos})
 
-    weights = dot_product_attention_weights(KeySize, KPos, query, key, mask, bias, attention_dtype, precision)
+    weights = dot_product_attention_weights(
+        KeySize, KPos, query, key, mask, bias, attention_dtype, precision
+    )
 
     return haliax.dot(KPos, weights, value)
 
@@ -116,7 +118,9 @@ def mask_to_bias(mask: NamedArray, mask_value: float = -1e9) -> NamedArray:
     return mask * mask_value
 
 
-def combine_masks_and(mask1: Optional[NamedArray], mask2: Optional[NamedArray]) -> Optional[NamedArray]:
+def combine_masks_and(
+    mask1: Optional[NamedArray], mask2: Optional[NamedArray]
+) -> Optional[NamedArray]:
     if mask1 is None:
         return mask2
     if mask2 is None:
@@ -124,7 +128,9 @@ def combine_masks_and(mask1: Optional[NamedArray], mask2: Optional[NamedArray]) 
     return mask1 & mask2
 
 
-def combine_masks_or(mask1: Optional[NamedArray], mask2: Optional[NamedArray]) -> Optional[NamedArray]:
+def combine_masks_or(
+    mask1: Optional[NamedArray], mask2: Optional[NamedArray]
+) -> Optional[NamedArray]:
     if mask1 is None:
         return mask2
     if mask2 is None:
@@ -132,6 +138,8 @@ def combine_masks_or(mask1: Optional[NamedArray], mask2: Optional[NamedArray]) -
     return mask1 | mask2
 
 
+# this ends up being surprisingly slow on CPU, so cache it
+@functools.lru_cache(maxsize=8)
 def causal_mask(QPos: Axis, KPos: Axis) -> NamedArray:
     """
     Creates a causal mask for attention.
@@ -141,7 +149,9 @@ def causal_mask(QPos: Axis, KPos: Axis) -> NamedArray:
     :return: NamedArray of shape (QPos, KPos)
     """
     # copilot wrote this and i'm just blown away
-    return haliax.arange(QPos).broadcast_axis(KPos) >= haliax.arange(KPos).broadcast_axis(QPos)
+    return haliax.arange(QPos).broadcast_axis(KPos) >= haliax.arange(
+        KPos
+    ).broadcast_axis(QPos)
 
 
 def prefix_lm_mask(QSeqLen: Axis, KSeqLen: Axis, prefix_len: int) -> NamedArray:
@@ -162,7 +172,9 @@ def dropout_mask(axes: AxisSpec, dropout_rate: float, *, key: PRNGKey) -> NamedA
     return hrandom.bernoulli(key, shape=axes, p=1 - dropout_rate)
 
 
-def forgetful_causal_mask(KPos: Axis, mask_prob: float, sample_prob: bool = True, *, key: PRNGKey) -> NamedArray:
+def forgetful_causal_mask(
+    KPos: Axis, mask_prob: float, sample_prob: bool = True, *, key: PRNGKey
+) -> NamedArray:
     """
     Forgetful Context Masking a la https://arxiv.org/abs/2210.13432. Randomly drops out positions from the key sequence.
     Reportedly better than normal attention dropout. Almost certainly faster.
@@ -173,12 +185,17 @@ def forgetful_causal_mask(KPos: Axis, mask_prob: float, sample_prob: bool = True
     :param mask_prob: Probability a position to mask
     :param sample_prob: If True, sample the prob between 0 and the provided prob (this is what the paper does)
     """
-    zeroth_on = haliax.nn.one_hot(0, KPos, dtype=jnp.bool_)  # always allow 0th position
     if mask_prob == 0:
-        return jnp.ones((KPos.size,), dtype=jnp.bool_)
+        return haliax.ones(KPos, dtype=jnp.bool_)
     elif mask_prob == 1:
+        zeroth_on = haliax.nn.one_hot(
+            0, KPos, dtype=jnp.bool_
+        )  # always allow 0th position
         return zeroth_on
     else:
+        zeroth_on = haliax.nn.one_hot(
+            0, KPos, dtype=jnp.bool_
+        )  # always allow 0th position
         if sample_prob:
             key, subkey = jax.random.split(key)
             mask_prob = jax.random.uniform(subkey, shape=(), minval=0, maxval=mask_prob)
@@ -201,11 +218,15 @@ def _get_alibi_slopes(heads: int, bias_max: float) -> List[float]:
     closest_power_of_2 = 2 ** math.floor(math.log2(heads))
     return (
         get_slopes_power_of_2(closest_power_of_2)
-        + get_slopes_power_of_2(2 * closest_power_of_2)[0::2][: heads - closest_power_of_2]
+        + get_slopes_power_of_2(2 * closest_power_of_2)[0::2][
+            : heads - closest_power_of_2
+        ]
     )
 
 
-def alibi_attention_bias(Heads: Axis, KPos: Axis, bias_max: float = 8, dtype=jnp.float32) -> NamedArray:
+def alibi_attention_bias(
+    Heads: Axis, KPos: Axis, bias_max: float = 8, dtype=jnp.float32
+) -> NamedArray:
     """
     Creates an attention bias for alibi attention.
 

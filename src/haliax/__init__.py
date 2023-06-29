@@ -3,6 +3,7 @@ from typing import Optional, Sequence
 import jax
 import jax.numpy as jnp
 
+import haliax.nn as nn
 import haliax.random as random
 from haliax import tree_util as tree_util
 
