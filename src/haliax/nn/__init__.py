@@ -11,18 +11,13 @@ import haliax.nn.attention as attention
 from ..core import NamedArray
 from ..types import Axis, AxisSelector, AxisSpec
 from ..util import UNSPECIFIED, Unspecified
-from ..wrap import (
-    ReductionFunction,
-    unwrap_namedarrays,
-    wrap_axiswise_call,
-    wrap_elemwise_unary,
-    wrap_reduction_call,
-)
+from ..wrap import ReductionFunction, unwrap_namedarrays, wrap_axiswise_call, wrap_elemwise_unary, wrap_reduction_call
 from .dropout import Dropout, dropout
 from .embedding import Embedding
 from .linear import Linear
 from .normalization import LayerNorm
 from .scan import Stacked
+
 
 relu = wrap_elemwise_unary(jnn.relu)
 relu6 = wrap_elemwise_unary(jnn.relu6)
@@ -69,16 +64,12 @@ def standardize(
     raw_x, mean, variance, where = unwrap_namedarrays(x, mean, variance, where)
     axis_indices = x._lookup_indices(axis)
 
-    plain = jnn.standardize(
-        raw_x, axis_indices, mean=mean, variance=variance, epsilon=epsilon, where=where
-    )
+    plain = jnn.standardize(raw_x, axis_indices, mean=mean, variance=variance, epsilon=epsilon, where=where)
     return NamedArray(plain, x.axes)
 
 
 @functools.wraps(jnn.one_hot)
-def one_hot(
-    x: Union[NamedArray, int], class_axis: Axis, *, dtype=jnp.float_
-) -> NamedArray:
+def one_hot(x: Union[NamedArray, int], class_axis: Axis, *, dtype=jnp.float_) -> NamedArray:
     if isinstance(x, NamedArray):
         array = jnn.one_hot(x.array, num_classes=class_axis.size, dtype=dtype)
         return NamedArray(array, x.axes + (class_axis,))
