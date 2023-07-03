@@ -59,14 +59,10 @@ def ones(shape: AxisSpec, dtype=None) -> NamedArray:
 def full(shape: AxisSpec, fill_value, dtype=None) -> NamedArray:
     """Creates a NamedArray with all elements set to `fill_value`"""
     if isinstance(shape, Axis):
-        return NamedArray(
-            jnp.full(shape=shape.size, fill_value=fill_value, dtype=dtype), (shape,)
-        )
+        return NamedArray(jnp.full(shape=shape.size, fill_value=fill_value, dtype=dtype), (shape,))
     else:
         x_shape = tuple(x.size for x in shape)
-        return NamedArray(
-            jnp.full(shape=x_shape, fill_value=fill_value, dtype=dtype), tuple(shape)
-        )
+        return NamedArray(jnp.full(shape=x_shape, fill_value=fill_value, dtype=dtype), tuple(shape))
 
 
 def zeros_like(a: NamedArray, dtype=None) -> NamedArray:
@@ -97,9 +93,7 @@ def stack(axis: AxisSelector, arrays: Sequence[NamedArray]) -> NamedArray:
     if len(arrays) == 0:
         return zeros(axis)
     arrays = [a.rearrange(arrays[0].axes) for a in arrays]
-    return NamedArray(
-        jnp.stack([a.array for a in arrays], axis=0), (axis,) + arrays[0].axes
-    )
+    return NamedArray(jnp.stack([a.array for a in arrays], axis=0), (axis,) + arrays[0].axes)
 
 
 def concatenate(axis: AxisSelector, arrays: Sequence[NamedArray]) -> NamedArray:
@@ -122,9 +116,7 @@ def concatenate(axis: AxisSelector, arrays: Sequence[NamedArray]) -> NamedArray:
         raise ValueError(f"Axis {axis.name} not found in 0th array {arrays[0]}")
 
     new_axes = arrays[0].axes[:axis_index] + (axis,) + arrays[0].axes[axis_index + 1 :]
-    return NamedArray(
-        jnp.concatenate([a.array for a in arrays], axis=axis_index), new_axes
-    )
+    return NamedArray(jnp.concatenate([a.array for a in arrays], axis=axis_index), new_axes)
 
 
 # elementwise unary operations
@@ -195,12 +187,8 @@ trunc = wrap_elemwise_unary(jnp.trunc)
 all: ReductionFunction = wrap_reduction_call(jnp.all)
 amax: ReductionFunction = wrap_reduction_call(jnp.amax)
 any: ReductionFunction = wrap_reduction_call(jnp.any)
-argmax: SimpleReductionFunction = wrap_reduction_call(
-    jnp.argmax, single_axis_only=True, supports_where=False
-)
-argmin: SimpleReductionFunction = wrap_reduction_call(
-    jnp.argmin, single_axis_only=True, supports_where=False
-)
+argmax: SimpleReductionFunction = wrap_reduction_call(jnp.argmax, single_axis_only=True, supports_where=False)
+argmin: SimpleReductionFunction = wrap_reduction_call(jnp.argmin, single_axis_only=True, supports_where=False)
 max: ReductionFunction = wrap_reduction_call(jnp.max)
 mean: ReductionFunction = wrap_reduction_call(jnp.mean)
 min: ReductionFunction = wrap_reduction_call(jnp.min)

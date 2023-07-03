@@ -1,9 +1,9 @@
 import numpy as np
 from jax.random import PRNGKey
-from test_utils import skip_if_no_torch
 
 import haliax as hax
 from haliax.nn.attention import alibi_attention_bias, dot_product_attention_weights, forgetful_causal_mask
+from test_utils import skip_if_no_torch
 
 
 def test_alibi_attention_bias():

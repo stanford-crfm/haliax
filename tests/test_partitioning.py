@@ -4,11 +4,11 @@ import jax.numpy as jnp
 import numpy as np
 from jax.sharding import Mesh, NamedSharding, PartitionSpec
 from jaxtyping import Array
-from test_utils import skip_if_not_enough_devices
 
 import haliax as hax
 from haliax import Axis, NamedArray
 from haliax.partitioning import ResourceAxis, axis_mapping, infer_resource_partitions, named_jit
+from test_utils import skip_if_not_enough_devices
 
 
 class MyModule(eqx.Module):
