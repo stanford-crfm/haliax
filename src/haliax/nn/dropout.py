@@ -2,6 +2,7 @@ from typing import Optional
 
 import equinox as eqx
 import jax
+from jaxtyping import PRNGKeyArray
 
 import haliax
 from haliax.core import NamedArray
@@ -76,7 +77,7 @@ class Dropout(eqx.Module):
         x: NamedArray,
         *,
         inference: bool,
-        key: Optional["jax.random.PRNGKey"] = None,
+        key: Optional[PRNGKeyArray] = None,
     ) -> NamedArray:
         """**Arguments:**
 

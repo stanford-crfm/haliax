@@ -2,7 +2,7 @@ from typing import Callable
 
 import jax
 import jax.numpy as jnp
-from chex import PRNGKey
+from jaxtyping import PRNGKeyArray
 
 import haliax as hax
 from haliax.random import generate_sharded
@@ -96,7 +96,7 @@ def test_randint():
 
 
 def check_gen_is_equal(
-    jax_fn: Callable[[PRNGKey, tuple], jnp.ndarray], hax_fn: Callable[[PRNGKey, hax.AxisSpec], hax.NamedArray]
+    jax_fn: Callable[[PRNGKeyArray, tuple], jnp.ndarray], hax_fn: Callable[[PRNGKeyArray, hax.AxisSpec], hax.NamedArray]
 ):
     key = jax.random.PRNGKey(0)
 

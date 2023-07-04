@@ -4,11 +4,13 @@ from typing import Any, Callable, List, Optional, Sequence, Union
 import equinox as eqx
 import jax
 import numpy as np
-from chex import PRNGKey
-from equinox.module import Static
 from jax import numpy as jnp
 from jax import random as jrandom
-from jaxtyping import PyTree
+from jaxtyping import PyTree, PRNGKeyArray
+
+
+class Static(eqx.Module):
+    value: Any = eqx.field(static=True)
 
 
 def shaped_rng_split(key, split_shape: Union[int, Sequence[int]] = 2) -> jrandom.KeyArray:
@@ -26,7 +28,7 @@ def shaped_rng_split(key, split_shape: Union[int, Sequence[int]] = 2) -> jrandom
     return jnp.reshape(unshaped, split_shape)
 
 
-def maybe_rng_split(key: Optional[PRNGKey], num: int = 2):
+def maybe_rng_split(key: Optional[PRNGKeyArray], num: int = 2):
     """Splits a random key into multiple random keys. If the key is None, then it replicates the None. Also handles
     num == 1 case"""
     if key is None:

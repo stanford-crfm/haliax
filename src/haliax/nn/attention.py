@@ -4,7 +4,7 @@ from typing import List, Optional
 import jax
 import jax.numpy as jnp
 import numpy as np
-from jax.random import PRNGKey
+from jaxtyping import PRNGKeyArray
 
 import haliax
 import haliax.random as hrandom
@@ -157,14 +157,14 @@ def prefix_lm_mask(QSeqLen: Axis, KSeqLen: Axis, prefix_len: int) -> NamedArray:
     return prefix | causal
 
 
-def dropout_mask(axes: AxisSpec, dropout_rate: float, *, key: PRNGKey) -> NamedArray:
+def dropout_mask(axes: AxisSpec, dropout_rate: float, *, key: PRNGKeyArray) -> NamedArray:
     """
     Really just an alias for haliax.random.bernoulli. You can pass in e.g. Head, QPos and KPos
     """
     return hrandom.bernoulli(key, shape=axes, p=1 - dropout_rate)
 
 
-def forgetful_causal_mask(KPos: Axis, mask_prob: float, sample_prob: bool = True, *, key: PRNGKey) -> NamedArray:
+def forgetful_causal_mask(KPos: Axis, mask_prob: float, sample_prob: bool = True, *, key: PRNGKeyArray) -> NamedArray:
     """
     Forgetful Context Masking a la https://arxiv.org/abs/2210.13432. Randomly drops out positions from the key sequence.
     Reportedly better than normal attention dropout. Almost certainly faster.

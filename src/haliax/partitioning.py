@@ -7,7 +7,8 @@ from typing import Mapping, Optional, Sequence, TypeVar, Union
 
 import equinox as eqx
 import jax
-from equinox.compile_utils import compile_cache, get_fun_names, hashable_combine, hashable_partition
+# TODO: avoid depending on private Equinox internals.
+from equinox._compile_utils import compile_cache, hashable_combine, hashable_partition
 from jax._src.sharding_impls import AUTO
 from jax.experimental.pjit import pjit
 from jax.lax import with_sharding_constraint
@@ -292,7 +293,7 @@ def named_jit(
             cmanager = contextlib.nullcontext()
 
         with cmanager:
-            cached_pjitted_fun = _named_pjit_cache(get_fun_names(fn), **my_pjit_args)
+            cached_pjitted_fun = _named_pjit_cache(fn, **my_pjit_args)
             return cached_pjitted_fun(dynamic_donated, dynamic_reserved, static)
 
     return f
