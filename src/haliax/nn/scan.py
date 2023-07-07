@@ -90,5 +90,5 @@ class Stacked(eqx.Module, Generic[M]):
         return block(carry, *extra_args, **extra_kwargs)
 
     # TODO: this is for logic that's in levanter. We should move that logic to haliax I guess?
-    def _state_dict_key_map(self) -> Optional[Dict[str, Optional[str]]]:
+    def _state_dict_key_map(self) -> Dict[str, Optional[str]]:
         return {"stacked": None}

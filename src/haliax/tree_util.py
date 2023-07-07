@@ -1,12 +1,11 @@
 import jax
-from jax.random import PRNGKey
-from jaxtyping import PyTree
+from jaxtyping import PyTree, PRNGKeyArray
 
 from .core import Axis, NamedArray
 from .util import is_named_array
 
 
-def resize_axis(tree: PyTree[NamedArray], axis: Axis, key: PRNGKey):
+def resize_axis(tree: PyTree[NamedArray], axis: Axis, key: PRNGKeyArray):
     """Resizes the NamedArrays of a PyTree along a given axis. If the array needs to grow, then the new elements are
     sampled from a truncated normal distribution with the same mean and standard deviation as the existing elements.
     If the array needs to shrink, then it's truncated."""

@@ -3,9 +3,9 @@ from typing import Callable, List, Optional, TypeVar
 import equinox as eqx
 import jax
 import pytest
-from chex import assert_trees_all_close
 from equinox import nn as nn
 from equinox import static_field
+from jaxtyping import PRNGKeyArray
 
 
 T = TypeVar("T")
@@ -35,7 +35,7 @@ class MLP(eqx.Module):
         activation: Callable = jax.nn.relu,
         final_activation: Callable = lambda x: x,
         *,
-        key: "jax.random.PRNGKey",
+        key: PRNGKeyArray,
         **kwargs,
     ):
         """**Arguments**:
@@ -70,7 +70,7 @@ class MLP(eqx.Module):
         self.activation = activation  # type: ignore
         self.final_activation = final_activation  # type: ignore
 
-    def __call__(self, x, *, key: Optional["jax.random.PRNGKey"] = None):
+    def __call__(self, x, *, key: Optional[PRNGKeyArray] = None):
         """**Arguments:**
 
         - `x`: A JAX array with shape `(in_size,)`.
@@ -89,23 +89,9 @@ class MLP(eqx.Module):
         return x
 
 
-def assert_trees_not_close(a, b):
-    try:
-        assert_trees_all_close(jax.tree_util.tree_leaves(arrays_only(a)), jax.tree_util.tree_leaves(arrays_only(b)))
-    except AssertionError:
-        pass
-    else:
-        raise AssertionError("Trees are equal")
-
-
-def arrays_only(x):
-    return eqx.filter(x, eqx.is_inexact_array_like)
-
-
 def has_torch():
     try:
         import torch  # noqa F401
-
         return True
     except ImportError:
         return False
