@@ -96,7 +96,8 @@ def test_randint():
 
 
 def check_gen_is_equal(
-    jax_fn: Callable[[PRNGKeyArray, tuple], jnp.ndarray], hax_fn: Callable[[PRNGKeyArray, hax.AxisSpec], hax.NamedArray]
+    jax_fn: Callable[[PRNGKeyArray, tuple], jnp.ndarray],
+    hax_fn: Callable[[PRNGKeyArray, hax.AxisSpec], hax.NamedArray],
 ):
     key = jax.random.PRNGKey(0)
 

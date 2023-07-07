@@ -92,6 +92,7 @@ class MLP(eqx.Module):
 def has_torch():
     try:
         import torch  # noqa F401
+
         return True
     except ImportError:
         return False

@@ -7,6 +7,7 @@ from typing import Mapping, Optional, Sequence, TypeVar, Union
 
 import equinox as eqx
 import jax
+
 # TODO: avoid depending on private Equinox internals.
 from equinox._compile_utils import compile_cache, hashable_combine, hashable_partition
 from jax._src.sharding_impls import AUTO

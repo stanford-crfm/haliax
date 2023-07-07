@@ -6,7 +6,7 @@ import jax
 import numpy as np
 from jax import numpy as jnp
 from jax import random as jrandom
-from jaxtyping import PyTree, PRNGKeyArray
+from jaxtyping import PRNGKeyArray, PyTree
 
 
 class Static(eqx.Module):

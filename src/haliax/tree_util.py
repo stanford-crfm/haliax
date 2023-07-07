@@ -1,5 +1,5 @@
 import jax
-from jaxtyping import PyTree, PRNGKeyArray
+from jaxtyping import PRNGKeyArray, PyTree
 
 from .core import Axis, NamedArray
 from .util import is_named_array
