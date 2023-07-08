@@ -144,6 +144,8 @@ __all__ = [
     "wrap_axiswise_call",
     "wrap_elemwise_binary",
     "unwrap_namedarrays",
+    "ReductionFunction",
+    "SimpleReductionFunction",
 ]
 
 
