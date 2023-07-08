@@ -1,4 +1,6 @@
+import equinox as eqx
 import jax
+import jax.tree_util as jtu
 from jaxtyping import PRNGKeyArray, PyTree
 
 from .core import Axis, NamedArray
@@ -46,3 +48,17 @@ def resize_axis(tree: PyTree[NamedArray], axis: Axis, key: PRNGKeyArray):
     new_leaves = [_resize_one(x, key) for x, key in zip(leaves, keys)]
 
     return jax.tree_util.tree_unflatten(structure, new_leaves)
+
+
+# old version of eqx's partition functions
+def hashable_partition(pytree, filter_spec):
+    dynamic, static = eqx.partition(pytree, filter_spec)
+    static_leaves, static_treedef = jtu.tree_flatten(static)
+    static_leaves = tuple(static_leaves)
+    return dynamic, (static_leaves, static_treedef)
+
+
+def hashable_combine(dynamic, static):
+    static_leaves, static_treedef = static
+    static = jtu.tree_unflatten(static_treedef, static_leaves)
+    return eqx.combine(dynamic, static)

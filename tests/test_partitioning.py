@@ -224,3 +224,36 @@ def test_shard_plain_array_in_module():
         with Mesh(np.array(devices).reshape(-1, 1), (ResourceAxis.DATA, ResourceAxis.MODEL)):
             mod = named_jit(MyModule)()
             assert mod.array.sharding.is_fully_replicated
+
+
+def test_named_jit_with_donation():
+    with axis_mapping(resource_map):
+
+        class MyModule(eqx.Module):
+            array: jnp.ndarray
+            array2: jnp.ndarray
+
+        devices = jax.devices()
+        with Mesh(np.array(devices).reshape(-1, 1), (ResourceAxis.DATA, ResourceAxis.MODEL)):
+            mod = named_jit(MyModule, donate_args=(True, False))(jnp.zeros((8, 8)), jnp.zeros((8, 16)))
+            assert mod.array.sharding.is_fully_replicated
+
+
+def test_named_jit_with_donation_nested_pytrees():
+    with axis_mapping(resource_map):
+
+        class MyModule(eqx.Module):
+            array: jnp.ndarray
+            array2: jnp.ndarray
+
+        class MyModule2(eqx.Module):
+            mod: MyModule
+            mod2: MyModule
+
+        def init(a1, a2):
+            return MyModule2(MyModule(a1, a2), MyModule(a1, a2))
+
+        devices = jax.devices()
+        with Mesh(np.array(devices).reshape(-1, 1), (ResourceAxis.DATA, ResourceAxis.MODEL)):
+            mod = named_jit(init, donate_args=(True, False))(jnp.zeros((8, 8)), jnp.zeros((8, 16)))
+            assert mod.mod.array.sharding.is_fully_replicated

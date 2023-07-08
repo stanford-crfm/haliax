@@ -9,7 +9,7 @@ import equinox as eqx
 import jax
 
 # TODO: avoid depending on private Equinox internals.
-from equinox._compile_utils import compile_cache, hashable_combine, hashable_partition
+from equinox._compile_utils import compile_cache
 from jax._src.sharding_impls import AUTO
 from jax.experimental.pjit import pjit
 from jax.lax import with_sharding_constraint
@@ -18,6 +18,7 @@ from jaxtyping import PyTree
 
 from .core import NamedArray
 from .jax_utils import filter_eval_shape, is_jax_array_like
+from .tree_util import hashable_combine, hashable_partition
 from .types import Axis, AxisSelection, AxisSelector
 from .util import StringHolderEnum, ensure_tuple, is_named_array
 
@@ -241,7 +242,6 @@ def named_jit(
             out_axis_resources = axis_resources
 
         dynamic_fun, static_fun = hashable_partition(fn, is_jax_array_like)
-
         dynamic_argspec, static_argspec = hashable_partition((args, kwargs), is_jax_array_like)
         dynamic = (dynamic_fun, dynamic_argspec)
 
