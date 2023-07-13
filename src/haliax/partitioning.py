@@ -381,6 +381,11 @@ def physical_axis_size(axis: AxisSelector, mapping: Optional[ResourceMapping] = 
     return prod([mesh_shape[n] for n in name])
 
 
+def sharding_for_axis(axis: AxisSelection, mapping: Optional[ResourceMapping] = None) -> NamedSharding:
+    """Get the sharding for a single axis"""
+    return NamedSharding(_get_mesh(), pspec_for_axis(axis, mapping))
+
+
 def pspec_for_axis(axis: AxisSelection, mapping: Optional[ResourceMapping] = None) -> PartitionSpec:
     """Get the PartitionSpec for a single axis"""
     axis = ensure_tuple(axis)
