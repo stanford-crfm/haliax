@@ -352,7 +352,8 @@ def _cached_filter_eval_shape(fun, *args, **kwargs):
 
 def physical_axis_name(axis: AxisSelector, mapping: Optional[ResourceMapping] = None) -> Optional[PhysicalAxisSpec]:
     """Get the physical axis name for a logical axis from the mapping. Returns none if the axis is not mapped."""
-    mapping = mapping or _mapping_holder.thread_data.resource_mapping
+    if mapping is None:
+        mapping = _mapping_holder.thread_data.resource_mapping
     if mapping is None:
         return None
     elif isinstance(axis, str):
@@ -381,9 +382,11 @@ def physical_axis_size(axis: AxisSelector, mapping: Optional[ResourceMapping] = 
     return prod([mesh_shape[n] for n in name])
 
 
-def sharding_for_axis(axis: AxisSelection, mapping: Optional[ResourceMapping] = None) -> NamedSharding:
+def sharding_for_axis(
+    axis: AxisSelection, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] = None
+) -> NamedSharding:
     """Get the sharding for a single axis"""
-    return NamedSharding(_get_mesh(), pspec_for_axis(axis, mapping))
+    return NamedSharding(mesh or _get_mesh(), pspec_for_axis(axis, mapping))
 
 
 def pspec_for_axis(axis: AxisSelection, mapping: Optional[ResourceMapping] = None) -> PartitionSpec:
