@@ -127,6 +127,33 @@ def fold(
     return scanned_f
 
 
+def map(
+    fn: Callable[[X], Y],
+    axis: Axis,
+    reverse: bool = False,
+    unroll: int = 1,
+    is_mapped: BoolAxisSpec = is_jax_or_hax_array_like,
+) -> Callable[[PyTree[X]], PyTree[Y]]:
+    """
+    NamedArray aware version of jax.lax.map. Normal arrays are mapped according to the specs as in equinox.filter_map,
+    except that the output axis is always 0 b/c it's annoying to make anything else work.
+
+    You'll typically want to use map (instead of a vmap or just vectorized code) when you want to encourage XLA to
+    loop over the axis to control memory.
+    """
+
+    def scan_compatible_fn(_, x):
+        del _
+        return None, fn(x)
+
+    scan_preconfig = scan(scan_compatible_fn, axis, reverse=reverse, unroll=unroll, is_scanned=is_mapped)
+
+    def scanned_f(*args, **kwargs):
+        return scan_preconfig(None, *args, **kwargs)[1]
+
+    return scanned_f
+
+
 ResolvedUnnamedAxisSpec = Union[int, None]
 UnnamedAxisSpec = Union[ResolvedUnnamedAxisSpec, Callable[[Any], ResolvedUnnamedAxisSpec]]
 
@@ -374,4 +401,4 @@ def _ensure_first(axis):
     return ensure_first
 
 
-__all__ = ["scan", "fold", "vmap"]
+__all__ = ["scan", "fold", "vmap", "map"]

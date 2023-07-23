@@ -27,7 +27,7 @@ from .core import (
     unbind,
     unflatten_axis,
 )
-from .hof import fold, scan, vmap
+from .hof import fold, map, scan, vmap
 from .ops import clip, isclose, pad_left, trace, tril, triu, where
 from .partitioning import auto_sharded, axis_mapping, named_jit, shard_with_axis_mapping
 from .types import Axis, AxisSelection, AxisSelector, AxisSpec
@@ -357,6 +357,7 @@ __all__ = [
     "sort",
     "scan",
     "fold",
+    "map",
     "vmap",
     "trace",
     "where",
