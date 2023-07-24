@@ -230,7 +230,7 @@ class NamedArray:
     def slice(self, axis: AxisSelector, new_axis: Axis, start: int = 0) -> "NamedArray":
         return haliax.slice(self, axis=axis, new_axis=new_axis, start=start)
 
-    def updated_slice(self, update: NamedArray, start: Mapping[AxisSelector, int]) -> "NamedArray":
+    def updated_slice(self, update: "NamedArray", start: Mapping[AxisSelector, int]) -> "NamedArray":
         return haliax.updated_slice(self, axis=axis, start=start, update=update)
 
     def take(self, axis: AxisSelector, index: Union[int, "NamedArray"]) -> "NamedArray":
@@ -611,8 +611,6 @@ def slice(array: NamedArray, axis: AxisSelector, new_axis: Axis, start: int = 0)
     # new axes come from splicing the old axis with
     return NamedArray(sliced, new_axes)
 
-
-def updated_slice(array, )
 
 
 def slice_nd(
