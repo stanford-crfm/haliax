@@ -10,7 +10,8 @@ import jax
 
 # TODO: avoid depending on private Equinox internals.
 from equinox._compile_utils import compile_cache
-from jax._src.sharding_impls import AUTO
+
+# from jax._src.sharding_impls import AUTO
 from jax.experimental.pjit import pjit
 from jax.lax import with_sharding_constraint
 from jax.sharding import Mesh, NamedSharding, PartitionSpec, SingleDeviceSharding
@@ -153,16 +154,10 @@ def infer_resource_partitions(
 
     mesh = mesh or _get_mesh()
 
-    def _auto_array_sharding(node):
-        if hasattr(node, "sharding"):
-            return node.sharding
-        else:
-            return None
-
     def partition_spec(node: typing.Any):
         if isinstance(node, NamedArray):
             if preserve_existing_shardings:
-                current_sharding = _auto_array_sharding(node)
+                current_sharding = getattr(node, "sharding", None)
             else:
                 current_sharding = None
 
@@ -172,7 +167,7 @@ def infer_resource_partitions(
                 sharding = NamedSharding(mesh, pspec_for_axis(node.axes, resource_mapping))
                 return NamedArray(sharding, node.axes)  # type: ignore
         else:
-            sharding = _auto_array_sharding(node)
+            sharding = getattr(node, "sharding", None)
             # TODO: these are usually replicated. Is there a better way to tell?
             if isinstance(sharding, SingleDeviceSharding):
                 return NamedSharding(mesh, PartitionSpec(None))
@@ -180,13 +175,13 @@ def infer_resource_partitions(
                 return sharding
             elif node.shape == ():
                 return NamedSharding(mesh, PartitionSpec())
-            elif use_auto_sharding:
-                # TODO: auto doesn't seem to really work reliably yet
-                #     compat between 0.4.10 and 0.4.11
-                if isinstance(AUTO, typing.Callable):  # type: ignore
-                    return AUTO(mesh)
-                else:
-                    return AUTO
+            # elif use_auto_sharding:
+            # TODO: auto doesn't seem to really work reliably yet
+            #     compat between 0.4.10 and 0.4.11
+            # if isinstance(AUTO, typing.Callable):  # type: ignore
+            #     return AUTO(mesh)
+            # else:
+            #     return AUTO
             return NamedSharding(mesh, PartitionSpec(None))
 
     return jax.tree_util.tree_map(partition_spec, tree, is_leaf=is_named_array)
