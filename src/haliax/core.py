@@ -227,7 +227,7 @@ class NamedArray:
     # slicing
 
     # TOOD: AxisSelector-ify new_axis
-    def slice(self, axis: AxisSelector, new_axis: Axis, start: int = 0) -> "NamedArray":
+    def slice(self, axis: AxisSelector, new_axis: Axis, start: int) -> "NamedArray":
         return haliax.slice(self, axis=axis, new_axis=new_axis, start=start)
 
     def updated_slice(self, update: "NamedArray", start: Mapping[AxisSelector, int]) -> "NamedArray":
@@ -597,7 +597,7 @@ def take(array: NamedArray, axis: AxisSelector, index: Union[int, NamedArray]) -
     return NamedArray(new_array, new_axes)
 
 
-def slice(array: NamedArray, axis: AxisSelector, new_axis: Axis, start: int = 0) -> NamedArray:
+def slice(array: NamedArray, axis: AxisSelector, new_axis: Axis, start) -> NamedArray:
     """
     Selects elements from an array along an axis, by an index or by another named array
     This is somewhat better than take if you want a contiguous slice of an array
@@ -610,7 +610,6 @@ def slice(array: NamedArray, axis: AxisSelector, new_axis: Axis, start: int = 0)
     new_axes = array.axes[:axis_index] + (new_axis,) + array.axes[axis_index + 1 :]
     # new axes come from splicing the old axis with
     return NamedArray(sliced, new_axes)
-
 
 
 def slice_nd(
