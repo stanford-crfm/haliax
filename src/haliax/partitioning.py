@@ -147,7 +147,7 @@ def infer_resource_partitions(
     don't have a sharding.
     """
     if resource_mapping is None:
-        resource_mapping = _mapping_holder.thread_data.resource_mapping
+        resource_mapping = current_thread_local_mapping()
 
     if resource_mapping is None:
         raise ValueError("No resource mapping found")
@@ -185,6 +185,10 @@ def infer_resource_partitions(
             return NamedSharding(mesh, PartitionSpec(None))
 
     return jax.tree_util.tree_map(partition_spec, tree, is_leaf=is_named_array)
+
+
+def current_thread_local_mapping():
+    return _mapping_holder.thread_data.resource_mapping
 
 
 def named_jit(
@@ -348,7 +352,8 @@ def _cached_filter_eval_shape(fun, *args, **kwargs):
 def physical_axis_name(axis: AxisSelector, mapping: Optional[ResourceMapping] = None) -> Optional[PhysicalAxisSpec]:
     """Get the physical axis name for a logical axis from the mapping. Returns none if the axis is not mapped."""
     if mapping is None:
-        mapping = _mapping_holder.thread_data.resource_mapping
+        if hasattr(_mapping_holder.thread_data, "resource_mapping"):
+            mapping = _mapping_holder.thread_data.resource_mapping
     if mapping is None:
         return None
     elif isinstance(axis, str):
@@ -425,4 +430,5 @@ __all__ = [
     "physical_axis_name",
     "pspec_for_axis",
     "round_axis_for_partitioning",
+    "current_thread_local_mapping",
 ]
