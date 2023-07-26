@@ -54,7 +54,7 @@ def axis_mapping(mapping: ResourceMapping, *, merge: bool = False, **kwargs):
     """Context manager for setting the global resource mapping"""
     mapping = dict(mapping)
 
-    old_mapping = _mapping_holder.thread_data.resource_mapping
+    old_mapping = current_thread_local_mapping()
     if merge:
         mapping.update(old_mapping or {})
 
@@ -68,6 +68,19 @@ def axis_mapping(mapping: ResourceMapping, *, merge: bool = False, **kwargs):
         _mapping_holder.thread_data.resource_mapping = old_mapping
 
 
+def current_thread_local_mapping():
+    """
+    Get the current thread-local resource mapping, or None if there is no resource mapping set.
+    :return:
+    """
+    if _mapping_holder.thread_data is None:
+        return None
+    if not hasattr(_mapping_holder.thread_data, "resource_mapping"):
+        return None
+
+    return _mapping_holder.thread_data.resource_mapping
+
+
 T = TypeVar("T", bound=PyTree)
 
 
@@ -78,7 +91,7 @@ def auto_sharded(x: T, mesh: Optional[Mesh] = None) -> T:
 
     If there is no axis mapping, the global axis mapping, this function is a no-op.
     """
-    mapping = _mapping_holder.thread_data.resource_mapping
+    mapping = current_thread_local_mapping()
 
     if mapping is None:
         return x
@@ -187,10 +200,6 @@ def infer_resource_partitions(
     return jax.tree_util.tree_map(partition_spec, tree, is_leaf=is_named_array)
 
 
-def current_thread_local_mapping():
-    return _mapping_holder.thread_data.resource_mapping
-
-
 def named_jit(
     fn=None,
     axis_resources: Optional[ResourceMapping] = None,
@@ -235,7 +244,7 @@ def named_jit(
         nonlocal axis_resources, in_axis_resources, out_axis_resources, donate_args, donate_kwargs
 
         if axis_resources is None:
-            axis_resources = _mapping_holder.thread_data.resource_mapping
+            axis_resources = current_thread_local_mapping()
 
         if out_axis_resources is None:
             out_axis_resources = axis_resources
@@ -352,8 +361,7 @@ def _cached_filter_eval_shape(fun, *args, **kwargs):
 def physical_axis_name(axis: AxisSelector, mapping: Optional[ResourceMapping] = None) -> Optional[PhysicalAxisSpec]:
     """Get the physical axis name for a logical axis from the mapping. Returns none if the axis is not mapped."""
     if mapping is None:
-        if hasattr(_mapping_holder.thread_data, "resource_mapping"):
-            mapping = _mapping_holder.thread_data.resource_mapping
+        mapping = current_thread_local_mapping()
     if mapping is None:
         return None
     elif isinstance(axis, str):
