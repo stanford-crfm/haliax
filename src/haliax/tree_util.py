@@ -27,7 +27,7 @@ def resize_axis(tree: PyTree[NamedArray], axis: Axis, key: PRNGKeyArray):
         if axis.size == current_axis.size:
             return x
         elif current_axis.size > axis.size:
-            return x.slice(current_axis, axis)
+            return x.slice(current_axis, 0, new_axis=axis)
         else:
             num_padding = axis.size - current_axis.size
 

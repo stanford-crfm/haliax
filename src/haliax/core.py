@@ -226,12 +226,12 @@ class NamedArray:
 
     # slicing
 
-    # TOOD: AxisSelector-ify new_axis
-    def slice(self, axis: AxisSelector, new_axis: Axis, start: int) -> "NamedArray":
-        return haliax.slice(self, axis=axis, new_axis=new_axis, start=start)
+    def slice(self, axis: AxisSelector, start: int = 0, length: Optional[int] = None,
+              new_axis: Optional[AxisSelector] = None) -> "NamedArray":
+        return haliax.slice(self, axis=axis, start=start, length=length, new_axis=new_axis)
 
-    def updated_slice(self, update: "NamedArray", start: Mapping[AxisSelector, int]) -> "NamedArray":
-        return haliax.updated_slice(self, axis=axis, start=start, update=update)
+    def updated_slice(self, start: Mapping[AxisSelector, int], update: "NamedArray") -> "NamedArray":
+        return haliax.updated_slice(self, start=start, update=update)
 
     def take(self, axis: AxisSelector, index: Union[int, "NamedArray"]) -> "NamedArray":
         return haliax.take(self, axis=axis, index=index)
@@ -259,15 +259,15 @@ class NamedArray:
         >>> Y = Axis("y", 20)
         >>> arr = haliax.random.randint(jax.random.PRNGKey(0), (X, Y), 0, X.size)
         # slice with ints or slices
-        >>> arr[{"x": 1, "y": slice(0, 10, 2)}]
+        >>> arr[{"x": 1, "y": slice(0,10,new_axis=2)}]
         >>> Z = Axis("z", 3)
         # so-called "advanced indexing" with NamedArrays.
         >>> index_arr = NamedArray(np.array([1, 2, 3]), Z)
         >>> arr[{"x": 1, "y": index_arr}]
 
         A shorthand is provided that works with Python's slicing syntax:
-        >>> arr["x", :] == arr[{"x": slice(None, None, None)}]
-        >>> arr["y", slice(0, 10, 2)] == arr[{"y": slice(0, 10, 2)}]
+        >>> arr["x", :] == arr[{"x": slice(None,None,new_axis=None)}]
+        >>> arr["y", slice(0,10,new_axis=2)] == arr[{"y": slice(0,10,new_axis=2)}]
 
         Advanced indexing is implemented by broadcasting all index arrays to the same shape (using Haliax's
         usual broadcasting rules).
@@ -284,7 +284,7 @@ class NamedArray:
                     )
                 idx = {idx[i]: idx[i + 1] for i in range(0, len(idx), 2)}
 
-        return slice_nd(self, idx)
+        return index(self, idx)
 
     # np.ndarray methods:
     def all(self, axis: Optional[AxisSelection] = None) -> "NamedArray":
@@ -597,22 +597,63 @@ def take(array: NamedArray, axis: AxisSelector, index: Union[int, NamedArray]) -
     return NamedArray(new_array, new_axes)
 
 
-def slice(array: NamedArray, axis: AxisSelector, new_axis: Axis, start) -> NamedArray:
+def slice(array: NamedArray, axis: AxisSelector, start: int = 0, length: Optional[int] = None, new_axis: Optional[AxisSelector] = None) -> NamedArray:
     """
     Selects elements from an array along an axis, by an index or by another named array
     This is somewhat better than take if you want a contiguous slice of an array
+
+    :arg axis: the axis to slice
+    :arg new_axis: the name of the new axis that replaces the old one. If none, the old name will be used
+    :arg start: the index to start the slice at
+    :arg length: the length of the slice. either new_axis must be an Axis or length must be specified
+
+    Note: this method is basically a wrapper around jax.lax.dynamic_slice_in_dim
     """
     axis_index = array._lookup_indices(axis)
     if axis_index is None:
         raise ValueError(f"axis {axis} not found in {array}")
 
-    sliced = jax.lax.dynamic_slice_in_dim(array.array, start, new_axis.size, axis=axis_index)
+    if length is None:
+        if not isinstance(new_axis, Axis):
+            raise ValueError("either new_axis must be an Axis or length must be specified")
+        length = new_axis.size
+
+    if isinstance(new_axis, str):
+        new_axis = Axis(new_axis, length)
+    elif new_axis is None:
+        new_axis = array.axes[axis_index].resize(length)
+
+    sliced = jax.lax.dynamic_slice_in_dim(array.array, start, length, axis=axis_index)
     new_axes = array.axes[:axis_index] + (new_axis,) + array.axes[axis_index + 1 :]
     # new axes come from splicing the old axis with
     return NamedArray(sliced, new_axes)
 
+def updated_slice(array: NamedArray, start: Mapping[AxisSelector, int], update: NamedArray) -> NamedArray:
+    """
+    Updates a slice of an array with another array
 
-def slice_nd(
+    :arg array: the array to update
+    :arg start: the starting index of each axis to update
+    :arg update: the array to update with
+    """
+
+    array_slice_indices = [0] * len(array.axes)
+    for axis, start in start.items():
+        axis_index = array._lookup_indices(axis)
+        if axis_index is None:
+            raise ValueError(f"axis {axis} not found in {array}")
+        array_slice_indices[axis_index] = start
+
+    # broadcasting here is a bit delicate because the sizes aren't necessarily the same
+    # we need to broadcast the update array to the same axis names as the array we're updating, adding them as necessary
+    update_axis_set = set(a.name for a in update.axes)
+    missing_axes = [a for a in array.axes if a.name not in update_axis_set]
+    update = update.broadcast_axis(*missing_axes)
+
+    return jax.lax.dynamic_update_slice(array.array, update.array, array_slice_indices)
+
+
+def index(
     array: NamedArray, slices: Mapping[AxisSelector, Union[int, slice_t, NamedArray]]
 ) -> Union[NamedArray, jnp.ndarray]:
     """
@@ -1278,7 +1319,8 @@ __all__ = [
     "named",
     "rearrange",
     "slice",
-    "slice_nd",
+    "updated_slice",
+    "index",
     "take",
     "split",
     "flatten_axes",

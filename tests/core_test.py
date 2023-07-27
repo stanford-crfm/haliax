@@ -416,15 +416,15 @@ def test_rename():
     assert hax.rename(named1, {H: H2, "W": "W2"}).axes == (H2, W2, D)
 
 
-def test_slice_nd():
+def test_index():
     H = Axis("H", 20)
     W = Axis("W", 30)
     D = Axis("D", 40)
 
     named1 = hax.random.uniform(PRNGKey(0), (H, W, D))
 
-    assert jnp.all(jnp.equal(hax.slice_nd(named1, {"H": slice(0, 10, 2)}).array, named1.array[0:10:2, :, :]))
-    assert hax.slice_nd(named1, {"H": slice(0, 10, 2)}).axes == (Axis("H", 5), W, D)
+    assert jnp.all(jnp.equal(hax.index(named1, {"H": slice(0, 10, 2)}).array, named1.array[0:10:2, :, :]))
+    assert hax.index(named1, {"H": slice(0, 10, 2)}).axes == (Axis("H", 5), W, D)
 
     # try indexing syntax
     assert jnp.all(jnp.equal(named1[{"H": slice(0, 10, 2)}].array, named1.array[0:10:2, :, :]))
@@ -443,7 +443,7 @@ def test_slice_nd():
     assert jnp.all(jnp.equal(named1[{"H": 0, "W": 0, "D": 0}], named1.array[0, 0, 0]))
 
 
-def test_slice_nd_array_slices():
+def test_index_array_slices():
     # fancier tests with array slices with named array args
     H = Axis("H", 10)
     W = Axis("W", 20)
@@ -581,3 +581,27 @@ def test_duplicate_axis_names_in_slicing():
         a[{"Y": ind1}]  # error, "X" is not eliminated by the indexing operation
 
     a[{"X": ind2, "Y": ind1}]  # ok, because X and Y are eliminated by the indexing operation
+
+
+def test_updated_slice():
+    H = Axis("H", 10)
+    W = Axis("W", 20)
+    D = Axis("D", 30)
+
+    H2 = H.resize(5)
+    W2 = W.resize(10)
+    D2 = D.resize(15)
+
+    named1 = hax.random.uniform(PRNGKey(0), (H, W, D))
+    named2 = hax.random.uniform(PRNGKey(0), (H2, W2, D2))
+
+    named1_updated = named1.updated_slice({"H": 0, "W": 0, "D": 0}, named2)
+
+    assert named1_updated.axes == named1.axes
+    assert named1_updated["H", 0:H2.size, "W", 0:W2.size, "D", 0:D2.size].array == named2.array
+
+
+
+
+
+
