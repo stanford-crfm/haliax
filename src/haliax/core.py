@@ -727,7 +727,8 @@ def dot(axis: AxisSelection, *arrays: NamedArray, precision: PrecisionLike = Non
         precision=precision,
     )
 
-    return NamedArray(output, output_axes)
+    out = NamedArray(output, output_axes)
+    return haliax.auto_sharded(out)
 
 
 def split(a: NamedArray, axis: AxisSelector, new_axes: Sequence[Axis]) -> Sequence[NamedArray]:
