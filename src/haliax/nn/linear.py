@@ -48,7 +48,8 @@ class Linear(eqx.Module):
 
     @property
     def out_first(self):
+        # We do it this way because of scan layers
         if isinstance(self.Out, hax.Axis):
-            return self.weight.axes[0] == self.Out
+            return self.weight.axes[-1] != self.Out
         else:
-            return self.weight.axes[: len(self.Out)] == self.Out
+            return self.weight.axes[-len(self.Out) :] != self.Out
