@@ -6,7 +6,7 @@ import jax
 import numpy as np
 from jax import numpy as jnp
 from jax import random as jrandom
-from jaxtyping import PRNGKeyArray, PyTree
+from jaxtyping import PRNGKeyArray
 
 
 class Static(eqx.Module):
@@ -39,7 +39,6 @@ def maybe_rng_split(key: Optional[PRNGKeyArray], num: int = 2):
         return jrandom.split(key, num)
 
 
-# use alias eqx.filter_eval_shape but mark as deprecated
 @ft.wraps(eqx.filter_eval_shape)
 def filter_eval_shape(*args, **kwargs):
     import warnings
@@ -86,34 +85,12 @@ def broadcast_prefix(prefix_tree: Any, full_tree: Any, is_leaf: Optional[Callabl
     return jax.tree_util.tree_unflatten(full_structure, result)
 
 
-def _is_none(x):
-    return x is None
+@ft.wraps(eqx.combine)
+def combine(*args, **kwargs):
+    import warnings
 
-
-def _combine(*args):
-    for arg in args:
-        if arg is not None:
-            return arg
-    return None
-
-
-def combine(*pytrees: PyTree, is_leaf=None) -> PyTree:
-    """Generalization of eqx.combine to support custom is_leaf functions
-
-    **Returns:**
-
-    A PyTree with the same structure as its inputs. Each leaf will be the first
-    non-`None` leaf found in the corresponding leaves of `pytrees` as they are
-    iterated over.
-    """
-
-    if is_leaf is None:
-        is_leaf = _is_none
-    else:
-        _orig_is_leaf = is_leaf
-        is_leaf = lambda x: _is_none(x) or _orig_is_leaf(x)  # noqa: E731
-
-    return jax.tree_util.tree_map(_combine, *pytrees, is_leaf=is_leaf)
+    warnings.warn("combine is deprecated, use eqx.combine instead", DeprecationWarning)
+    return eqx.combine(*args, **kwargs)
 
 
 def _UNSPECIFIED():

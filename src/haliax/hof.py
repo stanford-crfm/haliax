@@ -9,7 +9,7 @@ import jax.lax as lax
 from jaxtyping import PyTree
 
 from .core import NamedArray, selects_axis
-from .jax_utils import broadcast_prefix, combine, is_jax_array_like
+from .jax_utils import broadcast_prefix, is_jax_array_like
 from .partitioning import physical_axis_name
 from .types import Axis, AxisSelector
 from .util import index_where, is_jax_or_hax_array_like, is_named_array
@@ -77,7 +77,7 @@ def scan(
         def wrapped_fn(carry, scanned_x_leaves):
             scanned_x = jax.tree_util.tree_unflatten(x_elem_structure, scanned_x_leaves)
             # this part is the most delicate: combining the scanned x with the unscanned x
-            scanned_x = combine(scanned_x, unscanned_xs, is_leaf=is_named_array)
+            scanned_x = eqx.combine(scanned_x, unscanned_xs, is_leaf=is_named_array)
             args, kwargs = scanned_x
             carry, y = f(carry, *args, **kwargs)
             y = jax.tree_util.tree_map(_pacify_named_arrays, y, is_leaf=is_named_array)
