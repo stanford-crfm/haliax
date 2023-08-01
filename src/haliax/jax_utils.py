@@ -39,20 +39,13 @@ def maybe_rng_split(key: Optional[PRNGKeyArray], num: int = 2):
         return jrandom.split(key, num)
 
 
-def filter_eval_shape(fun: Callable, *args, **kwargs):
-    """As `jax.eval_shape`, but allows any Python object as inputs and outputs"""
+# use alias eqx.filter_eval_shape but mark as deprecated
+@ft.wraps(eqx.filter_eval_shape)
+def filter_eval_shape(*args, **kwargs):
+    import warnings
 
-    # TODO: file a bug
-
-    def _fn(_static, _dynamic):
-        _args, _kwargs = eqx.combine(_static, _dynamic)
-        _out = fun(*_args, **_kwargs)
-        _dynamic_out, _static_out = eqx.partition(_out, is_jax_array_like)
-        return _dynamic_out, Static(_static_out)
-
-    dynamic, static = eqx.partition((args, kwargs), is_jax_array_like)
-    dynamic_out, static_out = jax.eval_shape(ft.partial(_fn, static), dynamic)
-    return eqx.combine(dynamic_out, static_out.value)
+    warnings.warn("filter_eval_shape is deprecated, use eqx.filter_eval_shape instead", DeprecationWarning)
+    return eqx.filter_eval_shape(*args, **kwargs)
 
 
 def filter_checkpoint(fun: Callable, *, prevent_cse: bool = True, policy: Optional[Callable[..., bool]] = None):

@@ -18,7 +18,7 @@ from jax.sharding import Mesh, NamedSharding, PartitionSpec, SingleDeviceShardin
 from jaxtyping import PyTree
 
 from .core import NamedArray
-from .jax_utils import filter_eval_shape, is_jax_array_like
+from .jax_utils import is_jax_array_like
 from .tree_util import hashable_combine, hashable_partition
 from .types import Axis, AxisSelection, AxisSelector
 from .util import StringHolderEnum, ensure_tuple, is_named_array
@@ -356,7 +356,7 @@ def _cached_filter_eval_shape(fun, *args, **kwargs):
     """
     dynamic, static = hashable_partition((fun, args, kwargs), is_jax_array_like)
     if static not in _eval_shape_cache:
-        _eval_shape_cache[static] = filter_eval_shape(fun, *args, **kwargs)
+        _eval_shape_cache[static] = eqx.filter_eval_shape(fun, *args, **kwargs)
 
     return _eval_shape_cache[static]
 
