@@ -116,6 +116,9 @@ def shard_with_axis_mapping(x: T, mapping: ResourceMapping, mesh: Optional[Mesh]
         if _is_jit_tracer(x.array):
             pspec = pspec_for_axis(x.axes, mapping)
             return with_sharding_constraint(x, pspec)
+        elif not is_jax_array_like(x.array):
+            # this happens when we filter out params for things like lora
+            return x
         else:
             raw_x = x.array
             current_sharding = raw_x.sharding
