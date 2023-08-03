@@ -319,10 +319,10 @@ class NamedArray:
     def copy(self) -> "NamedArray":
         return NamedArray(self.array.copy(), self.axes)
 
-    def cumprod(self, axis: Optional[AxisSelection] = None, *, dtype=None) -> "NamedArray":
+    def cumprod(self, axis: Optional[AxisSelector] = None, *, dtype=None) -> "NamedArray":
         return haliax.cumprod(self, axis=axis, dtype=dtype)
 
-    def cumsum(self, axis: Optional[AxisSelection] = None, *, dtype=None) -> "NamedArray":
+    def cumsum(self, axis: Optional[AxisSelector] = None, *, dtype=None) -> "NamedArray":
         return haliax.cumsum(self, axis=axis, dtype=dtype)
 
     def dot(self, axis: AxisSelection, b, *, precision: PrecisionLike = None) -> "NamedArray":
@@ -336,10 +336,9 @@ class NamedArray:
         self,
         axis: Optional[AxisSelection] = None,
         *,
-        initial=None,
         where=None,
     ) -> "NamedArray":
-        return haliax.max(self, axis=axis, initial=initial, where=where)
+        return haliax.max(self, axis=axis, where=where)
 
     def mean(
         self,
@@ -354,24 +353,21 @@ class NamedArray:
         self,
         axis: Optional[AxisSelection] = None,
         *,
-        initial=None,
         where=None,
     ) -> "NamedArray":
-        return haliax.min(self, axis=axis, initial=initial, where=where)
+        return haliax.min(self, axis=axis, where=where)
 
     def prod(
         self,
         axis: Optional[AxisSelection] = None,
         *,
         dtype=None,
-        initial=None,
         where=None,
     ) -> "NamedArray":
         return haliax.prod(
             self,
             axis=axis,
             dtype=dtype,
-            initial=initial,
             where=where,
         )
 
@@ -393,8 +389,8 @@ class NamedArray:
     def round(self, decimals=0) -> "NamedArray":
         return haliax.round(self, decimals=decimals)
 
-    def sort(self, axis: AxisSelector, kind="quicksort") -> Any:
-        return haliax.sort(self, axis=axis, kind=kind)
+    def sort(self, axis: AxisSelector) -> Any:
+        return haliax.sort(self, axis=axis)
 
     def std(self, axis: Optional[AxisSelection] = None, *, dtype=None, ddof=0, where=None) -> "NamedArray":
         return haliax.std(self, axis=axis, dtype=dtype, ddof=ddof, where=where)
@@ -404,14 +400,12 @@ class NamedArray:
         axis: Optional[AxisSelection] = None,
         *,
         dtype=None,
-        initial=None,
         where=None,
     ) -> "NamedArray":
         return haliax.sum(
             self,
             axis=axis,
             dtype=dtype,
-            initial=initial,
             where=where,
         )
 

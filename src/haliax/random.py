@@ -243,7 +243,7 @@ def categorical(key, logits: NamedArray, axis: AxisSelector, shape: Optional[Axi
         so that `softmax(logits, axis)` gives the corresponding probabilities.
       axis: Axis along which logits belong to the same categorical distribution.
       shape: A tuple of axes representing the result shape, or None. if None, the shape is
-        logits.axes \ {axis}. If not None, logits.axes \ {axis}  must be a subset of shape.
+        `logits.axes - {axis}`. If not None, `logits.axes - {axis}`  must be a subset of shape.
     Returns:
       A random array with int dtype and shape given by ``shape``
     """
