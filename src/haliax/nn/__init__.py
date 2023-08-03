@@ -88,8 +88,8 @@ def selu(a: A) -> A:
     return wrap_elemwise_unary(jnn.selu, a)
 
 
-def gelu(a: A) -> A:
-    return wrap_elemwise_unary(jnn.gelu, a)
+def gelu(a: A, approximate: bool = True) -> A:
+    return wrap_elemwise_unary(jnn.gelu, a, approximate=approximate)
 
 
 def glu(x: NamedArray, axis: Axis) -> NamedArray:
