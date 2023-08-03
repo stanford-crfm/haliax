@@ -414,7 +414,7 @@ def mean(
     axis: Optional[AxisSelection] = None,
     *,
     where: Optional[NamedArray] = None,
-    dtype: Optional[DTypeLike],
+    dtype: Optional[DTypeLike] = None,
 ) -> NamedArray:
     return wrap_reduction_call(jnp.mean, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype)
 
@@ -452,7 +452,7 @@ def std(
     dtype: Optional[DTypeLike] = None,
 ) -> NamedArray:
     return wrap_reduction_call(
-        jnp.std, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype, ddpf=ddof
+        jnp.std, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype, ddof=ddof
     )
 
 
