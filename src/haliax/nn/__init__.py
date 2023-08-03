@@ -1,4 +1,5 @@
 import functools
+import typing
 import warnings
 from typing import Optional, Tuple, Union
 
@@ -10,7 +11,7 @@ import haliax as hax
 import haliax.nn.attention as attention
 
 from ..core import NamedArray
-from ..types import Axis, AxisSelector, AxisSpec
+from ..types import Axis, AxisSelection, AxisSelector, AxisSpec, Scalar
 from ..util import UNSPECIFIED, Unspecified
 from ..wrap import ReductionFunction, unwrap_namedarrays, wrap_axiswise_call, wrap_elemwise_unary, wrap_reduction_call
 from .dropout import Dropout, dropout
@@ -20,23 +21,75 @@ from .normalization import LayerNorm
 from .scan import Stacked
 
 
-relu = wrap_elemwise_unary(jnn.relu)
-relu6 = wrap_elemwise_unary(jnn.relu6)
-sigmoid = wrap_elemwise_unary(jnn.sigmoid)
-softplus = wrap_elemwise_unary(jnn.softplus)
-soft_sign = wrap_elemwise_unary(jnn.soft_sign)
-silu = wrap_elemwise_unary(jnn.silu)
-swish = wrap_elemwise_unary(jnn.swish)
-log_sigmoid = wrap_elemwise_unary(jnn.log_sigmoid)
-leaky_relu = wrap_elemwise_unary(jnn.leaky_relu)
-hard_sigmoid = wrap_elemwise_unary(jnn.hard_sigmoid)
-hard_silu = wrap_elemwise_unary(jnn.hard_silu)
-hard_swish = wrap_elemwise_unary(jnn.hard_swish)
-hard_tanh = wrap_elemwise_unary(jnn.hard_tanh)
-elu = wrap_elemwise_unary(jnn.elu)
-celu = wrap_elemwise_unary(jnn.celu)
-selu = wrap_elemwise_unary(jnn.selu)
-gelu = wrap_elemwise_unary(jnn.gelu)
+A = typing.TypeVar("A", Scalar, NamedArray, jnp.ndarray)
+
+
+def relu(a: A) -> A:
+    return wrap_elemwise_unary(jnn.relu, a)
+
+
+def relu6(a: A) -> A:
+    return wrap_elemwise_unary(jnn.relu6, a)
+
+
+def sigmoid(a: A) -> A:
+    return wrap_elemwise_unary(jnn.sigmoid, a)
+
+
+def softplus(a: A) -> A:
+    return wrap_elemwise_unary(jnn.softplus, a)
+
+
+def soft_sign(a: A) -> A:
+    return wrap_elemwise_unary(jnn.soft_sign, a)
+
+
+def silu(a: A) -> A:
+    return wrap_elemwise_unary(jnn.silu, a)
+
+
+def swish(a: A) -> A:
+    return wrap_elemwise_unary(jnn.swish, a)
+
+
+def log_sigmoid(a: A) -> A:
+    return wrap_elemwise_unary(jnn.log_sigmoid, a)
+
+
+def leaky_relu(a: A) -> A:
+    return wrap_elemwise_unary(jnn.leaky_relu, a)
+
+
+def hard_sigmoid(a: A) -> A:
+    return wrap_elemwise_unary(jnn.hard_sigmoid, a)
+
+
+def hard_silu(a: A) -> A:
+    return wrap_elemwise_unary(jnn.hard_silu, a)
+
+
+def hard_swish(a: A) -> A:
+    return wrap_elemwise_unary(jnn.hard_swish, a)
+
+
+def hard_tanh(a: A) -> A:
+    return wrap_elemwise_unary(jnn.hard_tanh, a)
+
+
+def elu(a: A) -> A:
+    return wrap_elemwise_unary(jnn.elu, a)
+
+
+def celu(a: A) -> A:
+    return wrap_elemwise_unary(jnn.celu, a)
+
+
+def selu(a: A) -> A:
+    return wrap_elemwise_unary(jnn.selu, a)
+
+
+def gelu(a: A) -> A:
+    return wrap_elemwise_unary(jnn.gelu, a)
 
 
 def glu(x: NamedArray, axis: Axis) -> NamedArray:
@@ -44,11 +97,18 @@ def glu(x: NamedArray, axis: Axis) -> NamedArray:
     return jnn.glu(x.array, axis_index)
 
 
-logsumexp = wrap_reduction_call(jnn.logsumexp, False, supports_where=False)
+def logsumexp(a: A, axis: Optional[AxisSelection] = None) -> A:
+    # TODO: logsumexp indirectly supports where via `b`. we should support it directly
+    return wrap_reduction_call(jnn.logsumexp, a, axis=axis, single_axis_only=False, supports_where=False)
+
 
 # TODO: support where in softmax, etc
-softmax = wrap_axiswise_call(jnn.softmax, False)
-log_softmax = wrap_axiswise_call(jnn.log_softmax, False)
+def softmax(a: A, axis: Optional[AxisSelection] = None) -> A:
+    return wrap_axiswise_call(jnn.softmax, a, axis=axis, single_axis_only=False)
+
+
+def log_softmax(a: A, axis: Optional[AxisSelection] = None) -> A:
+    return wrap_axiswise_call(jnn.log_softmax, a, axis=axis, single_axis_only=False)
 
 
 def standardize(
