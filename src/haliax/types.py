@@ -14,7 +14,7 @@ class Axis:
     def alias(self, new_name: str):
         return Axis(new_name, self.size)
 
-    def resize(self, size):
+    def resize(self, size) -> "Axis":
         return Axis(self.name, size)
 
 
