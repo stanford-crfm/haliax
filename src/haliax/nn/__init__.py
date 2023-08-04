@@ -1,4 +1,5 @@
 import functools
+import warnings
 from typing import Optional, Tuple, Union
 
 import jax.nn as jnn
@@ -90,6 +91,12 @@ def cross_entropy_loss(
     reduction_axis: Optional[AxisSelector] = None,
 ) -> NamedArray:
     loss, _ = cross_entropy_loss_and_log_normalizers(pred_y, Label, target_y)
+
+    # if target_y isn't some kind of floating point, something is wrong, so warn
+    if not jnp.issubdtype(target_y.dtype, jnp.floating):
+        warnings.warn(
+            f"target_y has dtype {target_y.dtype}, which is not a floating point type. This is probably a mistake."
+        )
 
     if reduction is UNSPECIFIED:
         reduction = haliax.mean

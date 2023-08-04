@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict, Optional, Sequence, Union, overload
+from typing import Dict, Mapping, Optional, Sequence, Union, overload
 
 from haliax.util import ensure_tuple, index_where
 
@@ -96,7 +96,7 @@ def _spec_to_dict(axis_spec: AxisSelection) -> Dict[str, Optional[int]]:  # type
     return shape_dict
 
 
-def _dict_to_spec(axis_spec: Dict[str, Optional[int]]) -> AxisSelection:
+def _dict_to_spec(axis_spec: Mapping[str, Optional[int]]) -> AxisSelection:
     return tuple(Axis(name, size) if size is not None else name for name, size in axis_spec.items())
 
 

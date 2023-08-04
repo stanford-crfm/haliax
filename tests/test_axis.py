@@ -17,3 +17,9 @@ def test_eliminate_axes():
 
     with pytest.raises(ValueError):
         eliminate_axes((H, W), (H, C))
+
+    # test string references
+    assert eliminate_axes((H, W), ("H",)) == (W,)
+    assert eliminate_axes(("H", W), (H,)) == (W,)
+    assert eliminate_axes(("H", W), ("H",)) == (W,)
+    assert eliminate_axes(("H", W), ("H", "W")) == ()

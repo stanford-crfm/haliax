@@ -246,6 +246,9 @@ right_shift = wrap_elemwise_binary(jnp.right_shift)
 subtract = wrap_elemwise_binary(jnp.subtract)
 true_divide = wrap_elemwise_binary(jnp.true_divide)
 
+# deprecated name
+concat_axis_specs = concat_axes
+
 
 __all__ = [
     "NamedArray",
@@ -409,4 +412,5 @@ __all__ = [
     "eliminate_axes",
     "selects_axis",
     "concat_axes",
+    "concat_axis_specs",
 ]

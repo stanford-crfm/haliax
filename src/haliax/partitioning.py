@@ -10,7 +10,8 @@ import jax
 
 # TODO: avoid depending on private Equinox internals.
 from equinox._compile_utils import compile_cache
-from jax._src.sharding_impls import AUTO
+
+# from jax._src.sharding_impls import AUTO
 from jax.experimental.pjit import pjit
 from jax.lax import with_sharding_constraint
 from jax.sharding import Mesh, NamedSharding, PartitionSpec, SingleDeviceSharding
@@ -18,7 +19,7 @@ from jaxtyping import PyTree
 
 from .axis import Axis, AxisSelection, AxisSelector
 from .core import NamedArray
-from .jax_utils import filter_eval_shape, is_jax_array_like
+from .jax_utils import is_jax_array_like
 from .tree_util import hashable_combine, hashable_partition
 from .util import StringHolderEnum, ensure_tuple, is_named_array
 
@@ -53,7 +54,7 @@ def axis_mapping(mapping: ResourceMapping, *, merge: bool = False, **kwargs):
     """Context manager for setting the global resource mapping"""
     mapping = dict(mapping)
 
-    old_mapping = _mapping_holder.thread_data.resource_mapping
+    old_mapping = current_thread_local_mapping()
     if merge:
         mapping.update(old_mapping or {})
 
@@ -67,6 +68,19 @@ def axis_mapping(mapping: ResourceMapping, *, merge: bool = False, **kwargs):
         _mapping_holder.thread_data.resource_mapping = old_mapping
 
 
+def current_thread_local_mapping():
+    """
+    Get the current thread-local resource mapping, or None if there is no resource mapping set.
+    :return:
+    """
+    if _mapping_holder.thread_data is None:
+        return None
+    if not hasattr(_mapping_holder.thread_data, "resource_mapping"):
+        return None
+
+    return _mapping_holder.thread_data.resource_mapping
+
+
 T = TypeVar("T", bound=PyTree)
 
 
@@ -77,7 +91,7 @@ def auto_sharded(x: T, mesh: Optional[Mesh] = None) -> T:
 
     If there is no axis mapping, the global axis mapping, this function is a no-op.
     """
-    mapping = _mapping_holder.thread_data.resource_mapping
+    mapping = current_thread_local_mapping()
 
     if mapping is None:
         return x
@@ -102,6 +116,9 @@ def shard_with_axis_mapping(x: T, mapping: ResourceMapping, mesh: Optional[Mesh]
         if _is_jit_tracer(x.array):
             pspec = pspec_for_axis(x.axes, mapping)
             return with_sharding_constraint(x, pspec)
+        elif not is_jax_array_like(x.array):
+            # this happens when we filter out params for things like lora
+            return x
         else:
             raw_x = x.array
             current_sharding = raw_x.sharding
@@ -146,23 +163,17 @@ def infer_resource_partitions(
     don't have a sharding.
     """
     if resource_mapping is None:
-        resource_mapping = _mapping_holder.thread_data.resource_mapping
+        resource_mapping = current_thread_local_mapping()
 
     if resource_mapping is None:
         raise ValueError("No resource mapping found")
 
     mesh = mesh or _get_mesh()
 
-    def _auto_array_sharding(node):
-        if hasattr(node, "sharding"):
-            return node.sharding
-        else:
-            return None
-
     def partition_spec(node: typing.Any):
         if isinstance(node, NamedArray):
             if preserve_existing_shardings:
-                current_sharding = _auto_array_sharding(node)
+                current_sharding = getattr(node, "sharding", None)
             else:
                 current_sharding = None
 
@@ -172,7 +183,7 @@ def infer_resource_partitions(
                 sharding = NamedSharding(mesh, pspec_for_axis(node.axes, resource_mapping))
                 return NamedArray(sharding, node.axes)  # type: ignore
         else:
-            sharding = _auto_array_sharding(node)
+            sharding = getattr(node, "sharding", None)
             # TODO: these are usually replicated. Is there a better way to tell?
             if isinstance(sharding, SingleDeviceSharding):
                 return NamedSharding(mesh, PartitionSpec(None))
@@ -180,13 +191,13 @@ def infer_resource_partitions(
                 return sharding
             elif node.shape == ():
                 return NamedSharding(mesh, PartitionSpec())
-            elif use_auto_sharding:
-                # TODO: auto doesn't seem to really work reliably yet
-                #     compat between 0.4.10 and 0.4.11
-                if isinstance(AUTO, typing.Callable):  # type: ignore
-                    return AUTO(mesh)
-                else:
-                    return AUTO
+            # elif use_auto_sharding:
+            # TODO: auto doesn't seem to really work reliably yet
+            #     compat between 0.4.10 and 0.4.11
+            # if isinstance(AUTO, typing.Callable):  # type: ignore
+            #     return AUTO(mesh)
+            # else:
+            #     return AUTO
             return NamedSharding(mesh, PartitionSpec(None))
 
     return jax.tree_util.tree_map(partition_spec, tree, is_leaf=is_named_array)
@@ -236,7 +247,7 @@ def named_jit(
         nonlocal axis_resources, in_axis_resources, out_axis_resources, donate_args, donate_kwargs
 
         if axis_resources is None:
-            axis_resources = _mapping_holder.thread_data.resource_mapping
+            axis_resources = current_thread_local_mapping()
 
         if out_axis_resources is None:
             out_axis_resources = axis_resources
@@ -345,7 +356,7 @@ def _cached_filter_eval_shape(fun, *args, **kwargs):
     """
     dynamic, static = hashable_partition((fun, args, kwargs), is_jax_array_like)
     if static not in _eval_shape_cache:
-        _eval_shape_cache[static] = filter_eval_shape(fun, *args, **kwargs)
+        _eval_shape_cache[static] = eqx.filter_eval_shape(fun, *args, **kwargs)
 
     return _eval_shape_cache[static]
 
@@ -353,7 +364,7 @@ def _cached_filter_eval_shape(fun, *args, **kwargs):
 def physical_axis_name(axis: AxisSelector, mapping: Optional[ResourceMapping] = None) -> Optional[PhysicalAxisSpec]:
     """Get the physical axis name for a logical axis from the mapping. Returns none if the axis is not mapped."""
     if mapping is None:
-        mapping = _mapping_holder.thread_data.resource_mapping
+        mapping = current_thread_local_mapping()
     if mapping is None:
         return None
     elif isinstance(axis, str):
@@ -430,4 +441,5 @@ __all__ = [
     "physical_axis_name",
     "pspec_for_axis",
     "round_axis_for_partitioning",
+    "current_thread_local_mapping",
 ]
