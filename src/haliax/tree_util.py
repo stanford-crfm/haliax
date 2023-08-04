@@ -3,7 +3,8 @@ import jax
 import jax.tree_util as jtu
 from jaxtyping import PRNGKeyArray, PyTree
 
-from .core import Axis, NamedArray
+from .axis import Axis
+from .core import NamedArray
 from .util import is_named_array
 
 

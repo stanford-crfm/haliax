@@ -8,12 +8,12 @@ import jax.numpy as jnp
 import jax.random as jrandom
 
 import haliax
-from haliax.core import NamedArray, NamedOrNumeric, broadcast_to, selects_axis
+from haliax.core import NamedArray, NamedOrNumeric, broadcast_to
 from haliax.util import ensure_tuple
 
+from .axis import Axis, AxisSelector, AxisSpec, selects_axis
 from .jax_utils import named_call
 from .partitioning import auto_sharded, physical_axis_name, physical_axis_size, pspec_for_axis
-from .types import Axis, AxisSelector, AxisSpec
 
 
 @named_call

@@ -8,10 +8,10 @@ import jax
 import jax.lax as lax
 from jaxtyping import PyTree
 
-from .core import NamedArray, selects_axis
+from .axis import Axis, AxisSelector, selects_axis
+from .core import NamedArray
 from .jax_utils import broadcast_prefix, combine, is_jax_array_like
 from .partitioning import physical_axis_name
-from .types import Axis, AxisSelector
 from .util import index_where, is_jax_or_hax_array_like, is_named_array
 
 

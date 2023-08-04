@@ -6,32 +6,31 @@ import jax.numpy as jnp
 import haliax.random as random
 from haliax import tree_util as tree_util
 
+from .axis import Axis, AxisSelection, AxisSelector, AxisSpec, concat_axes, eliminate_axes, selects_axis
 from .core import (
     NamedArray,
     are_shape_checks_enabled,
     broadcast_arrays,
     broadcast_axis,
     broadcast_to,
-    concat_axis_specs,
     dot,
     enable_shape_checks,
     flatten_axes,
+    index,
     named,
     rearrange,
     rename,
     roll,
     slice,
-    updated_slice,
-    index,
     split,
     take,
     unbind,
     unflatten_axis,
+    updated_slice,
 )
 from .hof import fold, map, scan, vmap
 from .ops import clip, isclose, pad_left, trace, tril, triu, where
 from .partitioning import auto_sharded, axis_mapping, named_jit, shard_with_axis_mapping
-from .types import Axis, AxisSelection, AxisSelector, AxisSpec
 from .wrap import (
     ReductionFunction,
     SimpleReductionFunction,
@@ -249,11 +248,7 @@ true_divide = wrap_elemwise_binary(jnp.true_divide)
 
 
 __all__ = [
-    "Axis",
     "NamedArray",
-    "AxisSpec",
-    "AxisSelection",
-    "AxisSelector",
     "broadcast_to",
     "broadcast_axis",
     "named",
@@ -268,7 +263,6 @@ __all__ = [
     "unbind",
     "rename",
     "rearrange",
-    "concat_axis_specs",
     "zeros",
     "ones",
     "full",
@@ -412,4 +406,7 @@ __all__ = [
     "pad_left",
     "stack",
     "concatenate",
+    "eliminate_axes",
+    "selects_axis",
+    "concat_axes",
 ]

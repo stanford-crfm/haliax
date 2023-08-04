@@ -10,14 +10,14 @@ Basic indexing works basically like you would expect: you can use integers or sl
 Haliax supports two syntaxes for indexing: one accepts a dict of axis names and indices, and the other accepts
 an alternating sequence of axis names and indices. The latter is useful for indexing with a small number of indices.
 
-
 ```python
+import haliax.axis
 import haliax as hax
 import jax
 
-X = hax.Axis("X", 10)
-Y = hax.Axis("Y", 20)
-Z = hax.Axis("Z", 30)
+X = haliax.axis.Axis("X", 10)
+Y = haliax.axis.Axis("Y", 20)
+Z = haliax.axis.Axis("Z", 30)
 
 a = hax.random.uniform(jax.random.PRNGKey(0), (X, Y, Z))
 
@@ -45,18 +45,19 @@ broadcastable to the same shape. Advanced indexing in Haliax is similar, except 
 meaning that the axis names determine broadcasting. Axes with the same name must have the same size.
 
 ```python
+import haliax.axis
 import haliax as hax
 import jax
 
-X = hax.Axis("X", 10)
-Y = hax.Axis("Y", 20)
-Z = hax.Axis("Z", 30)
+X = haliax.axis.Axis("X", 10)
+Y = haliax.axis.Axis("Y", 20)
+Z = haliax.axis.Axis("Z", 30)
 
 a = hax.random.uniform(jax.random.PRNGKey(0), (X, Y, Z))
 
-I1 = hax.Axis("I1", 5)
-I2 = hax.Axis("I2", 5)
-I3 = hax.Axis("I3", 5)
+I1 = haliax.axis.Axis("I1", 5)
+I2 = haliax.axis.Axis("I2", 5)
+I3 = haliax.axis.Axis("I3", 5)
 ind1 = hax.random.randint(jax.random.PRNGKey(0), (I1,), 0, 10)
 ind2 = hax.random.randint(jax.random.PRNGKey(0), (I2, I3), 0, 20)
 
@@ -74,15 +75,16 @@ In keeping with the one-axis-per-name rule, you are allowed to index using axes 
 if it would be eliminated by the indexing operation. For example:
 
 ```python
+import haliax.axis
 import haliax as hax
 import jax
 
-X = hax.Axis("X", 10)
-Y = hax.Axis("Y", 20)
-Z = hax.Axis("Z", 30)
+X = haliax.axis.Axis("X", 10)
+Y = haliax.axis.Axis("Y", 20)
+Z = haliax.axis.Axis("Z", 30)
 
-X2 = hax.Axis("X", 5)
-Y2 = hax.Axis("Y", 5)
+X2 = haliax.axis.Axis("X", 5)
+Y2 = haliax.axis.Axis("Y", 5)
 
 a = hax.random.uniform(jax.random.PRNGKey(0), (X, Y, Z))
 ind1 = hax.random.randint(jax.random.PRNGKey(0), (X2,), 0, 10)

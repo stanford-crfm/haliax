@@ -12,10 +12,12 @@ import jax.numpy as jnp
 import numpy as np
 
 import haliax
+import haliax.axis
 from haliax.jax_utils import is_jax_array_like
 from haliax.util import ensure_tuple, index_where, py_slice, slice_t
 
-from .types import Axis, AxisSelection, AxisSelector, AxisSpec, PrecisionLike, Scalar
+from .axis import Axis, AxisSelection, AxisSelector, AxisSpec, selects_axis
+from .types import PrecisionLike, Scalar
 
 
 NamedOrNumeric = Union[Scalar, "NamedArray"]
@@ -1115,42 +1117,6 @@ def named(a: jnp.ndarray, axis: AxisSelection) -> NamedArray:
     return NamedArray(a, axes)
 
 
-@overload
-def concat_axis_specs(a1: AxisSpec, a2: AxisSpec) -> Sequence[Axis]:
-    pass
-
-
-@overload
-def concat_axis_specs(a1: AxisSelection, a2: AxisSelection) -> Sequence[Union[Axis, str]]:
-    pass
-
-
-def concat_axis_specs(a1: AxisSelection, a2: AxisSelection) -> AxisSelection:
-    """Concatenates two AxisSpec. Raises ValueError if any axis is present in both specs"""
-
-    def _ax_name(ax: AxisSelector) -> str:
-        if isinstance(ax, Axis):
-            return ax.name
-        else:
-            return ax
-
-    if isinstance(a1, Axis) and isinstance(a2, Axis):
-        if _ax_name(a1) == _ax_name(a2):
-            raise ValueError(f"Axis {a1} specified twice")
-        return (a1, a2)
-    else:
-        a1 = ensure_tuple(a1)
-        a2 = ensure_tuple(a2)
-
-        a1_names = [_ax_name(ax) for ax in a1]
-        a2_names = [_ax_name(ax) for ax in a2]
-
-        if len(set(a1_names) & set(a2_names)) > 0:
-            overlap = [ax for ax in a1_names if ax in a2_names]
-            raise ValueError(f"AxisSpecs overlap! {' '.join(str(x) for x in overlap)}")
-        return a1 + a2
-
-
 # Broadcasting Support
 def _broadcast_order(a: NamedArray, b: NamedArray, require_subset: bool = True) -> Tuple[Axis, ...]:
     """
@@ -1359,7 +1325,7 @@ def check_shape(jnp_shape: Sequence[int], hax_axes: AxisSelection) -> Tuple[Axis
     axes: Tuple[AxisSelector, ...] = ensure_tuple(hax_axes)
     if len(jnp_shape) != len(axes):
         raise ValueError(f"Shape mismatch: jnp_shape={jnp_shape} hax_axes={hax_axes}")
-    result_axes: List[haliax.Axis] = []
+    result_axes: List[haliax.axis.Axis] = []
     for i in range(len(axes)):
         ax = axes[i]
         if isinstance(ax, Axis):
@@ -1374,74 +1340,8 @@ def check_shape(jnp_shape: Sequence[int], hax_axes: AxisSelection) -> Tuple[Axis
     return tuple(result_axes)
 
 
-class _Sentinel:
-    ...
-
-
-def is_axis_compatible(ax1: AxisSelector, ax2: AxisSelector):
-    if isinstance(ax1, str):
-        if isinstance(ax2, str):
-            return ax1 == ax2
-        return ax1 == ax2.name
-    if isinstance(ax2, str):
-        return ax1.name == ax2
-    return ax1.name == ax2.name
-
-
-def selects_axis(selector: AxisSelection, selected: AxisSelection) -> bool:
-    """Returns true if the selector has every axis in selected and, if dims are given, that they match"""
-    if isinstance(selector, Axis) or isinstance(selector, str):
-        selected = ensure_tuple(selected)
-        try:
-            index = index_where(lambda ax: is_axis_compatible(ax, selector), selected)  # type: ignore
-            return index >= 0
-        except ValueError:
-            return False
-
-    selector_dict = _spec_to_dict(selector)
-
-    selected_tuple = ensure_tuple(selected)  # type: ignore
-    for ax in selected_tuple:
-        if isinstance(ax, Axis):
-            selector_size = selector_dict.get(ax.name, _Sentinel)
-            if selector_size is not None and selector_size != ax.size:
-                return False
-        elif isinstance(ax, str):
-            if ax not in selector_dict:
-                return False
-        else:
-            raise ValueError(f"Invalid axis spec: {ax}")
-
-    return True
-
-
-@overload
-def _spec_to_dict(axis_spec: AxisSpec) -> Mapping[str, int]:
-    ...
-
-
-@overload
-def _spec_to_dict(axis_spec: AxisSelection) -> Mapping[str, Optional[int]]:
-    ...
-
-
-def _spec_to_dict(axis_spec: AxisSelection) -> Mapping[str, Optional[int]]:
-    spec = ensure_tuple(axis_spec)  # type: ignore
-    shape_dict: Dict[str, Optional[int]] = {}
-    for ax in spec:
-        if isinstance(ax, Axis):
-            shape_dict[ax.name] = ax.size
-        elif isinstance(ax, str):
-            shape_dict[ax] = None
-        else:
-            raise ValueError(f"Invalid axis spec: {ax}")
-
-    return shape_dict
-
-
 __all__ = [
     "NamedArray",
-    "concat_axis_specs",
     "dot",
     "named",
     "rearrange",

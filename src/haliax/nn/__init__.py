@@ -8,8 +8,8 @@ import haliax
 import haliax as hax
 import haliax.nn.attention as attention
 
+from .. import Axis, AxisSelector, AxisSpec
 from ..core import NamedArray
-from ..types import Axis, AxisSelector, AxisSpec
 from ..util import UNSPECIFIED, Unspecified
 from ..wrap import ReductionFunction, unwrap_namedarrays, wrap_axiswise_call, wrap_elemwise_unary, wrap_reduction_call
 from .dropout import Dropout, dropout

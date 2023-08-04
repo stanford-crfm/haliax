@@ -4,9 +4,10 @@ import equinox as eqx
 import jax
 
 import haliax as hax
+import haliax.axis
 
+from ..axis import AxisSpec
 from ..core import NamedArray
-from ..types import AxisSpec
 
 
 class Linear(eqx.Module):
@@ -21,7 +22,7 @@ class Linear(eqx.Module):
 
     @staticmethod
     def init(In: AxisSpec, Out: AxisSpec, *, key, use_bias=True) -> "Linear":
-        joint_spec = hax.concat_axis_specs(In, Out)
+        joint_spec = haliax.axis.concat_axes(In, Out)
         weight = hax.random.normal(key, joint_spec) * 0.02
         bias = hax.zeros(Out) if use_bias else None
         return Linear(weight, bias, In, Out)

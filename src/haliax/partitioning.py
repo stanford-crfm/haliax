@@ -16,10 +16,10 @@ from jax.lax import with_sharding_constraint
 from jax.sharding import Mesh, NamedSharding, PartitionSpec, SingleDeviceSharding
 from jaxtyping import PyTree
 
+from .axis import Axis, AxisSelection, AxisSelector
 from .core import NamedArray
 from .jax_utils import filter_eval_shape, is_jax_array_like
 from .tree_util import hashable_combine, hashable_partition
-from .types import Axis, AxisSelection, AxisSelector
 from .util import StringHolderEnum, ensure_tuple, is_named_array
 
 
