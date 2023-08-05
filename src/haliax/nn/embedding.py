@@ -2,7 +2,8 @@ import equinox as eqx
 
 import haliax as hax
 
-from ..core import Axis, NamedArray
+from ..axis import Axis
+from ..core import NamedArray
 from ..jax_utils import named_call
 
 

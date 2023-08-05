@@ -416,15 +416,15 @@ def test_rename():
     assert hax.rename(named1, {H: H2, "W": "W2"}).axes == (H2, W2, D)
 
 
-def test_slice_nd():
+def test_index():
     H = Axis("H", 20)
     W = Axis("W", 30)
     D = Axis("D", 40)
 
     named1 = hax.random.uniform(PRNGKey(0), (H, W, D))
 
-    assert jnp.all(jnp.equal(hax.slice_nd(named1, {"H": slice(0, 10, 2)}).array, named1.array[0:10:2, :, :]))
-    assert hax.slice_nd(named1, {"H": slice(0, 10, 2)}).axes == (Axis("H", 5), W, D)
+    assert jnp.all(jnp.equal(hax.index(named1, {"H": slice(0, 10, 2)}).array, named1.array[0:10:2, :, :]))
+    assert hax.index(named1, {"H": slice(0, 10, 2)}).axes == (Axis("H", 5), W, D)
 
     # try indexing syntax
     assert jnp.all(jnp.equal(named1[{"H": slice(0, 10, 2)}].array, named1.array[0:10:2, :, :]))
@@ -443,7 +443,7 @@ def test_slice_nd():
     assert jnp.all(jnp.equal(named1[{"H": 0, "W": 0, "D": 0}], named1.array[0, 0, 0]))
 
 
-def test_slice_nd_array_slices():
+def test_index_array_slices():
     # fancier tests with array slices with named array args
     H = Axis("H", 10)
     W = Axis("W", 20)
@@ -581,3 +581,95 @@ def test_duplicate_axis_names_in_slicing():
         a[{"Y": ind1}]  # error, "X" is not eliminated by the indexing operation
 
     a[{"X": ind2, "Y": ind1}]  # ok, because X and Y are eliminated by the indexing operation
+
+
+def test_slice_old_style():
+    H = Axis("H", 10)
+    W = Axis("W", 20)
+    D = Axis("D", 30)
+
+    named1 = hax.random.randint(PRNGKey(0), (H, W, D), minval=0, maxval=10)
+
+    assert jnp.alltrue(named1.slice("H", start=4, length=2).array == named1.array[4:6, :, :])
+    assert jnp.alltrue(named1.slice("W", start=4, length=2).array == named1.array[:, 4:6, :])
+    assert jnp.alltrue(named1.slice("D", start=4, length=2).array == named1.array[:, :, 4:6])
+
+    H2 = Axis("H2", 5)
+    W2 = Axis("W2", 10)
+    D2 = Axis("D2", 15)
+
+    assert jnp.alltrue(named1.slice("H", H2, start=4).array == named1.array[4 : 4 + H2.size, :, :])
+    assert jnp.alltrue(named1.slice("W", W2, start=4).array == named1.array[:, 4 : 4 + W2.size, :])
+    assert jnp.alltrue(named1.slice("D", D2, start=4).array == named1.array[:, :, 4 : 4 + D2.size])
+
+
+def test_slice_new_style():
+    H = Axis("H", 10)
+    W = Axis("W", 20)
+    D = Axis("D", 30)
+
+    named1 = hax.random.randint(PRNGKey(0), (H, W, D), minval=0, maxval=10)
+
+    x1 = named1.slice({"H": 4, "W": 5, "D": 7}, length={"H": 2, "W": 3, "D": 4})
+    assert jnp.alltrue(x1.array == named1.array[4:6, 5:8, 7:11])
+
+    with pytest.raises(TypeError):
+        named1.slice({"H": 4, "W": 5, "D": 7}, length={"H": 2, "W": 3, "D": 4}, start={"H": 1, "W": 2, "D": 3})
+
+    with pytest.raises(ValueError):
+        named1.slice({"H": 4, "W": 5, "D": 7}, length={"H": 2, "W": 3})
+
+    H2 = Axis("H2", 5)
+    W2 = Axis("W2", 10)
+    D2 = Axis("D2", 15)
+
+    x2 = named1.slice({"H": 4, "W": 5, "D": 7}, length={"H": H2, "W": W2, "D": D2})
+    assert jnp.alltrue(x2.array == named1.array[4 : 4 + H2.size, 5 : 5 + W2.size, 7 : 7 + D2.size])
+
+
+def test_updated_slice():
+    H = Axis("H", 10)
+    W = Axis("W", 20)
+    D = Axis("D", 30)
+
+    H2 = H.resize(5)
+    W2 = W.resize(10)
+    D2 = D.resize(15)
+
+    named1 = hax.random.randint(PRNGKey(0), (H, W, D), minval=0, maxval=10)
+    named2 = hax.random.randint(PRNGKey(0), (H2, W2, D2), minval=10, maxval=30)
+
+    named1_updated = named1.updated_slice({"H": 0, "W": 0, "D": 0}, named2)
+
+    assert named1_updated.axes == named1.axes
+    assert jnp.alltrue(named1_updated["H", 0 : H2.size, "W", 0 : W2.size, "D", 0 : D2.size].array == named2.array)
+
+    # test broadcasting
+    for pair in [(H2, D2), (H2, W2), (W2, D2), (D2, H2), (D2, W2), (W2, H2)]:
+        n3 = hax.random.randint(PRNGKey(0), pair, minval=10, maxval=30)
+        named1_updated = named1.updated_slice({ax.name: 0 for ax in pair}, n3)
+        assert named1_updated.axes == named1.axes
+        assert jnp.alltrue((named1_updated[{ax.name: slice(0, ax.size) for ax in pair}] == n3).array)
+        # check that the array outside the slice is unchanged
+        assert jnp.alltrue(
+            (
+                named1_updated[{ax.name: slice(ax.size, None) for ax in pair}]
+                == named1[{ax.name: slice(ax.size, None) for ax in pair}]
+            ).array
+        )
+
+
+def test_updated_slice_extra_update_axis_errors():
+    H = Axis("H", 10)
+    W = Axis("W", 20)
+    D = Axis("D", 30)
+
+    named1 = hax.random.randint(PRNGKey(0), (H, W, D), minval=0, maxval=10)
+    named2 = hax.random.randint(PRNGKey(0), (H, W, D), minval=10, maxval=30)
+
+    with pytest.raises(ValueError):
+        named1.updated_slice({"H": 0, "W": 0, "D": 0, "extra": 0}, named2)
+
+    with pytest.raises(ValueError):
+        named3 = hax.random.randint(PRNGKey(0), (H, W), minval=10, maxval=30)
+        named3.updated_slice({"H": 0, "W": 0}, named2)
