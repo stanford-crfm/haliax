@@ -465,6 +465,13 @@ class NamedArray:
         return haliax.less_equal(self, other)
 
     def __eq__(self, other):
+        # special case because Jax sometimes call == on
+        # types when they're in PyTrees
+        if self.array is None:
+            return other.array is None
+        if other.array is None:
+            return False
+
         return haliax.equal(self, other)
 
     def __ne__(self, other):
