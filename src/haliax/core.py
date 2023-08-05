@@ -1333,7 +1333,7 @@ def check_shape(jnp_shape: Sequence[int], hax_axes: AxisSelection) -> Tuple[Axis
     axes: Tuple[AxisSelector, ...] = ensure_tuple(hax_axes)
     if len(jnp_shape) != len(axes):
         raise ValueError(f"Shape mismatch: jnp_shape={jnp_shape} hax_axes={hax_axes}")
-    result_axes: List[haliax.axis.Axis] = []
+    result_axes: List[Axis] = []
     for i in range(len(axes)):
         ax = axes[i]
         if isinstance(ax, Axis):
