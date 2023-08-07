@@ -251,6 +251,10 @@ concat_axis_specs = concat_axes
 
 
 __all__ = [
+    "Axis",
+    "AxisSpec",
+    "AxisSelection",
+    "AxisSelector",
     "NamedArray",
     "broadcast_to",
     "broadcast_axis",
