@@ -72,7 +72,7 @@ class Stacked(eqx.Module, Generic[M]):
 
     def scan(self, init, *extra_args, **extra_kwargs):
         if self.gradient_checkpointing:
-            do_block = filter_checkpoint(self._do_block)
+            do_block = filter_checkpoint(self._do_block, prevent_cse=False)
         else:
             do_block = self._do_block
         return haliax.scan(do_block, self.Block)(init, self.stacked, *extra_args, **extra_kwargs)
