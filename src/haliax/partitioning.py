@@ -358,7 +358,7 @@ def _fsdp_impl(fn: F, parameter_mapping, compute_mapping, mp: Optional[jmp.Polic
 
             return fn(*args, **kwargs)
 
-    return named_jit(f, axis_resources=parameter_mapping)
+    return named_jit(f, in_axis_resources=parameter_mapping, out_axis_resources=parameter_mapping)
 
 
 # This is more or less copy-pasted from Equinox's similar functions (pmap, vmap, etc), but
