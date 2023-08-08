@@ -30,7 +30,7 @@ from .core import (
 )
 from .hof import fold, map, scan, vmap
 from .ops import clip, isclose, pad_left, trace, tril, triu, where
-from .partitioning import auto_sharded, axis_mapping, named_jit, shard_with_axis_mapping
+from .partitioning import auto_sharded, axis_mapping, fsdp, named_jit, shard_with_axis_mapping
 from .wrap import (
     ReductionFunction,
     SimpleReductionFunction,
@@ -251,6 +251,10 @@ concat_axis_specs = concat_axes
 
 
 __all__ = [
+    "Axis",
+    "AxisSpec",
+    "AxisSelection",
+    "AxisSelector",
     "NamedArray",
     "broadcast_to",
     "broadcast_axis",
@@ -401,8 +405,8 @@ __all__ = [
     "auto_sharded",
     "axis_mapping",
     "named_jit",
+    "fsdp",
     "shard_with_axis_mapping",
-    "named_jit",
     "enable_shape_checks",
     "are_shape_checks_enabled",
     "isclose",
