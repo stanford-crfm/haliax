@@ -8,8 +8,9 @@ from jaxtyping import PRNGKeyArray
 
 import haliax
 import haliax.random as hrandom
+from haliax import Axis, AxisSelection, AxisSpec
 from haliax.core import NamedArray
-from haliax.types import Axis, AxisSelection, AxisSpec, PrecisionLike
+from haliax.types import PrecisionLike
 
 
 # With attention we usually distinguish between the mask and the bias, though the former is just a special case of the

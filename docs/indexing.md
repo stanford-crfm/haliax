@@ -10,7 +10,6 @@ Basic indexing works basically like you would expect: you can use integers or sl
 Haliax supports two syntaxes for indexing: one accepts a dict of axis names and indices, and the other accepts
 an alternating sequence of axis names and indices. The latter is useful for indexing with a small number of indices.
 
-
 ```python
 import haliax as hax
 import jax

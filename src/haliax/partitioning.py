@@ -7,6 +7,7 @@ from typing import Mapping, Optional, Sequence, TypeVar, Union
 
 import equinox as eqx
 import jax
+import jmp
 
 # TODO: avoid depending on private Equinox internals.
 from equinox._compile_utils import compile_cache
@@ -17,10 +18,10 @@ from jax.lax import with_sharding_constraint
 from jax.sharding import Mesh, NamedSharding, PartitionSpec, SingleDeviceSharding
 from jaxtyping import PyTree
 
+from .axis import Axis, AxisSelection, AxisSelector
 from .core import NamedArray
 from .jax_utils import is_jax_array_like
 from .tree_util import hashable_combine, hashable_partition
-from .types import Axis, AxisSelection, AxisSelector
 from .util import StringHolderEnum, ensure_tuple, is_named_array
 
 
@@ -29,6 +30,8 @@ PhysicalAxis = str
 PhysicalAxisSpec = Union[PhysicalAxis, Sequence[PhysicalAxis]]
 ResourceMapping = Mapping[LogicalAxisName, PhysicalAxisSpec]
 """Mapping from logical axis names to physical axis names"""
+
+F = typing.TypeVar("F", bound=typing.Callable)
 
 
 class ResourceAxis(StringHolderEnum):
@@ -311,6 +314,53 @@ def named_jit(
     return f
 
 
+@typing.overload
+def fsdp(
+    fn: F, parameter_mapping: ResourceMapping, compute_mapping: ResourceMapping, mp: Optional[jmp.Policy] = None
+) -> F:
+    ...
+
+
+@typing.overload
+def fsdp(
+    parameter_mapping: ResourceMapping, compute_mapping: ResourceMapping, mp: Optional[jmp.Policy] = None
+) -> typing.Callable[[F], F]:
+    ...
+
+
+def fsdp(*args, **kwargs):
+    """
+    A convenience wrapper around named_jit / pjit and jmp's Policy to encode the FSDP pattern. It's basically equivalent to this:
+
+    ```python
+    @named_jit(in_axis_resources=parameter_mapping, out_axis_resources=parameter_mapping)
+    def f(*args, **kwargs):
+        with axis_mapping(compute_mapping):
+            return fn(*args, **kwargs)
+    ```
+
+    This function can be used as a decorator or as a function.
+    """
+    if "fn" in kwargs:
+        return _fsdp_impl(*args, **kwargs)
+    elif len(args) > 1 and callable(args[0]):
+        return _fsdp_impl(*args[1:], fn=args[0])
+    else:
+        return functools.partial(_fsdp_impl, *args, **kwargs)
+
+
+def _fsdp_impl(fn: F, parameter_mapping, compute_mapping, mp: Optional[jmp.Policy] = None):
+    @functools.wraps(fn)
+    def f(*args, **kwargs):
+        with axis_mapping(compute_mapping):
+            if mp is not None:
+                args, kwargs = mp.cast_to_compute((args, kwargs))
+
+            return fn(*args, **kwargs)
+
+    return named_jit(f, axis_resources=parameter_mapping)
+
+
 # This is more or less copy-pasted from Equinox's similar functions (pmap, vmap, etc), but
 # it's not really explained there so we'll explain it here.
 # Many jax functions work by compiling functions to XLA. The compilation process is expensive,
@@ -438,6 +488,7 @@ __all__ = [
     "auto_sharded",
     "infer_resource_partitions",
     "named_jit",
+    "fsdp",
     "physical_axis_name",
     "pspec_for_axis",
     "round_axis_for_partitioning",

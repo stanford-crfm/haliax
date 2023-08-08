@@ -5,8 +5,8 @@ import jax
 from jaxtyping import PRNGKeyArray
 
 import haliax
+from haliax.axis import AxisSpec
 from haliax.core import NamedArray
-from haliax.types import AxisSpec
 from haliax.util import ensure_tuple
 
 
