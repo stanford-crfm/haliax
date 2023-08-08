@@ -1,6 +1,8 @@
 import math
+from dataclasses import dataclass
 from typing import List, Optional
 
+import equinox
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -111,6 +113,55 @@ def dot_product_attention(
     weights = dot_product_attention_weights(KeySize, KPos, query, key, mask, bias, attention_dtype, precision)
 
     return haliax.dot(KPos, weights, value)
+
+
+class AttentionMask(equinox.Module):
+    """
+    Represents an attention mask in a structured way to make it easier to optimize attention for particular use cases (causal, prefix, etc)
+    while still maintaining sufficient flexibility to handle arbitrary attention masks.
+
+    Semantically, the mask represents the intersection of a static mask and a dynamic mask, as well a possible implicit causal mask.
+
+    """
+    Pos: Axis = equinox.field(static=True)
+    KeyPos: Axis = equinox.field(static=True)
+    static: Optional[NamedArray] = equinox.field(default=None, static=True)
+    dynamic: Optional[NamedArray] = equinox.field(default=None, static=False)
+    causal: bool = equinox.field(default=False, static=True)
+
+    def materialize(self, include_causal: bool) -> Optional[NamedArray]:
+        mask = combine_masks_and(self.static, self.dynamic)
+        if self.causal and include_causal:
+            mask = combine_masks_and(mask, causal_mask(self.Pos, self.KeyPos))
+
+        return mask
+
+    def __and__(self, other: "AttentionMask") -> "AttentionMask":
+        return AttentionMask(
+            Pos=self.Pos,
+            KeyPos=self.KeyPos,
+            static=combine_masks_and(self.static, other.static),
+            dynamic=combine_masks_and(self.dynamic, other.dynamic),
+            causal=self.causal or other.causal, # NB `or`
+        )
+
+    def __or__(self, other: "AttentionMask") -> "AttentionMask":
+        # or is tricky. Our masks are basically (static&dynamic&causal), so we need to distribute
+        new_static = combine_masks_or(self.static, other.static)
+        new_dynamic = combine_masks_and(
+            combine_masks_or(self.dynamic, other.dynamic),
+            combine_masks_and(
+                combine_masks_or(self.static, other.dynamic),
+                combine_masks_or(self.dynamic, other.static)
+            )
+        )
+        return AttentionMask(
+            Pos=self.Pos,
+            KeyPos=self.KeyPos,
+            static=new_static,
+            dynamic=new_dynamic,
+            causal=self.causal and other.causal,
+        )
 
 
 def mask_to_bias(mask: NamedArray, mask_value: float = -1e9) -> NamedArray:
