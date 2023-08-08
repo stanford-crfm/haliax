@@ -318,14 +318,14 @@ def named_jit(
 
 @typing.overload
 def fsdp(
-    fn: F, compute_mapping: ResourceMapping, parameter_mapping: ResourceMapping, mp: Optional[jmp.Policy] = None
+    fn: F, parameter_mapping: ResourceMapping, compute_mapping: ResourceMapping, mp: Optional[jmp.Policy] = None
 ) -> F:
     ...
 
 
 @typing.overload
 def fsdp(
-    compute_mapping: ResourceMapping, parameter_mapping: ResourceMapping, mp: Optional[jmp.Policy] = None
+    parameter_mapping: ResourceMapping, compute_mapping: ResourceMapping, mp: Optional[jmp.Policy] = None
 ) -> typing.Callable[[F], F]:
     ...
 
@@ -351,7 +351,7 @@ def fsdp(*args, **kwargs):
         return functools.partial(_fsdp_impl, *args, **kwargs)
 
 
-def _fsdp_impl(fn: F, compute_mapping, parameter_mapping, mp: Optional[jmp.Policy] = None):
+def _fsdp_impl(fn: F, parameter_mapping, compute_mapping, mp: Optional[jmp.Policy] = None):
     @functools.wraps(fn)
     def f(*args, **kwargs):
         with haliax.axis_mapping(compute_mapping):
