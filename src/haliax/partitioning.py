@@ -346,7 +346,7 @@ def fsdp(*args, **kwargs):
     elif len(args) > 1 and callable(args[0]):
         return _fsdp_impl(*args[1:], fn=args[0])
     else:
-        return functools.partial(_fsdp_impl, *args, **kwargs)
+        return lambda fn: _fsdp_impl(fn, *args, **kwargs)
 
 
 def _fsdp_impl(fn: F, parameter_mapping, compute_mapping, mp: Optional[jmp.Policy] = None):
