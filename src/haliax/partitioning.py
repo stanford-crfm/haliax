@@ -18,8 +18,6 @@ from jax.lax import with_sharding_constraint
 from jax.sharding import Mesh, NamedSharding, PartitionSpec, SingleDeviceSharding
 from jaxtyping import PyTree
 
-import haliax
-
 from .axis import Axis, AxisSelection, AxisSelector
 from .core import NamedArray
 from .jax_utils import is_jax_array_like
@@ -354,7 +352,7 @@ def fsdp(*args, **kwargs):
 def _fsdp_impl(fn: F, parameter_mapping, compute_mapping, mp: Optional[jmp.Policy] = None):
     @functools.wraps(fn)
     def f(*args, **kwargs):
-        with haliax.axis_mapping(compute_mapping):
+        with axis_mapping(compute_mapping):
             if mp is not None:
                 args, kwargs = mp.cast_to_compute((args, kwargs))
 
