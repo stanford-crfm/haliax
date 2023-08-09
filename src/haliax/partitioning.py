@@ -7,7 +7,6 @@ from typing import Mapping, Optional, Sequence, TypeVar, Union
 
 import equinox as eqx
 import jax
-import jmp
 
 # TODO: avoid depending on private Equinox internals.
 from equinox._compile_utils import compile_cache
@@ -224,8 +223,19 @@ def named_jit(
     provided, the arguments' own (pre-existing) shardings will be used as the in_axis_resources.
     If out_axis_resources is not provided, axis_resources will be used as the out_axis_resources.
 
+    functionally this is very similar to something like:
+
+    ```python
+     arg = hax.shard_with_axis_mapping(arg, in_axis_resources)
+     with hax.use_resource_mapping(axis_resources):
+        result = jit(fn, **pjit_args)(arg)
+    result = hax.shard_with_axis_mapping(result, out_axis_resources)
+    return result
+    ```
+    but it uses the jit decorator directly
+
     :param fn: The function to be jit'd
-    :param axis_resources: A mapping from logical axis names to physical axis names
+    :param axis_resources: A mapping from logical axis names to physical axis names use for the contextual resource mapping
     :param in_axis_resources: A mapping from logical axis names to physical axis names for arguments. If not passed, it uses the arguments' own shardings
     :param out_axis_resources: A mapping from logical axis names to physical axis names for the result, defaults to axis_resources
     :param donate_args: A PyTree of booleans or function leaf->bool, indicating whether to donate arguments to the
@@ -315,28 +325,23 @@ def named_jit(
 
 
 @typing.overload
-def fsdp(
-    fn: F, parameter_mapping: ResourceMapping, compute_mapping: ResourceMapping, mp: Optional[jmp.Policy] = None
-) -> F:
+def fsdp(fn: F, parameter_mapping: ResourceMapping, compute_mapping: ResourceMapping) -> F:
     ...
 
 
 @typing.overload
-def fsdp(
-    parameter_mapping: ResourceMapping, compute_mapping: ResourceMapping, mp: Optional[jmp.Policy] = None
-) -> typing.Callable[[F], F]:
+def fsdp(parameter_mapping: ResourceMapping, compute_mapping: ResourceMapping) -> typing.Callable[[F], F]:
     ...
 
 
 def fsdp(*args, **kwargs):
     """
-    A convenience wrapper around named_jit / pjit and jmp's Policy to encode the FSDP pattern. It's basically equivalent to this:
+    A convenience wrapper around named_jit / pjit to encode the FSDP pattern. It's basically equivalent to this:
 
     ```python
-    @named_jit(in_axis_resources=parameter_mapping, out_axis_resources=parameter_mapping)
+    @named_jit(in_axis_resources=parameter_mapping, out_axis_resources=parameter_mapping, axis_resources=compute_mapping)
     def f(*args, **kwargs):
-        with axis_mapping(compute_mapping):
-            return fn(*args, **kwargs)
+        return fn(*args, **kwargs)
     ```
 
     This function can be used as a decorator or as a function.
@@ -349,16 +354,10 @@ def fsdp(*args, **kwargs):
         return lambda fn: _fsdp_impl(fn, *args, **kwargs)
 
 
-def _fsdp_impl(fn: F, parameter_mapping, compute_mapping, mp: Optional[jmp.Policy] = None):
-    @functools.wraps(fn)
-    def f(*args, **kwargs):
-        with axis_mapping(compute_mapping):
-            if mp is not None:
-                args, kwargs = mp.cast_to_compute((args, kwargs))
-
-            return fn(*args, **kwargs)
-
-    return named_jit(f, in_axis_resources=parameter_mapping, out_axis_resources=parameter_mapping)
+def _fsdp_impl(fn: F, parameter_mapping, compute_mapping):
+    return named_jit(
+        fn, in_axis_resources=parameter_mapping, out_axis_resources=parameter_mapping, axis_resources=compute_mapping
+    )
 
 
 # This is more or less copy-pasted from Equinox's similar functions (pmap, vmap, etc), but
