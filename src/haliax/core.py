@@ -626,7 +626,7 @@ def take(array: NamedArray, axis: AxisSelector, index: Union[int, NamedArray]) -
                 index = index.rename({axis.name: "__DUMMY_" + axis.name})
             array = haliax.broadcast_to(array, index.axes, ensure_order=False, enforce_no_extra_axes=False)
             new_axes = eliminate_axes(array.axes, axis)
-            index = haliax.broadcast_to(index, new_axes, ensure_order=True, enforce_no_extra_axes=False)
+            index = haliax.broadcast_to(index, new_axes, ensure_order=True, enforce_no_extra_axes=True)
 
             axis_index = array._lookup_indices(axis)  # if it moved
             index_array = jnp.expand_dims(index.array, axis=axis_index)
