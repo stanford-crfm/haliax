@@ -2,7 +2,8 @@ import abc
 import dataclasses
 import functools as ft
 import math
-from typing import List, Optional, Tuple
+import typing
+from typing import List, Optional, Tuple, TypeAlias, Union
 
 import equinox as eqx
 import jax
@@ -32,7 +33,7 @@ def dot_product_attention_weights(
     KPos: AxisSelection,
     query: NamedArray,
     key: NamedArray,
-    mask: Optional[NamedArray] = None,
+    mask: Optional[Union[NamedArray, "AttentionMask"]] = None,
     bias: Optional[NamedArray] = None,
     attention_dtype: Optional[jnp.dtype] = None,
     precision: PrecisionLike = None,
@@ -66,7 +67,7 @@ def dot_product_attention_weights(
     if bias is not None:
         weights = weights + bias
     if mask is not None:
-        weights = haliax.where(mask, weights, -1e9)
+        weights = haliax.where(materialize_mask(mask), weights, -1e9)
 
     weights = hnn.softmax(weights, axis=KPos)
 
@@ -80,7 +81,7 @@ def dot_product_attention(
     query: NamedArray,
     key: NamedArray,
     value: NamedArray,
-    mask: Optional[NamedArray] = None,
+    mask: Optional[Union[NamedArray, "AttentionMask"]] = None,
     bias: Optional[NamedArray] = None,
     attention_dtype: Optional[jnp.dtype] = None,
     precision: PrecisionLike = None,
@@ -115,6 +116,28 @@ def dot_product_attention(
     weights = dot_product_attention_weights(KeySize, KPos, query, key, mask, bias, attention_dtype, precision)
 
     return haliax.dot(KPos, weights, value)
+
+
+AttnMask: TypeAlias = Union[NamedArray, "AttentionMask"]
+
+
+@typing.overload
+def materialize_mask(mask: AttnMask) -> NamedArray:
+    ...
+
+
+@typing.overload
+def materialize_mask(mask: Optional[AttnMask]) -> Optional[NamedArray]:
+    ...
+
+
+def materialize_mask(mask: Optional[AttnMask]) -> Optional[NamedArray]:
+    """
+    Materialize an attention mask if it is an AttentionMask. Otherwise, just return it.
+    """
+    if isinstance(mask, AttentionMask):
+        mask = mask.materialize()
+    return mask
 
 
 class AttentionMask(eqx.Module, abc.ABC):
@@ -340,7 +363,7 @@ def combine_masks_or(mask1: Optional[NamedArray], mask2: Optional[NamedArray]) -
 
 def causal_mask(QPos: Axis, KPos: Axis, q_start: int = 0, k_start: int = 0) -> NamedArray:
     """
-    Creates a causal mask for attention.
+    Creates a materialized causal mask for attention.
 
     :param QPos: Axis of query sequence length
     :param KPos: Axis of key sequence length
