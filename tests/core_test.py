@@ -251,12 +251,20 @@ def test_take_overlapping_2():
 
     loss = cross_entropy(logits, labels)
     assert loss.axes == (Batch, Block)
-    assert loss.array == jnp.take_along_axis(logits.array, labels.array[..., None], axis=-1)[..., 0]
+    assert jnp.alltrue(loss.array == jnp.take_along_axis(logits.array, labels.array[..., None], axis=-1)[..., 0])
 
     logits = hax.random.uniform(PRNGKey(0), (Batch, Embed, Block))
 
     loss = cross_entropy(logits, labels)
     assert loss.axes == (Batch, Block)
+    assert jnp.alltrue(loss.array == jnp.take_along_axis(logits.array, labels.array[..., None, :], axis=-2)[..., 0, :])
+
+    index = hax.random.randint(PRNGKey(0), (Block, Batch), 0, Embed.size)
+    loss = cross_entropy(logits, index)
+    assert loss.axes == (Batch, Block)
+    assert jnp.alltrue(
+        loss.array == jnp.take_along_axis(logits.array, index.array.transpose()[..., None, :], axis=-2)[..., 0, :]
+    )
 
 
 def test_cumsum_etc():
