@@ -8,7 +8,7 @@ from jaxtyping import PRNGKeyArray
 
 import haliax
 import haliax.random as hrandom
-from haliax import Axis, AxisSelection, AxisSpec
+from haliax.axis import Axis, AxisSelection, AxisSpec
 from haliax.core import NamedArray
 from haliax.types import PrecisionLike
 

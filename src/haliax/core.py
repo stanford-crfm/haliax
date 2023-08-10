@@ -16,7 +16,7 @@ import haliax.axis
 from haliax.jax_utils import is_jax_array_like
 from haliax.util import ensure_tuple, index_where, py_slice, slice_t
 
-from .axis import Axis, AxisSelection, AxisSelector, AxisSpec, selects_axis
+from .axis import Axis, AxisSelection, AxisSelector, AxisSpec, eliminate_axes, selects_axis
 from .types import PrecisionLike, Scalar
 
 
@@ -278,8 +278,8 @@ class NamedArray:
         >>> arr[{"x": 1, "y": index_arr}]
 
         A shorthand is provided that works with Python's slicing syntax:
-        >>> arr["x", :] == arr[{"x": slice(None,None,new_axis=None)}]
-        >>> arr["y", slice(0,10,new_axis=2)] == arr[{"y": slice(0,10,new_axis=2)}]
+        >>> arr["x", :] == arr[{"x": slice(None)}]
+        >>> arr["y", 1, "x", 2] == arr[{"y": 1, "x": 2}]
 
         Advanced indexing is implemented by broadcasting all index arrays to the same shape (using Haliax's
         usual broadcasting rules).
@@ -605,15 +605,44 @@ def take(array: NamedArray, axis: AxisSelector, index: Union[int, NamedArray]) -
     axis_index = array._lookup_indices(axis)
     if axis_index is None:
         raise ValueError(f"axis {axis} not found in {array}")
+
+    axis = array.axes[axis_index]
     if isinstance(index, int):
         # just drop the axis
         new_array = jnp.take(array.array, index, axis=axis_index)
         new_axes = array.axes[:axis_index] + array.axes[axis_index + 1 :]
+        return NamedArray(new_array, new_axes)
     else:
-        new_array = jnp.take(array.array, index.array, axis=axis_index)
-        new_axes = array.axes[:axis_index] + index.axes + array.axes[axis_index + 1 :]
-    # new axes come from splicing the old axis with
-    return NamedArray(new_array, new_axes)
+        # #13: should broadcast/autobatch take
+        remaining_axes = eliminate_axes(array.axes, axis)
+        # axis order is generally [array.axes[:axis_index], index.axes, array.axes[axis_index + 1 :]]
+        # except that index.axes may overlap with array.axes
+        overlapping_axes: AxisSpec = haliax.axis.overlapping_axes(remaining_axes, index.axes)
+
+        if overlapping_axes:
+            # if the eliminated axis is also in the index, we rename it to a dummy axis that we can broadcast over it
+            need_to_use_dummy_axis = index._lookup_indices(axis.name) is not None
+            if need_to_use_dummy_axis:
+                index = index.rename({axis.name: "__DUMMY_" + axis.name})
+            array = haliax.broadcast_to(array, index.axes, ensure_order=False, enforce_no_extra_axes=False)
+            new_axes = eliminate_axes(array.axes, axis)
+            index = haliax.broadcast_to(index, new_axes, ensure_order=True, enforce_no_extra_axes=True)
+
+            axis_index = array._lookup_indices(axis)  # if it moved
+            index_array = jnp.expand_dims(index.array, axis=axis_index)
+            new_array = jnp.take_along_axis(array.array, index_array, axis=axis_index)
+            new_array = jnp.squeeze(new_array, axis=axis_index)
+
+            out = NamedArray(new_array, new_axes)
+            if need_to_use_dummy_axis:
+                out = out.rename({"__DUMMY_" + axis.name: axis.name})
+            return out
+        else:
+            new_axes = array.axes[:axis_index] + index.axes + array.axes[axis_index + 1 :]
+            new_array = jnp.take(array.array, index.array, axis=axis_index)
+
+            # new axes come from splicing the old axis with
+            return NamedArray(new_array, new_axes)
 
 
 @typing.overload

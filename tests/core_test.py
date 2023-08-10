@@ -222,6 +222,51 @@ def test_take():
     assert named2.axes == (Height, Width, Index, Index2)
 
 
+def test_take_overlapping_names():
+    Height = Axis("Height", 20)
+    Width = Axis("Width", 30)
+    Depth = Axis("Depth", 40)
+    named1 = hax.random.uniform(PRNGKey(0), (Height, Width, Depth))
+
+    Height2 = Axis("Height", 10)
+    indices_to_take = hax.arange(Height2, dtype=jnp.int32)
+    named2 = hax.take(named1, Height, indices_to_take)
+
+    assert named2.axes == (Height2, Width, Depth)
+    assert named2.array.shape == (10, 30, 40)
+
+    assert jnp.all(jnp.equal(named2.array, named1.array[:10]))
+
+
+def test_take_overlapping_2():
+    # https://github.com/stanford-crfm/haliax/issues/13
+    def cross_entropy(logits: hax.NamedArray, labels: hax.NamedArray) -> hax.NamedArray:
+        return hax.take(logits, Embed, labels)  # extract log probability of the correct token
+
+    Embed = Axis("Embed", 10)
+    Block = Axis("Block", 20)
+    Batch = Axis("Batch", 30)
+    logits = hax.random.uniform(PRNGKey(0), (Batch, Block, Embed))
+    labels = hax.random.randint(PRNGKey(0), (Batch, Block), 0, Embed.size)
+
+    loss = cross_entropy(logits, labels)
+    assert loss.axes == (Batch, Block)
+    assert jnp.alltrue(loss.array == jnp.take_along_axis(logits.array, labels.array[..., None], axis=-1)[..., 0])
+
+    logits = hax.random.uniform(PRNGKey(0), (Batch, Embed, Block))
+
+    loss = cross_entropy(logits, labels)
+    assert loss.axes == (Batch, Block)
+    assert jnp.alltrue(loss.array == jnp.take_along_axis(logits.array, labels.array[..., None, :], axis=-2)[..., 0, :])
+
+    index = hax.random.randint(PRNGKey(0), (Block, Batch), 0, Embed.size)
+    loss = cross_entropy(logits, index)
+    assert loss.axes == (Batch, Block)
+    assert jnp.alltrue(
+        loss.array == jnp.take_along_axis(logits.array, index.array.transpose()[..., None, :], axis=-2)[..., 0, :]
+    )
+
+
 def test_cumsum_etc():
     Height = Axis("Height", 2)
     Width = Axis("Width", 3)

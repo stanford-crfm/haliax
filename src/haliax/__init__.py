@@ -3,8 +3,9 @@ from typing import Optional, Sequence
 import jax
 import jax.numpy as jnp
 
+import haliax.nn as nn
 import haliax.random as random
-from haliax import tree_util as tree_util
+import haliax.tree_util as tree_util
 
 from .axis import Axis, AxisSelection, AxisSelector, AxisSpec, concat_axes, eliminate_axes, selects_axis
 from .core import (
@@ -251,6 +252,9 @@ concat_axis_specs = concat_axes
 
 
 __all__ = [
+    "random",
+    "tree_util",
+    "nn",
     "Axis",
     "AxisSpec",
     "AxisSelection",
