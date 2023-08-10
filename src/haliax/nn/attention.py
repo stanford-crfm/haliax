@@ -141,7 +141,7 @@ def causal_mask(QPos: Axis, KPos: Axis, q_start: int = 0, k_start: int = 0) -> N
     :param KPos: Axis of key sequence length
     :return: NamedArray of shape (QPos, KPos)
     """
-    return haliax.arange(QPos, start=q_start).broadcast_axis(KPos) >= haliax.arange(KPos, start=k_start)
+    return haliax.arange(QPos, start=q_start) >= haliax.arange(KPos, start=k_start).broadcast_axis(QPos)
 
 
 def prefix_lm_mask(QSeqLen: Axis, KSeqLen: Axis, prefix_len: int, q_start: int = 0, k_start: int = 0) -> NamedArray:
