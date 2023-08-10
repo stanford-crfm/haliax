@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict, Mapping, Optional, Sequence, Union, overload
+from typing import Dict, List, Mapping, Optional, Sequence, Tuple, Union, overload
 
 from haliax.util import ensure_tuple, index_where
 
@@ -137,7 +137,7 @@ def concat_axes(a1: AxisSelection, a2: AxisSelection) -> AxisSelection:
 
 
 @overload
-def eliminate_axes(axis_spec: AxisSpec, axes: AxisSelection) -> AxisSpec:  # type: ignore
+def eliminate_axes(axis_spec: AxisSpec, axes: AxisSelection) -> Tuple[Axis, ...]:  # type: ignore
     ...
 
 
@@ -164,3 +164,44 @@ def eliminate_axes(axis_spec: AxisSelection, to_remove: AxisSelection) -> AxisSe
             raise ValueError(f"Invalid axis spec: {ax}")
 
     return _dict_to_spec(axis_spec_dict)
+
+
+@overload
+def overlapping_axes(ax1: AxisSpec, ax2: AxisSelection) -> Tuple[Axis, ...]:
+    ...
+
+
+@overload
+def overlapping_axes(ax1: AxisSelection, ax2: AxisSpec) -> Tuple[Axis, ...]:
+    ...
+
+
+@overload
+def overlapping_axes(ax1: AxisSelection, ax2: AxisSelection) -> Tuple[AxisSelector, ...]:
+    ...
+
+
+def overlapping_axes(ax1: AxisSelection, ax2: AxisSelection) -> Tuple[AxisSelector, ...]:
+    """Returns a tuple of axes that are present in both ax1 and ax2"""
+    ax2_dict = _spec_to_dict(ax2)
+    out: List[AxisSelector] = []
+    ax1 = ensure_tuple(ax1)
+
+    for ax in ax1:
+        if isinstance(ax, Axis):
+            if ax.name in ax2_dict:
+                sz = ax2_dict[ax.name]
+                if sz is not None and sz != ax.size:
+                    raise ValueError(f"Axis {ax.name} has different sizes in {ax1} and {ax2}")
+                out.append(ax)
+        elif isinstance(ax, str):
+            if ax in ax2_dict:
+                ax_sz = ax2_dict[ax]
+                if ax_sz is not None:
+                    out.append(Axis(ax, ax_sz))
+                else:
+                    out.append(ax)
+        else:
+            raise ValueError(f"Invalid axis spec: {ax}")
+
+    return tuple(out)

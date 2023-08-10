@@ -16,7 +16,7 @@ import haliax.axis
 from haliax.jax_utils import is_jax_array_like
 from haliax.util import ensure_tuple, index_where, py_slice, slice_t
 
-from .axis import Axis, AxisSelection, AxisSelector, AxisSpec, selects_axis
+from .axis import Axis, AxisSelection, AxisSelector, AxisSpec, eliminate_axes, selects_axis
 from .types import PrecisionLike, Scalar
 
 
@@ -278,8 +278,8 @@ class NamedArray:
         >>> arr[{"x": 1, "y": index_arr}]
 
         A shorthand is provided that works with Python's slicing syntax:
-        >>> arr["x", :] == arr[{"x": slice(None,None,new_axis=None)}]
-        >>> arr["y", slice(0,10,new_axis=2)] == arr[{"y": slice(0,10,new_axis=2)}]
+        >>> arr["x", :] == arr[{"x": slice(None)}]
+        >>> arr["y", 1, "x", 2] == arr[{"y": 1, "x": 2}]
 
         Advanced indexing is implemented by broadcasting all index arrays to the same shape (using Haliax's
         usual broadcasting rules).
@@ -610,8 +610,46 @@ def take(array: NamedArray, axis: AxisSelector, index: Union[int, NamedArray]) -
         new_array = jnp.take(array.array, index, axis=axis_index)
         new_axes = array.axes[:axis_index] + array.axes[axis_index + 1 :]
     else:
-        new_array = jnp.take(array.array, index.array, axis=axis_index)
-        new_axes = array.axes[:axis_index] + index.axes + array.axes[axis_index + 1 :]
+        # #13: should broadcast/autobatch take
+        remaining_axes = eliminate_axes(array.axes, axis)
+        # axis order is generally [array.axes[:axis_index], index.axes, array.axes[axis_index + 1 :]]
+        # except that index.axes may overlap with array.axes
+        overlapping_axes: AxisSpec = haliax.axis.overlapping_axes(remaining_axes, index.axes)
+        new_axes = (
+            array.axes[:axis_index] + eliminate_axes(index.axes, overlapping_axes) + array.axes[axis_index + 1 :]
+        )
+        dummy_out = NamedArray(None, new_axes)
+
+        if overlapping_axes:
+            # this ends up being insanely complicated to batch, but we're committed.
+            # TODO: it might just be easier to use gather directly? but then i have to understand gather
+            # our strategy is to vmap the underlying take. We have to do one vmap for each overlapping axis
+            # note that each vmap affects subsequent vmaps, because the axis for a position potentially moves
+            # as we drop axes.
+            def rec_vmap(overlapping_axes, array_axes, index_axes, out_axes, axis_index):
+                if not overlapping_axes:
+                    return lambda array, index: jnp.take(array, index, axis=axis_index)
+                else:
+                    new_array_axes = eliminate_axes(array_axes, overlapping_axes[0])
+                    new_index_axes = eliminate_axes(index_axes, overlapping_axes[0])
+                    new_out_axes = eliminate_axes(out_axes, overlapping_axes[0])
+                    # see if the axis_index shifts
+                    new_axis_index = axis_index
+                    index_of_axis = array_axes.index(overlapping_axes[0])
+                    if index_of_axis < axis_index:
+                        new_axis_index -= 1
+                    rec = rec_vmap(overlapping_axes[1:], new_array_axes, new_index_axes, new_out_axes, new_axis_index)
+
+                    array_index = array_axes.index(overlapping_axes[0])
+                    index_index = index_axes.index(overlapping_axes[0])
+                    out_index = out_axes.index(overlapping_axes[0])
+                    return jax.vmap(rec, in_axes=(array_index, index_index), out_axes=out_index)
+
+            op = rec_vmap(overlapping_axes, array.axes, index.axes, dummy_out.axes, axis_index)
+            new_array = op(array.array, index.array)
+        else:
+            new_array = jnp.take(array.array, index.array, axis=axis_index)
+
     # new axes come from splicing the old axis with
     return NamedArray(new_array, new_axes)
 

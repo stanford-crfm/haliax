@@ -4,8 +4,9 @@ from typing import Dict, Generic, Optional, Protocol, Type, TypeVar
 import equinox as eqx
 
 import haliax
-import haliax as hax
 from haliax.jax_utils import filter_checkpoint
+
+from ..axis import Axis
 
 
 M = TypeVar("M", bound=eqx.Module, covariant=True)
@@ -57,12 +58,12 @@ class Stacked(eqx.Module, Generic[M]):
     # TODO: we can probably make this module support pipeline parallelism, but that's a whole project in itself
 
     stacked: M
-    Block: hax.Axis = eqx.static_field()
+    Block: Axis = eqx.static_field()
     # TODO: support fancier gradient checkpointing
     gradient_checkpointing: bool = eqx.static_field()
 
     @staticmethod
-    def init(Block: hax.Axis, module: Type[M], *, gradient_checkpointing: bool = False) -> ModuleInit["Stacked[M]"]:
+    def init(Block: Axis, module: Type[M], *, gradient_checkpointing: bool = False) -> ModuleInit["Stacked[M]"]:
         @functools.wraps(module)
         def fn(*args, **kwargs):
             stacked = haliax.vmap(module.init, Block)(*args, **kwargs)
