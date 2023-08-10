@@ -250,6 +250,7 @@ class CausalAttentionMask(AttentionMask):
 class PrefixAttentionMask(AttentionMask):
     Pos: Axis = eqx.field(static=True)
     KeyPos: Axis = eqx.field(static=True)
+    # TODO: prefix size needs to be dynamic
     prefix_size: int = eqx.field(static=True)
     pos_start: int = eqx.field(static=True, default=0)
     kpos_start: int = eqx.field(static=True, default=0)
@@ -369,10 +370,7 @@ def causal_mask(QPos: Axis, KPos: Axis, q_start: int = 0, k_start: int = 0) -> N
     :param KPos: Axis of key sequence length
     :return: NamedArray of shape (QPos, KPos)
     """
-    # copilot wrote this and i'm just blown away
-    return haliax.arange(QPos, start=q_start).broadcast_axis(KPos) >= haliax.arange(
-        KPos, start=k_start
-    ).broadcast_axis(QPos)
+    return haliax.arange(QPos, start=q_start).broadcast_axis(KPos) >= haliax.arange(KPos, start=k_start)
 
 
 def prefix_lm_mask(QSeqLen: Axis, KSeqLen: Axis, prefix_len: int, q_start: int = 0, k_start: int = 0) -> NamedArray:
