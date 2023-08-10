@@ -291,33 +291,33 @@ def named_jit(
 
         static = (static_fun, static_argspec)
 
-        output_shape = _cached_filter_eval_shape(fn, *args, **kwargs)
-        # TODO: with new jax.Array I shouldn't have to specify shardings, but I do for now
-        #  https://github.com/google/jax/issues/15600
-        # we don't really need in_shardings though
-        my_pjit_args = dict(**pjit_args)
-
-        if in_axis_resources is not None or axis_resources is not None:
-            if in_axis_resources is None:
-                in_axis_resources = axis_resources
-            in_resources = infer_resource_partitions(
-                (dynamic_donated, dynamic_reserved),
-                in_axis_resources,
-                preserve_existing_shardings=in_axis_resources is None,
-            )
-            my_pjit_args["in_shardings"] = in_resources
-
-        if out_axis_resources is not None:
-            # TODO: when AUTO is fixed (or eval_shape can give shardings), use it here
-            out_resources = infer_resource_partitions(output_shape, out_axis_resources, use_auto_sharding=False)
-            my_pjit_args["out_shardings"] = out_resources
-
         if axis_resources is not None:
             cmanager = axis_mapping(axis_resources)
         else:
             cmanager = contextlib.nullcontext()
 
         with cmanager:
+            output_shape = _cached_filter_eval_shape(fn, *args, **kwargs)
+            # TODO: with new jax.Array I shouldn't have to specify shardings, but I do for now
+            #  https://github.com/google/jax/issues/15600
+            # we don't really need in_shardings though
+            my_pjit_args = dict(**pjit_args)
+
+            if in_axis_resources is not None or axis_resources is not None:
+                if in_axis_resources is None:
+                    in_axis_resources = axis_resources
+                in_resources = infer_resource_partitions(
+                    (dynamic_donated, dynamic_reserved),
+                    in_axis_resources,
+                    preserve_existing_shardings=in_axis_resources is None,
+                )
+                my_pjit_args["in_shardings"] = in_resources
+
+            if out_axis_resources is not None:
+                # TODO: when AUTO is fixed (or eval_shape can give shardings), use it here
+                out_resources = infer_resource_partitions(output_shape, out_axis_resources, use_auto_sharding=False)
+                my_pjit_args["out_shardings"] = out_resources
+
             cached_pjitted_fun = _named_pjit_cache(fn, **my_pjit_args)
             return cached_pjitted_fun(dynamic_donated, dynamic_reserved, static)
 
@@ -349,7 +349,7 @@ def fsdp(*args, **kwargs):
     if "fn" in kwargs:
         return _fsdp_impl(*args, **kwargs)
     elif len(args) > 1 and callable(args[0]):
-        return _fsdp_impl(*args[1:], fn=args[0])
+        return _fsdp_impl(*args, **kwargs)
     else:
         return lambda fn: _fsdp_impl(fn, *args, **kwargs)
 
