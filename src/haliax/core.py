@@ -16,7 +16,7 @@ import haliax.axis
 from haliax.jax_utils import is_jax_array_like
 from haliax.util import ensure_tuple, index_where, py_slice, slice_t
 
-from .axis import Axis, AxisSelection, AxisSelector, AxisSpec, eliminate_axes, selects_axis
+from .axis import Axis, AxisSelection, AxisSelector, AxisSpec, eliminate_axes, selects_axis, union_axes
 from .types import PrecisionLike, Scalar
 
 
@@ -907,28 +907,31 @@ def dot(axis: AxisSelection, *arrays: NamedArray, precision: PrecisionLike = Non
     and any other axes that are shared between the arrays are batched over. Non-contracted Axes in one
     that are not in the other are preserved.
     """
+    _ensure_no_mismatched_axes(*arrays)
+    output_axes: Tuple[Axis, ...] = ft.reduce(union_axes, (a.axes for a in arrays), ())  # type: ignore
+    output_axes = eliminate_axes(output_axes, axis)
+
     axis = ensure_tuple(axis)
 
     array_specs = []
 
     next_index = 0
-    axis_mappings: Dict[Axis, int] = {}
+    axis_mappings: Dict[str, int] = {}
 
     for a in arrays:
         spec = ""
         for ax in a.axes:
-            if ax in axis_mappings:
-                spec += f"{axis_mappings[ax]} "
+            if ax.name in axis_mappings:
+                spec += f"{axis_mappings[ax.name]} "
             else:
-                axis_mappings[ax] = next_index
+                axis_mappings[ax.name] = next_index
                 spec += f"{next_index} "
                 next_index += 1
 
         array_specs.append(spec)
 
     # now compute the output axes:
-    output_axes = tuple(ax for ax in axis_mappings.keys() if not selects_axis(ax, axis))
-    output_spec = " ".join(str(axis_mappings[ax]) for ax in output_axes)
+    output_spec = " ".join(str(axis_mappings[ax.name]) for ax in output_axes)
 
     output = jnp.einsum(
         ", ".join(array_specs) + "-> " + output_spec,
@@ -1375,6 +1378,21 @@ def check_shape(jnp_shape: Sequence[int], hax_axes: AxisSelection) -> Tuple[Axis
             raise ValueError(f"Invalid axis spec: {ax}")
 
     return tuple(result_axes)
+
+
+def _ensure_no_mismatched_axes(*arrays: NamedArray):
+    """Ensure that all the arrays have no axes with the same name but different sizes"""
+    if len(arrays) <= 1:
+        return
+
+    known_sizes: dict[str, int] = {}
+    for a in arrays:
+        for ax in a.axes:
+            if ax.name in known_sizes:
+                if known_sizes[ax.name] != ax.size:
+                    raise ValueError(f"Axis {ax.name} has multiple sizes: {known_sizes[ax.name]} and {ax.size}")
+            else:
+                known_sizes[ax.name] = ax.size
 
 
 __all__ = [

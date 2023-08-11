@@ -53,6 +53,20 @@ def test_dot_string_selection():
     )
 
 
+def test_dot_errors_if_different_sized_axes():
+    Height = Axis("Height", 2)
+    Width = Axis("Width", 3)
+    Depth = Axis("Depth", 4)
+
+    H2 = Axis("Height", 4)
+
+    m1 = NamedArray(jnp.ones((Height.size, Width.size, Depth.size)), (Height, Width, Depth))
+    m2 = NamedArray(jnp.ones((Depth.size, Width.size, H2.size)), (Depth, Width, H2))
+
+    with pytest.raises(ValueError):
+        hax.dot("Height", m1, m2)
+
+
 def test_unary_np_functions():
     Height = Axis("Height", 2)
     Width = Axis("Width", 3)
