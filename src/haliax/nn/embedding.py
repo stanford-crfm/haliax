@@ -1,10 +1,15 @@
+import dataclasses
+from typing import Optional
+
 import equinox as eqx
+from jaxtyping import PRNGKeyArray
 
 import haliax as hax
 
 from ..axis import Axis
 from ..core import NamedArray
 from ..jax_utils import named_call
+from ..tree_util import resize_axis
 
 
 class Embedding(eqx.Module):
@@ -30,3 +35,7 @@ class Embedding(eqx.Module):
 
     def unembed(self, input_embeds):
         return input_embeds.dot(self.Embed, self.weight)
+
+    def resize_embeddings(self, new_size: int, key: Optional[PRNGKeyArray] = None):
+        new_weights = resize_axis(self.weight, self.Vocab, new_size, key=key)
+        return dataclasses.replace(self, Vocab=self.Vocab.resize(new_size), weight=new_weights)
