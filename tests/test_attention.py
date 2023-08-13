@@ -3,8 +3,7 @@ from jax.random import PRNGKey
 
 import haliax as hax
 from haliax.nn.attention import alibi_attention_bias, dot_product_attention_weights, forgetful_causal_mask
-
-from .test_utils import skip_if_no_torch
+from test_utils import skip_if_no_torch
 
 
 def test_alibi_attention_bias():
