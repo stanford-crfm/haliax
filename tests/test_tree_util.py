@@ -26,7 +26,7 @@ def test_resize_axis():
 
     NewA = A.resize(15)
 
-    module2 = htu.resize_axis(module, NewA, jax.random.PRNGKey(1))
+    module2 = htu.resize_axis(module, "A", 15, key=jax.random.PRNGKey(1))
 
     assert module2.name1.axes == (B, NewA, C)
     assert module2.name2.axes == (B, C)

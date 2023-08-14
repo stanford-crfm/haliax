@@ -83,8 +83,11 @@ def full_like(a: NamedArray, fill_value, dtype=None) -> NamedArray:
 
 def arange(axis: Axis, *, start=0, step=1, dtype=None) -> NamedArray:
     """Version of jnp.arange that returns a NamedArray"""
-    stop = start + axis.size * step
-    return NamedArray(jnp.arange(start, stop, step, dtype=dtype), (axis,))
+    # if start is a tracer, we need to be a bit cleverer since arange doesn't support tracers
+    # return NamedArray(jnp.arange(start, stop, step, dtype=dtype), (axis,))
+
+    arr = jax.lax.iota(dtype=dtype or jnp.result_type(start), size=axis.size) * step + start
+    return NamedArray(arr, (axis,))
 
 
 def stack(axis: AxisSelector, arrays: Sequence[NamedArray]) -> NamedArray:
