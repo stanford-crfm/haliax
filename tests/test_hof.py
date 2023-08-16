@@ -1,3 +1,4 @@
+import equinox as eqx
 import jax.numpy as jnp
 from jax.random import PRNGKey
 
@@ -212,3 +213,17 @@ def test_vmap_static_args():
 
     assert jnp.all(jnp.equal(selected.array, expected.array))
     assert selected.axes == expected.axes
+
+
+def test_vmap_error_for_incorrectly_specified_args():
+    class Module(eqx.Module):
+        # this should usually be declared static, but we're simulating a user error
+        field: Axis
+
+        def __call__(self, x):
+            return x.sum(self.field)
+
+    Batch = Axis("Batch", 10)
+    Width = Axis("Width", 3)
+
+    hax.vmap(lambda a: Module(a), Batch)(Width)
