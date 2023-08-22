@@ -44,6 +44,7 @@ plugins:
           options:
             docstring_options:
               ignore_init_summary: true
+              docstring_style: sphinx
             show_source: false
             docstring_section_style: list
             heading_level: 4
@@ -70,6 +71,7 @@ watch:
   - docs
 nav:
   - Home: 'index.md'
+  - Tutorial: 'tutorial.md'
   - Broadcasting: 'broadcasting.md'
   - Indexing and Slicing: 'indexing.md'
   - API Reference: 'api.md'

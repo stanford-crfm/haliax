@@ -1,6 +1,6 @@
 # Broadcasting
 
-One area where Haliax's treatment of named axes differs substantially from NumPy-esque positional code is in broadcasting. In traditional positional code, [broadcasting works like this](https://numpy.org/doc/stable/user/basics.broadcasting.html):
+One area where Haliax's treatment of named axes differs substantially from Numpy-esque positional code is in broadcasting. In traditional positional code, [broadcasting works like this](https://numpy.org/doc/stable/user/basics.broadcasting.html):
 
 ```python
 import numpy as np

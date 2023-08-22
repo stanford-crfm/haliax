@@ -24,10 +24,26 @@ We don't include `hstack` or `vstack` because we prefer semantic axes.
 ::: haliax.concatenate
 ::: haliax.stack
 
+
+## Array Manipulation
+
+### Slicing
+
+See also the section on [Indexing and Slicing](indexing.md).
+
+::: haliax.index
+::: haliax.slice
+::: haliax.take
+::: haliax.updated_slice
+
 ## Operations
 
 [Binary](#binary-operations) and [unary](#unary-operations) operations are all more or less directly from JAX's NumPy API.
 The only difference is they operate on named arrays instead.
+
+## Matrix Multiplication (`dot`)
+
+::: haliax.dot
 
 ### Reductions
 
