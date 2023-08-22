@@ -1315,6 +1315,20 @@ def broadcast_arrays(
     require_subset: bool = True,
     ensure_order: bool = True,
 ) -> Tuple[Optional[NamedOrNumeric], ...]:
+    """
+    Broadcasts a sequence of arrays to a common set of axes.
+    Args:
+        *arrays: Arrays, Scalars, or None. If None, then None is returned. Scalars and None are supported for convenience.
+        require_subset: If true, then one of the arrays must be a subset of the others. This is a bit stricter than numpy's broadcasting
+            rules, but I've been bitten by numpy's rules too many times. False is looser than numpy's rules, and allows
+            broadcasting any pair of arrays (so long as the axes don't overtly conflict with different sizes for the same
+            name.)
+        ensure_order: If true, then the returned arrays will be reordered to all have the same axes in the same order.
+
+    Returns:
+        The arrays, broadcast to a common set of axes, reordered if necessary.
+
+    """
     return broadcast_arrays_and_return_axes(*arrays, require_subset=require_subset, ensure_order=ensure_order)[0]
 
 
@@ -1382,8 +1396,10 @@ def broadcast_arrays_and_return_axes(
 # TODO: convert to AxisSelection?
 def broadcast_axis(a: NamedArray, axis: AxisSpec) -> NamedArray:
     """
-    Broadcasts a, ensuring that it has all the axes in axis.
-     broadcast_axis is an alias for broadcast_to(a, axis, enforce_no_extra_axes=False, ensure_order=True)
+    Broadcasts `a`, ensuring that it has all the axes in `axis`.
+     `broadcast_axis` is an alias for `broadcast_to(a, axis, enforce_no_extra_axes=False, ensure_order=True)`
+
+     You typically use this function when you want to broadcast an array to a common set of axes.
     """
     if isinstance(axis, Axis) and axis in a.axes:
         return a

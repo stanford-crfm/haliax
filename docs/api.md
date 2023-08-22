@@ -36,12 +36,26 @@ See also the section on [Indexing and Slicing](indexing.md).
 ::: haliax.take
 ::: haliax.updated_slice
 
+### Shape Manipulation
+
+::: haliax.flatten_axes
+::: haliax.rearrange
+::: haliax.unbind
+::: haliax.unflatten_axis
+
+### Broadcasting
+
+See also the section on [Broadcasting](broadcasting.md).
+
+::: haliax.broadcast_axis
+::: haliax.broadcast_to
+
 ## Operations
 
 [Binary](#binary-operations) and [unary](#unary-operations) operations are all more or less directly from JAX's NumPy API.
 The only difference is they operate on named arrays instead.
 
-## Matrix Multiplication (`dot`)
+## Matrix Multiplication
 
 ::: haliax.dot
 

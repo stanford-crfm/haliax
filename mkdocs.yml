@@ -47,7 +47,7 @@ plugins:
               docstring_style: sphinx
             show_source: false
             docstring_section_style: list
-            heading_level: 4
+            heading_level: 5
             inherited_members: true
             merge_init_into_class: true
             load_external_modules: true
