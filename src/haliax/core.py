@@ -12,10 +12,12 @@ import jax.numpy as jnp
 import numpy as np
 
 import haliax
+import haliax.axis
 from haliax.jax_utils import is_jax_array_like
 from haliax.util import ensure_tuple, index_where, py_slice, slice_t
 
-from .types import Axis, AxisSelection, AxisSelector, AxisSpec, PrecisionLike, Scalar
+from .axis import Axis, AxisSelection, AxisSelector, AxisSpec, eliminate_axes, selects_axis, union_axes
+from .types import PrecisionLike, Scalar
 
 
 NamedOrNumeric = Union[Scalar, "NamedArray"]
@@ -225,10 +227,23 @@ class NamedArray:
         return haliax.rename(self, renames=renames)
 
     # slicing
+    @typing.overload
+    def slice(
+        self, axis: AxisSelector, new_axis: Optional[AxisSelector] = None, start: int = 0, length: Optional[int] = None
+    ) -> "NamedArray":
+        pass
 
-    # TOOD: AxisSelector-ify new_axis
-    def slice(self, axis: AxisSelector, new_axis: Axis, start: int = 0) -> "NamedArray":
-        return haliax.slice(self, axis=axis, new_axis=new_axis, start=start)
+    @typing.overload
+    def slice(
+        self, start: Mapping[AxisSelector, int], length: Mapping[AxisSelector, Union[int, Axis]]
+    ) -> "NamedArray":
+        pass
+
+    def slice(self, *args, **kwargs) -> "NamedArray":
+        return haliax.slice(self, *args, **kwargs)
+
+    def updated_slice(self, start: Mapping[AxisSelector, int], update: "NamedArray") -> "NamedArray":
+        return haliax.updated_slice(self, start=start, update=update)
 
     def take(self, axis: AxisSelector, index: Union[int, "NamedArray"]) -> "NamedArray":
         return haliax.take(self, axis=axis, index=index)
@@ -256,15 +271,15 @@ class NamedArray:
         >>> Y = Axis("y", 20)
         >>> arr = haliax.random.randint(jax.random.PRNGKey(0), (X, Y), 0, X.size)
         # slice with ints or slices
-        >>> arr[{"x": 1, "y": slice(0, 10, 2)}]
+        >>> arr[{"x": 1, "y": slice(0,10,new_axis=2)}]
         >>> Z = Axis("z", 3)
         # so-called "advanced indexing" with NamedArrays.
         >>> index_arr = NamedArray(np.array([1, 2, 3]), Z)
         >>> arr[{"x": 1, "y": index_arr}]
 
         A shorthand is provided that works with Python's slicing syntax:
-        >>> arr["x", :] == arr[{"x": slice(None, None, None)}]
-        >>> arr["y", slice(0, 10, 2)] == arr[{"y": slice(0, 10, 2)}]
+        >>> arr["x", :] == arr[{"x": slice(None)}]
+        >>> arr["y", 1, "x", 2] == arr[{"y": 1, "x": 2}]
 
         Advanced indexing is implemented by broadcasting all index arrays to the same shape (using Haliax's
         usual broadcasting rules).
@@ -281,7 +296,7 @@ class NamedArray:
                     )
                 idx = {idx[i]: idx[i + 1] for i in range(0, len(idx), 2)}
 
-        return slice_nd(self, idx)
+        return index(self, idx)
 
     # np.ndarray methods:
     def all(self, axis: Optional[AxisSelection] = None) -> "NamedArray":
@@ -444,6 +459,13 @@ class NamedArray:
         return haliax.less_equal(self, other)
 
     def __eq__(self, other):
+        # special case because Jax sometimes call == on
+        # types when they're in PyTrees
+        if self.array is None:
+            return other.array is None
+        if other.array is None:
+            return False
+
         return haliax.equal(self, other)
 
     def __ne__(self, other):
@@ -577,33 +599,220 @@ def take(array: NamedArray, axis: AxisSelector, index: Union[int, NamedArray]) -
     axis_index = array._lookup_indices(axis)
     if axis_index is None:
         raise ValueError(f"axis {axis} not found in {array}")
+
+    axis = array.axes[axis_index]
     if isinstance(index, int):
         # just drop the axis
         new_array = jnp.take(array.array, index, axis=axis_index)
         new_axes = array.axes[:axis_index] + array.axes[axis_index + 1 :]
+        return NamedArray(new_array, new_axes)
     else:
-        new_array = jnp.take(array.array, index.array, axis=axis_index)
-        new_axes = array.axes[:axis_index] + index.axes + array.axes[axis_index + 1 :]
-    # new axes come from splicing the old axis with
-    return NamedArray(new_array, new_axes)
+        # #13: should broadcast/autobatch take
+        remaining_axes = eliminate_axes(array.axes, axis)
+        # axis order is generally [array.axes[:axis_index], index.axes, array.axes[axis_index + 1 :]]
+        # except that index.axes may overlap with array.axes
+        overlapping_axes: AxisSpec = haliax.axis.overlapping_axes(remaining_axes, index.axes)
+
+        if overlapping_axes:
+            # if the eliminated axis is also in the index, we rename it to a dummy axis that we can broadcast over it
+            need_to_use_dummy_axis = index._lookup_indices(axis.name) is not None
+            if need_to_use_dummy_axis:
+                index = index.rename({axis.name: "__DUMMY_" + axis.name})
+            array = haliax.broadcast_to(array, index.axes, ensure_order=False, enforce_no_extra_axes=False)
+            new_axes = eliminate_axes(array.axes, axis)
+            index = haliax.broadcast_to(index, new_axes, ensure_order=True, enforce_no_extra_axes=True)
+
+            axis_index = array._lookup_indices(axis)  # if it moved
+            index_array = jnp.expand_dims(index.array, axis=axis_index)
+            new_array = jnp.take_along_axis(array.array, index_array, axis=axis_index)
+            new_array = jnp.squeeze(new_array, axis=axis_index)
+
+            out = NamedArray(new_array, new_axes)
+            if need_to_use_dummy_axis:
+                out = out.rename({"__DUMMY_" + axis.name: axis.name})
+            return out
+        else:
+            new_axes = array.axes[:axis_index] + index.axes + array.axes[axis_index + 1 :]
+            new_array = jnp.take(array.array, index.array, axis=axis_index)
+
+            # new axes come from splicing the old axis with
+            return NamedArray(new_array, new_axes)
 
 
-def slice(array: NamedArray, axis: AxisSelector, new_axis: Axis, start: int = 0) -> NamedArray:
+@typing.overload
+def slice(
+    array: NamedArray,
+    axis: AxisSelector,
+    new_axis: Optional[AxisSelector] = None,
+    start: int = 0,
+    length: Optional[int] = None,
+) -> NamedArray:
+    pass
+
+
+@typing.overload
+def slice(
+    array: NamedArray,
+    start: Mapping[AxisSelector, Union[int, jnp.ndarray]],
+    length: Optional[Mapping[AxisSelector, int]],
+) -> NamedArray:
+    """
+    Slices the array along the specified axes, replacing them with new axes (or a shortened version of the old one)
+
+    :arg start: the starting index of each axis to slice
+    :arg length: the length of each axis to slice. If not specified, the length of the new axis will be the same as the old one
+    """
+    pass
+
+
+def slice(array: NamedArray, *args, **kwargs) -> NamedArray:
+    """
+    Slices the array along the specified axis or axes, replacing them with new axes (or a shortened version of the old one)
+
+    This method has two signatures:
+    slice(array, axis, new_axis=None, start=0, length=None)
+    slice(array, start: Mapping[AxisSelector, Union[int, jnp.ndarray]], length: Mapping[AxisSelector, int])
+
+    They both do similar things. The former slices an array along a single axis, replacing it with a new axis.
+    The latter slices an array along multiple axes, replacing them with new axes.
+    """
+    if len(args) >= 1:
+        if isinstance(args[0], Mapping):
+            return _slice_new(array, *args, **kwargs)
+        else:
+            return _slice_old(array, *args, **kwargs)
+    elif "axis" in kwargs:
+        return _slice_old(array, **kwargs)
+    else:
+        return _slice_new(array, **kwargs)
+
+
+def _slice_old(
+    array: NamedArray,
+    axis: AxisSelector,
+    new_axis: Optional[AxisSelector] = None,
+    start: int = 0,
+    length: Optional[int] = None,
+) -> NamedArray:
     """
     Selects elements from an array along an axis, by an index or by another named array
     This is somewhat better than take if you want a contiguous slice of an array
+
+    :arg axis: the axis to slice
+    :arg new_axis: the name of the new axis that replaces the old one. If none, the old name will be used
+    :arg start: the index to start the slice at
+    :arg length: the length of the slice. either new_axis must be an Axis or length must be specified
+
+    Note: this method is basically a wrapper around jax.lax.dynamic_slice_in_dim
     """
     axis_index = array._lookup_indices(axis)
     if axis_index is None:
         raise ValueError(f"axis {axis} not found in {array}")
 
-    sliced = jax.lax.dynamic_slice_in_dim(array.array, start, new_axis.size, axis=axis_index)
+    if length is None:
+        if not isinstance(new_axis, Axis):
+            raise ValueError("either new_axis must be an Axis or length must be specified")
+        length = new_axis.size
+
+    if isinstance(new_axis, str):
+        new_axis = Axis(new_axis, length)
+    elif new_axis is None:
+        new_axis = array.axes[axis_index].resize(length)
+
+    assert isinstance(new_axis, Axis)
+
+    sliced = jax.lax.dynamic_slice_in_dim(array.array, start, length, axis=axis_index)
     new_axes = array.axes[:axis_index] + (new_axis,) + array.axes[axis_index + 1 :]
     # new axes come from splicing the old axis with
     return NamedArray(sliced, new_axes)
 
 
-def slice_nd(
+def _slice_new(
+    array: NamedArray,
+    start: Mapping[AxisSelector, Union[int, jnp.ndarray]],
+    length: Mapping[AxisSelector, Union[int, Axis]],
+) -> NamedArray:
+    array_slice_indices = [0] * len(array.axes)
+    new_axes = list(array.axes)
+    new_lengths = [axis.size for axis in array.axes]
+
+    for axis, s in start.items():
+        axis_index = array._lookup_indices(axis.name if isinstance(axis, Axis) else axis)
+        if axis_index is None:
+            raise ValueError(f"axis {axis} not found in {array}")
+
+        array_slice_indices[axis_index] = s
+        try:
+            length_or_axis = length[axis]
+        except KeyError:
+            raise ValueError(f"length of axis {axis} not specified")
+
+        if isinstance(length_or_axis, Axis):
+            new_axis = length_or_axis
+            ax_len = length_or_axis.size
+        else:
+            ax_len = length_or_axis
+            new_axis = array.axes[axis_index].resize(ax_len)
+
+        new_axes[axis_index] = new_axis
+        new_lengths[axis_index] = ax_len
+
+        total_length = array.axes[axis_index].size
+        if isinstance(s, int) and isinstance(ax_len, int):
+            if s + ax_len > total_length:
+                raise ValueError(f"slice {s}:{s} + {ax_len} is out of bounds for axis {axis} of length {total_length}")
+
+    sliced_array = jax.lax.dynamic_slice(array.array, array_slice_indices, new_lengths)
+
+    return NamedArray(sliced_array, tuple(new_axes))
+
+
+def updated_slice(
+    array: NamedArray, start: Mapping[AxisSelector, Union[int, jnp.ndarray]], update: NamedArray
+) -> NamedArray:
+    """
+    Updates a slice of an array with another array
+
+    :arg array: the array to update
+    :arg start: the starting index of each axis to update
+    :arg update: the array to update with
+    """
+
+    array_slice_indices = [0] * len(array.axes)
+    for axis, s in start.items():
+        axis_index = array._lookup_indices(axis.name if isinstance(axis, Axis) else axis)
+        if axis_index is None:
+            raise ValueError(f"axis {axis} not found in {array}")
+        array_slice_indices[axis_index] = s
+        total_length = array.axes[axis_index].size
+        update_axis = update._lookup_indices(axis.name if isinstance(axis, Axis) else axis)
+
+        if update_axis is None:
+            raise ValueError(f"axis {axis} not found in {update}")
+        # if s is a tracer we can't check the size
+        if isinstance(s, int) and update.axes[update_axis].size + s > total_length:
+            raise ValueError(
+                f"update axis {axis} is too large to start at {s}. Array size is {total_length}, update size is"
+                f" {update.axes[update_axis].size}"
+            )
+
+    # broadcasting here is a bit delicate because the sizes aren't necessarily the same
+    # we need to broadcast the update array to the same axis names as the array we're updating, adding them as necessary
+    broadcasted_axes = []
+    for axis in array.axes:
+        update_axis = update._lookup_indices(axis.name)
+        if update_axis is None:
+            broadcasted_axes.append(axis)
+        else:
+            broadcasted_axes.append(update.axes[update_axis])
+
+    update = haliax.broadcast_to(update, broadcasted_axes, enforce_no_extra_axes=True)
+
+    updated = jax.lax.dynamic_update_slice(array.array, update.array, array_slice_indices)
+    return NamedArray(updated, array.axes)
+
+
+def index(
     array: NamedArray, slices: Mapping[AxisSelector, Union[int, slice_t, NamedArray]]
 ) -> Union[NamedArray, jnp.ndarray]:
     """
@@ -692,28 +901,31 @@ def dot(axis: AxisSelection, *arrays: NamedArray, precision: PrecisionLike = Non
     and any other axes that are shared between the arrays are batched over. Non-contracted Axes in one
     that are not in the other are preserved.
     """
+    _ensure_no_mismatched_axes(*arrays)
+    output_axes: Tuple[Axis, ...] = ft.reduce(union_axes, (a.axes for a in arrays), ())  # type: ignore
+    output_axes = eliminate_axes(output_axes, axis)
+
     axis = ensure_tuple(axis)
 
     array_specs = []
 
     next_index = 0
-    axis_mappings: Dict[Axis, int] = {}
+    axis_mappings: Dict[str, int] = {}
 
     for a in arrays:
         spec = ""
         for ax in a.axes:
-            if ax in axis_mappings:
-                spec += f"{axis_mappings[ax]} "
+            if ax.name in axis_mappings:
+                spec += f"{axis_mappings[ax.name]} "
             else:
-                axis_mappings[ax] = next_index
+                axis_mappings[ax.name] = next_index
                 spec += f"{next_index} "
                 next_index += 1
 
         array_specs.append(spec)
 
     # now compute the output axes:
-    output_axes = tuple(ax for ax in axis_mappings.keys() if not selects_axis(ax, axis))
-    output_spec = " ".join(str(axis_mappings[ax]) for ax in output_axes)
+    output_spec = " ".join(str(axis_mappings[ax.name]) for ax in output_axes)
 
     output = jnp.einsum(
         ", ".join(array_specs) + "-> " + output_spec,
@@ -939,42 +1151,6 @@ def named(a: jnp.ndarray, axis: AxisSelection) -> NamedArray:
     return NamedArray(a, axes)
 
 
-@overload
-def concat_axis_specs(a1: AxisSpec, a2: AxisSpec) -> Sequence[Axis]:
-    pass
-
-
-@overload
-def concat_axis_specs(a1: AxisSelection, a2: AxisSelection) -> Sequence[Union[Axis, str]]:
-    pass
-
-
-def concat_axis_specs(a1: AxisSelection, a2: AxisSelection) -> AxisSelection:
-    """Concatenates two AxisSpec. Raises ValueError if any axis is present in both specs"""
-
-    def _ax_name(ax: AxisSelector) -> str:
-        if isinstance(ax, Axis):
-            return ax.name
-        else:
-            return ax
-
-    if isinstance(a1, Axis) and isinstance(a2, Axis):
-        if _ax_name(a1) == _ax_name(a2):
-            raise ValueError(f"Axis {a1} specified twice")
-        return (a1, a2)
-    else:
-        a1 = ensure_tuple(a1)
-        a2 = ensure_tuple(a2)
-
-        a1_names = [_ax_name(ax) for ax in a1]
-        a2_names = [_ax_name(ax) for ax in a2]
-
-        if len(set(a1_names) & set(a2_names)) > 0:
-            overlap = [ax for ax in a1_names if ax in a2_names]
-            raise ValueError(f"AxisSpecs overlap! {' '.join(str(x) for x in overlap)}")
-        return a1 + a2
-
-
 # Broadcasting Support
 def _broadcast_order(a: NamedArray, b: NamedArray, require_subset: bool = True) -> Tuple[Axis, ...]:
     """
@@ -1183,7 +1359,7 @@ def check_shape(jnp_shape: Sequence[int], hax_axes: AxisSelection) -> Tuple[Axis
     axes: Tuple[AxisSelector, ...] = ensure_tuple(hax_axes)
     if len(jnp_shape) != len(axes):
         raise ValueError(f"Shape mismatch: jnp_shape={jnp_shape} hax_axes={hax_axes}")
-    result_axes: List[haliax.Axis] = []
+    result_axes: List[Axis] = []
     for i in range(len(axes)):
         ax = axes[i]
         if isinstance(ax, Axis):
@@ -1198,79 +1374,29 @@ def check_shape(jnp_shape: Sequence[int], hax_axes: AxisSelection) -> Tuple[Axis
     return tuple(result_axes)
 
 
-class _Sentinel:
-    ...
+def _ensure_no_mismatched_axes(*arrays: NamedArray):
+    """Ensure that all the arrays have no axes with the same name but different sizes"""
+    if len(arrays) <= 1:
+        return
 
-
-def is_axis_compatible(ax1: AxisSelector, ax2: AxisSelector):
-    if isinstance(ax1, str):
-        if isinstance(ax2, str):
-            return ax1 == ax2
-        return ax1 == ax2.name
-    if isinstance(ax2, str):
-        return ax1.name == ax2
-    return ax1.name == ax2.name
-
-
-def selects_axis(selector: AxisSelection, selected: AxisSelection) -> bool:
-    """Returns true if the selector has every axis in selected and, if dims are given, that they match"""
-    if isinstance(selector, Axis) or isinstance(selector, str):
-        selected = ensure_tuple(selected)
-        try:
-            index = index_where(lambda ax: is_axis_compatible(ax, selector), selected)  # type: ignore
-            return index >= 0
-        except ValueError:
-            return False
-
-    selector_dict = _spec_to_dict(selector)
-
-    selected_tuple = ensure_tuple(selected)  # type: ignore
-    for ax in selected_tuple:
-        if isinstance(ax, Axis):
-            selector_size = selector_dict.get(ax.name, _Sentinel)
-            if selector_size is not None and selector_size != ax.size:
-                return False
-        elif isinstance(ax, str):
-            if ax not in selector_dict:
-                return False
-        else:
-            raise ValueError(f"Invalid axis spec: {ax}")
-
-    return True
-
-
-@overload
-def _spec_to_dict(axis_spec: AxisSpec) -> Mapping[str, int]:
-    ...
-
-
-@overload
-def _spec_to_dict(axis_spec: AxisSelection) -> Mapping[str, Optional[int]]:
-    ...
-
-
-def _spec_to_dict(axis_spec: AxisSelection) -> Mapping[str, Optional[int]]:
-    spec = ensure_tuple(axis_spec)  # type: ignore
-    shape_dict: Dict[str, Optional[int]] = {}
-    for ax in spec:
-        if isinstance(ax, Axis):
-            shape_dict[ax.name] = ax.size
-        elif isinstance(ax, str):
-            shape_dict[ax] = None
-        else:
-            raise ValueError(f"Invalid axis spec: {ax}")
-
-    return shape_dict
+    known_sizes: dict[str, int] = {}
+    for a in arrays:
+        for ax in a.axes:
+            if ax.name in known_sizes:
+                if known_sizes[ax.name] != ax.size:
+                    raise ValueError(f"Axis {ax.name} has multiple sizes: {known_sizes[ax.name]} and {ax.size}")
+            else:
+                known_sizes[ax.name] = ax.size
 
 
 __all__ = [
     "NamedArray",
-    "concat_axis_specs",
     "dot",
     "named",
     "rearrange",
     "slice",
-    "slice_nd",
+    "updated_slice",
+    "index",
     "take",
     "split",
     "flatten_axes",

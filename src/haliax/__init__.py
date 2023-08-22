@@ -5,9 +5,11 @@ import jax
 import jax.numpy as jnp
 from jax._src.typing import DTypeLike
 
+import haliax.nn as nn
 import haliax.random as random
-from haliax import tree_util as tree_util
+import haliax.tree_util as tree_util
 
+from .axis import Axis, AxisSelection, AxisSelector, AxisSpec, concat_axes, eliminate_axes, selects_axis
 from .core import (
     NamedArray,
     NamedOrNumeric,
@@ -15,25 +17,25 @@ from .core import (
     broadcast_arrays,
     broadcast_axis,
     broadcast_to,
-    concat_axis_specs,
     dot,
     enable_shape_checks,
     flatten_axes,
+    index,
     named,
     rearrange,
     rename,
     roll,
     slice,
-    slice_nd,
     split,
     take,
     unbind,
     unflatten_axis,
+    updated_slice,
 )
 from .hof import fold, map, scan, vmap
 from .ops import clip, isclose, pad_left, trace, tril, triu, where
-from .partitioning import auto_sharded, axis_mapping, named_jit, shard_with_axis_mapping
-from .types import Axis, AxisSelection, AxisSelector, AxisSpec, Scalar
+from .partitioning import auto_sharded, axis_mapping, fsdp, named_jit, shard_with_axis_mapping
+from .types import Scalar
 from .wrap import (
     ReductionFunction,
     SimpleReductionFunction,
@@ -89,8 +91,11 @@ def full_like(a: NamedArray, fill_value: T, dtype: Optional[DTypeLike] = None) -
 
 def arange(axis: Axis, *, start: int = 0, step: int = 1, dtype: Optional[DTypeLike] = None) -> NamedArray:
     """Version of jnp.arange that returns a NamedArray"""
-    stop = start + axis.size * step
-    return NamedArray(jnp.arange(start, stop, step, dtype=dtype), (axis,))
+    # if start is a tracer, we need to be a bit cleverer since arange doesn't support tracers
+    # return NamedArray(jnp.arange(start, stop, step, dtype=dtype), (axis,))
+
+    arr = jax.lax.iota(dtype=dtype or jnp.result_type(start), size=axis.size) * step + start
+    return NamedArray(arr, (axis,))
 
 
 def stack(axis: AxisSelector, arrays: Sequence[NamedArray]) -> NamedArray:
@@ -751,12 +756,19 @@ def true_divide(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
     return jnp.true_divide(x1, x2)  # type: ignore
 
 
+# deprecated name
+concat_axis_specs = concat_axes
+
+
 __all__ = [
+    "random",
+    "tree_util",
+    "nn",
     "Axis",
-    "NamedArray",
     "AxisSpec",
     "AxisSelection",
     "AxisSelector",
+    "NamedArray",
     "broadcast_to",
     "broadcast_axis",
     "named",
@@ -765,12 +777,12 @@ __all__ = [
     "split",
     "flatten_axes",
     "slice",
-    "slice_nd",
+    "updated_slice",
+    "index",
     "take",
     "unbind",
     "rename",
     "rearrange",
-    "concat_axis_specs",
     "zeros",
     "ones",
     "full",
@@ -904,12 +916,16 @@ __all__ = [
     "auto_sharded",
     "axis_mapping",
     "named_jit",
+    "fsdp",
     "shard_with_axis_mapping",
-    "named_jit",
     "enable_shape_checks",
     "are_shape_checks_enabled",
     "isclose",
     "pad_left",
     "stack",
     "concatenate",
+    "eliminate_axes",
+    "selects_axis",
+    "concat_axes",
+    "concat_axis_specs",
 ]

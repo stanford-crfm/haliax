@@ -8,10 +8,10 @@ import jax
 import jax.lax as lax
 from jaxtyping import PyTree
 
-from .core import NamedArray, selects_axis
-from .jax_utils import broadcast_prefix, is_jax_array_like
+from .axis import Axis, AxisSelector, selects_axis
+from .core import NamedArray
+from .jax_utils import Static, broadcast_prefix, is_jax_array_like
 from .partitioning import physical_axis_name
-from .types import Axis, AxisSelector
 from .util import index_where, is_jax_or_hax_array_like, is_named_array
 
 
@@ -263,17 +263,20 @@ def vmap(
 
             # now we need to pacify the output, which may include NamedArrays, and add the batch axis back at the end
             chilled = jax.tree_util.tree_map(_pacify_named_arrays, out, is_leaf=is_named_array)
-            return chilled
+            arrays, nonarrays = eqx.partition(chilled, eqx.is_array_like)
+            return arrays, Static(nonarrays)
 
         spmd_axis_name = physical_axis_name(axis)
 
-        result = jax.vmap(
+        result_dynamic, result_static = jax.vmap(
             wrapped_fn,
             in_axes=(arg_axis_specs, kwarg_axis_specs),
             out_axes=0,
             axis_size=axis.size if isinstance(axis, Axis) else None,
             spmd_axis_name=spmd_axis_name,
         )(args, kwargs)
+
+        result = eqx.combine(result_dynamic, result_static.value)
 
         # if we were passed in a string arg, we need to get its axis size out from some result
         true_axis = _infer_axis_size_from_result(result, axis)

@@ -8,8 +8,9 @@ from jaxtyping import PRNGKeyArray
 
 import haliax
 import haliax.random as hrandom
+from haliax.axis import Axis, AxisSelection, AxisSpec
 from haliax.core import NamedArray
-from haliax.types import Axis, AxisSelection, AxisSpec, PrecisionLike
+from haliax.types import PrecisionLike
 
 
 # With attention we usually distinguish between the mask and the bias, though the former is just a special case of the
@@ -132,27 +133,26 @@ def combine_masks_or(mask1: Optional[NamedArray], mask2: Optional[NamedArray]) -
     return mask1 | mask2
 
 
-def causal_mask(QPos: Axis, KPos: Axis) -> NamedArray:
+def causal_mask(QPos: Axis, KPos: Axis, q_start: int = 0, k_start: int = 0) -> NamedArray:
     """
-    Creates a causal mask for attention.
+    Creates a materialized causal mask for attention.
 
     :param QPos: Axis of query sequence length
     :param KPos: Axis of key sequence length
     :return: NamedArray of shape (QPos, KPos)
     """
-    # copilot wrote this and i'm just blown away
-    return haliax.arange(QPos).broadcast_axis(KPos) >= haliax.arange(KPos).broadcast_axis(QPos)
+    return haliax.arange(QPos, start=q_start) >= haliax.arange(KPos, start=k_start).broadcast_axis(QPos)
 
 
-def prefix_lm_mask(QSeqLen: Axis, KSeqLen: Axis, prefix_len: int) -> NamedArray:
+def prefix_lm_mask(QSeqLen: Axis, KSeqLen: Axis, prefix_len: int, q_start: int = 0, k_start: int = 0) -> NamedArray:
     """Mask for the PrefixLM objective: fully connected before prefix_len, then causal after."""
     # sometimes prefix_len is a tracer so we can't assert
     if isinstance(prefix_len, int):
         assert prefix_len >= 0
-        assert prefix_len <= KSeqLen.size
+        # assert prefix_len <= KSeqLen.size
 
-    causal = causal_mask(QSeqLen, KSeqLen)
-    prefix = haliax.arange(KSeqLen) < prefix_len
+    causal = causal_mask(QSeqLen, KSeqLen, q_start=q_start, k_start=k_start)
+    prefix = haliax.arange(KSeqLen, start=k_start) < (prefix_len + k_start)
 
     return prefix | causal
 
@@ -177,7 +177,7 @@ def forgetful_causal_mask(KPos: Axis, mask_prob: float, sample_prob: bool = True
     """
     zeroth_on = haliax.nn.one_hot(0, KPos, dtype=jnp.bool_)  # always allow 0th position
     if mask_prob == 0:
-        return jnp.ones((KPos.size,), dtype=jnp.bool_)
+        return haliax.ones((KPos,), dtype=jnp.bool_)
     elif mask_prob == 1:
         return zeroth_on
     else:

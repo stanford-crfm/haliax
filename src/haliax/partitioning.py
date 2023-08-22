@@ -17,10 +17,10 @@ from jax.lax import with_sharding_constraint
 from jax.sharding import Mesh, NamedSharding, PartitionSpec, SingleDeviceSharding
 from jaxtyping import PyTree
 
+from .axis import Axis, AxisSelection, AxisSelector
 from .core import NamedArray
 from .jax_utils import is_jax_array_like
 from .tree_util import hashable_combine, hashable_partition
-from .types import Axis, AxisSelection, AxisSelector
 from .util import StringHolderEnum, ensure_tuple, is_named_array
 
 
@@ -29,6 +29,8 @@ PhysicalAxis = str
 PhysicalAxisSpec = Union[PhysicalAxis, Sequence[PhysicalAxis]]
 ResourceMapping = Mapping[LogicalAxisName, PhysicalAxisSpec]
 """Mapping from logical axis names to physical axis names"""
+
+F = typing.TypeVar("F", bound=typing.Callable)
 
 
 class ResourceAxis(StringHolderEnum):
@@ -221,8 +223,19 @@ def named_jit(
     provided, the arguments' own (pre-existing) shardings will be used as the in_axis_resources.
     If out_axis_resources is not provided, axis_resources will be used as the out_axis_resources.
 
+    functionally this is very similar to something like:
+
+    ```python
+     arg = hax.shard_with_axis_mapping(arg, in_axis_resources)
+     with hax.use_resource_mapping(axis_resources):
+        result = jit(fn, **pjit_args)(arg)
+    result = hax.shard_with_axis_mapping(result, out_axis_resources)
+    return result
+    ```
+    but it uses the jit decorator directly
+
     :param fn: The function to be jit'd
-    :param axis_resources: A mapping from logical axis names to physical axis names
+    :param axis_resources: A mapping from logical axis names to physical axis names use for the contextual resource mapping
     :param in_axis_resources: A mapping from logical axis names to physical axis names for arguments. If not passed, it uses the arguments' own shardings
     :param out_axis_resources: A mapping from logical axis names to physical axis names for the result, defaults to axis_resources
     :param donate_args: A PyTree of booleans or function leaf->bool, indicating whether to donate arguments to the
@@ -278,37 +291,73 @@ def named_jit(
 
         static = (static_fun, static_argspec)
 
-        output_shape = _cached_filter_eval_shape(fn, *args, **kwargs)
-        # TODO: with new jax.Array I shouldn't have to specify shardings, but I do for now
-        #  https://github.com/google/jax/issues/15600
-        # we don't really need in_shardings though
-        my_pjit_args = dict(**pjit_args)
-
-        if in_axis_resources is not None or axis_resources is not None:
-            if in_axis_resources is None:
-                in_axis_resources = axis_resources
-            in_resources = infer_resource_partitions(
-                (dynamic_donated, dynamic_reserved),
-                in_axis_resources,
-                preserve_existing_shardings=in_axis_resources is None,
-            )
-            my_pjit_args["in_shardings"] = in_resources
-
-        if out_axis_resources is not None:
-            # TODO: when AUTO is fixed (or eval_shape can give shardings), use it here
-            out_resources = infer_resource_partitions(output_shape, out_axis_resources, use_auto_sharding=False)
-            my_pjit_args["out_shardings"] = out_resources
-
         if axis_resources is not None:
             cmanager = axis_mapping(axis_resources)
         else:
             cmanager = contextlib.nullcontext()
 
         with cmanager:
+            output_shape = _cached_filter_eval_shape(fn, *args, **kwargs)
+            # TODO: with new jax.Array I shouldn't have to specify shardings, but I do for now
+            #  https://github.com/google/jax/issues/15600
+            # we don't really need in_shardings though
+            my_pjit_args = dict(**pjit_args)
+
+            if in_axis_resources is not None or axis_resources is not None:
+                if in_axis_resources is None:
+                    in_axis_resources = axis_resources
+                in_resources = infer_resource_partitions(
+                    (dynamic_donated, dynamic_reserved),
+                    in_axis_resources,
+                    preserve_existing_shardings=in_axis_resources is None,
+                )
+                my_pjit_args["in_shardings"] = in_resources
+
+            if out_axis_resources is not None:
+                # TODO: when AUTO is fixed (or eval_shape can give shardings), use it here
+                out_resources = infer_resource_partitions(output_shape, out_axis_resources, use_auto_sharding=False)
+                my_pjit_args["out_shardings"] = out_resources
+
             cached_pjitted_fun = _named_pjit_cache(fn, **my_pjit_args)
             return cached_pjitted_fun(dynamic_donated, dynamic_reserved, static)
 
     return f
+
+
+@typing.overload
+def fsdp(fn: F, parameter_mapping: ResourceMapping, compute_mapping: ResourceMapping) -> F:
+    ...
+
+
+@typing.overload
+def fsdp(parameter_mapping: ResourceMapping, compute_mapping: ResourceMapping) -> typing.Callable[[F], F]:
+    ...
+
+
+def fsdp(*args, **kwargs):
+    """
+    A convenience wrapper around named_jit / pjit to encode the FSDP pattern. It's basically equivalent to this:
+
+    ```python
+    @named_jit(in_axis_resources=parameter_mapping, out_axis_resources=parameter_mapping, axis_resources=compute_mapping)
+    def f(*args, **kwargs):
+        return fn(*args, **kwargs)
+    ```
+
+    This function can be used as a decorator or as a function.
+    """
+    if "fn" in kwargs:
+        return _fsdp_impl(*args, **kwargs)
+    elif len(args) > 1 and callable(args[0]):
+        return _fsdp_impl(*args, **kwargs)
+    else:
+        return lambda fn: _fsdp_impl(fn, *args, **kwargs)
+
+
+def _fsdp_impl(fn: F, parameter_mapping, compute_mapping):
+    return named_jit(
+        fn, in_axis_resources=parameter_mapping, out_axis_resources=parameter_mapping, axis_resources=compute_mapping
+    )
 
 
 # This is more or less copy-pasted from Equinox's similar functions (pmap, vmap, etc), but
@@ -438,6 +487,7 @@ __all__ = [
     "auto_sharded",
     "infer_resource_partitions",
     "named_jit",
+    "fsdp",
     "physical_axis_name",
     "pspec_for_axis",
     "round_axis_for_partitioning",

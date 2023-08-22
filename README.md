@@ -10,7 +10,6 @@ as in NumPy, PyTorch, etc. Here's a minimal attention module implementation in H
 please see the [Haliax tutorial](https://colab.research.google.com/drive/1TiTcQQ4V5mopbgCu1SVl-oqJtXn7rFnC).
 
 ```python
-
 import equinox as eqx
 import jax
 import jax.numpy as jnp
@@ -23,52 +22,55 @@ Head = hax.Axis("head", 8)  # number of attention heads
 Key = hax.Axis("key", 64)  # key size
 Embed = hax.Axis("embed", 512)  # embedding size
 
+
 def attention_scores(Key, KPos, query, key, mask):
-  # how similar is each query to each key
-  scores = hax.dot(Key, query, key) / jnp.sqrt(Key.size)
+    # how similar is each query to each key
+    scores = hax.dot(Key, query, key) / jnp.sqrt(Key.size)
 
-  if mask is not None:
-    scores -= 1E9 * (1.0 - mask)
+    if mask is not None:
+        scores -= 1E9 * (1.0 - mask)
 
-  # convert to probabilities
-  scores = hax.nn.softmax(scores, KPos)
-  return scores
+    # convert to probabilities
+    scores = hax.nn.softmax(scores, KPos)
+    return scores
 
 
 def attention(Key, KPos, query, key, value, mask):
-  scores = attention_scores(Key, KPos, query, key, mask)
-  answers = hax.dot(KPos, scores, value)
+    scores = attention_scores(Key, KPos, query, key, mask)
+    answers = hax.dot(KPos, scores, value)
 
-  return answers
+    return answers
+
 
 # Causal Mask means that if pos >= key_pos, then pos can attend to key_pos
 causal_mask = hax.arange(Pos).broadcast_axis(KPos) >= hax.arange(KPos)
 
+
 class Attention(eqx.Module):
-  proj_qkv: hnn.Linear  # input projection from [Embed] -> [(q, k, v), Head, Key]
-  proj_answer: hnn.Linear  # output projection from [Head, Key] -> [Embed]
+    proj_qkv: hnn.Linear  # input projection from [Embed] -> [(q, k, v), Head, Key]
+    proj_answer: hnn.Linear  # output projection from [Head, Key] -> [Embed]
 
-  @staticmethod
-  def init(Embed, Head, Key, *, key):
-    Qkv = hax.Axis("qkv", 3)  # create all three at once
+    @staticmethod
+    def init(Embed, Head, Key, *, key):
+        Qkv = hax.Axis("qkv", 3)  # create all three at once
 
-    k_qkv, k_ans = jax.random.split(key, 2)
-    proj_qkv = hnn.Linear.init(In=Embed, Out=(Qkv, Head, Key), key=k_qkv)
-    proj_answer = hnn.Linear.init(In=(Head, Key), Out=Embed, key=k_ans)
-    return Attention(proj_qkv, proj_answer)
+        k_qkv, k_ans = jax.random.split(key, 2)
+        proj_qkv = hnn.Linear.init(In=Embed, Out=(Qkv, Head, Key), key=k_qkv)
+        proj_answer = hnn.Linear.init(In=(Head, Key), Out=Embed, key=k_ans)
+        return Attention(proj_qkv, proj_answer)
 
-  def __call__(self, x, mask=None):
-    qkv_out = self.proj_qkv(x)
-    q, k, v = qkv_out.unbind("qkv")
+    def __call__(self, x, mask=None):
+        qkv_out = self.proj_qkv(x)
+        q, k, v = qkv_out.unbind("qkv")
 
-    # Rename k and v's Pos as haliax doesn't support unnamed axes or duplicate axes
-    k = k.rename({"position": "key_position"})
-    v = v.rename({"position": "key_position"})
+        # Rename k and v's Pos as haliax doesn't support unnamed axes or duplicate axes
+        k = k.rename({"position": "key_position"})
+        v = v.rename({"position": "key_position"})
 
-    answers = attention(Key, KPos, q, k, v, causal_mask)
+        answers = attention(Key, KPos, q, k, v, causal_mask)
 
-    x = self.proj_answer(answers)
-    return x
+        x = self.proj_answer(answers)
+        return x
 ```
 
 (We use the excellent [Equinox](https://github.com/patrick-kidger/equinox) library for its module system and tree transformations.)

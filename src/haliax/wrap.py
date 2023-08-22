@@ -3,10 +3,10 @@ from typing import Optional, Protocol
 import jax
 import jax.numpy as jnp
 
-from haliax.core import NamedArray, _broadcast_order, broadcast_to, selects_axis
+from haliax.core import NamedArray, _broadcast_order, broadcast_to
 from haliax.util import ensure_tuple
 
-from .types import AxisSelection, AxisSelector
+from .axis import AxisSelection, AxisSelector, selects_axis
 
 
 def wrap_elemwise_unary(f, a, *args, **kwargs):

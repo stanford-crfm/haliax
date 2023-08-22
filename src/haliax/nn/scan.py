@@ -4,8 +4,9 @@ from typing import Dict, Generic, Optional, Protocol, Type, TypeVar
 import equinox as eqx
 
 import haliax
-from haliax.core import Axis
 from haliax.jax_utils import filter_checkpoint
+
+from ..axis import Axis
 
 
 M = TypeVar("M", bound=eqx.Module, covariant=True)
@@ -43,8 +44,9 @@ class Stacked(eqx.Module, Generic[M]):
         >>> import haliax.nn as hnn
         >>> class MyModule(eqx.Module):
         ...     def __init__(self, num_layers: int, hidden: hax.Axis, *, key):
-        ...         self.axis = Axis("layer", num_layers)
-        ...         self.layers = Stacked.init(self.axis, hnn.Linear)(In=hidden, Out=hidden, key=key)
+        ...         self.axis = hax.Axis("layer", num_layers)
+        ...         split_key = jax.random.split(key, num_layers)
+        ...         self.layers = Stacked.init(self.axis, hnn.Linear)(In=hidden, Out=hidden, key=split_key)
         ...
         ...     def __call__(self, x):
         ...         return self.layers.fold(x)  # applies each layer in sequence
@@ -60,19 +62,32 @@ class Stacked(eqx.Module, Generic[M]):
     Block: Axis = eqx.static_field()
     # TODO: support fancier gradient checkpointing
     gradient_checkpointing: bool = eqx.static_field()
+    prevent_cse: bool = eqx.static_field()
 
     @staticmethod
-    def init(Block: Axis, module: Type[M], *, gradient_checkpointing: bool = False) -> ModuleInit["Stacked[M]"]:
+    def init(
+        Block: Axis, module: Type[M], *, gradient_checkpointing: bool = False, prevent_cse: bool = True
+    ) -> ModuleInit["Stacked[M]"]:
+        """
+        Initialize a Stacked module. This method is curried: you can pass in the Block and module, and it will return
+        a function that takes (batched) arguments to the vmapped module's init method.
+        :param Block:
+        :param module:
+        :param gradient_checkpointing:
+        :param prevent_cse:
+        :return:
+        """
+
         @functools.wraps(module)
         def fn(*args, **kwargs):
             stacked = haliax.vmap(module.init, Block)(*args, **kwargs)
-            return Stacked(stacked, Block, gradient_checkpointing)
+            return Stacked(stacked, Block, gradient_checkpointing, prevent_cse)
 
         return fn
 
     def scan(self, init, *extra_args, **extra_kwargs):
         if self.gradient_checkpointing:
-            do_block = filter_checkpoint(self._do_block)
+            do_block = filter_checkpoint(self._do_block, prevent_cse=self.prevent_cse)
         else:
             do_block = self._do_block
         return haliax.scan(do_block, self.Block)(init, self.stacked, *extra_args, **extra_kwargs)
