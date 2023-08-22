@@ -9,6 +9,7 @@ arrays (see [haliax.zeros][] and [haliax.ones][]) as well as things like reducti
 ::: haliax.AxisSpec
 ::: haliax.AxisSelection
 ## Array Creation
+::: haliax.named
 ::: haliax.zeros
 ::: haliax.ones
 ::: haliax.full
@@ -27,6 +28,13 @@ We don't include `hstack` or `vstack` because we prefer semantic axes.
 
 ## Array Manipulation
 
+### Broadcasting
+
+See also the section on [Broadcasting](broadcasting.md).
+
+::: haliax.broadcast_axis
+::: haliax.broadcast_to
+
 ### Slicing
 
 See also the section on [Indexing and Slicing](indexing.md).
@@ -42,13 +50,8 @@ See also the section on [Indexing and Slicing](indexing.md).
 ::: haliax.rearrange
 ::: haliax.unbind
 ::: haliax.unflatten_axis
+::: haliax.split
 
-### Broadcasting
-
-See also the section on [Broadcasting](broadcasting.md).
-
-::: haliax.broadcast_axis
-::: haliax.broadcast_to
 
 ## Operations
 
@@ -62,7 +65,7 @@ The only difference is they operate on named arrays instead.
 ### Reductions
 
 Reduction operations are things like [haliax.sum][] and [haliax.mean][] that reduce an array along one or more axes.
-With the exception of argmin and argmax, They all have the form:
+Except for [haliax.argmin]() and [haliax.argmax](), they all have the form:
 
 ```python
 def sum(x, axis: Optional[AxisSelection] = None, where: Optional[NamedArray] = None) -> haliax.NamedArray:
@@ -99,7 +102,7 @@ don't reduce it.
 
 ### Unary Operations
 
-The `A` here means [haliax.NamedArray](), `Scalar`, or [jax.numpy.ndarray]().
+The `A` in these operations means [haliax.NamedArray](), `Scalar`, or [jax.numpy.ndarray]().
 
 ::: haliax.abs
 ::: haliax.absolute

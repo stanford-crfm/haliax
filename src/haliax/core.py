@@ -960,6 +960,14 @@ def dot(axis: AxisSelection, *arrays: NamedArray, precision: PrecisionLike = Non
 
 
 def split(a: NamedArray, axis: AxisSelector, new_axes: Sequence[Axis]) -> Sequence[NamedArray]:
+    """
+    Splits an array along an axis into multiple arrays, one for each element of new_axes.
+
+    Args:
+        a (NamedArray): the array to split
+        axis (AxisSelector): the axis to split along
+        new_axes (Sequence[Axis]): the axes to split into. Must have the same total length as the axis being split.
+    """
     # check the lengths of the new axes
     index = a._lookup_indices(axis)
     if index is None:
@@ -1183,7 +1191,7 @@ def unflatten_axis(array: NamedArray, axis: AxisSelector, new_axes: AxisSpec) ->
 
 
 def named(a: jnp.ndarray, axis: AxisSelection) -> NamedArray:
-    """Creates a NamedArray from a numpy array and a list of axes"""
+    """Creates a NamedArray from a numpy array and a list of axes."""
     axes = check_shape(a.shape, axis)
     return NamedArray(a, axes)
 
