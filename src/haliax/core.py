@@ -78,6 +78,7 @@ class NamedArray:
                 raise ValueError(f"Shape of underlying array {s} does not match shape of axes {self.axes}")
 
     def item(self):
+        """Returns the value of this NamedArray as a python scalar."""
         return self.array.item()
 
     def scalar(self) -> jnp.ndarray:
@@ -97,9 +98,13 @@ class NamedArray:
 
     # shape = property(lambda self: self.array.shape)
     dtype = property(lambda self: self.array.dtype)
+    """The dtype of the underlying array"""
     ndim = property(lambda self: self.array.ndim)
+    """The number of dimensions of the underlying array"""
     size = property(lambda self: self.array.size)
+    """The number of elements in the underlying array"""
     nbytes = property(lambda self: self.array.nbytes)
+    """The number of bytes in the underlying array"""
 
     def tree_flatten(self) -> Any:
         return ((self.array,), self.axes)
@@ -110,6 +115,7 @@ class NamedArray:
         return cls(tree[0], axes=aux)
 
     def has_axis(self, axis: AxisSelection) -> bool:
+        """Returns true if the given axis is present in this NamedArray."""
         return self._lookup_indices(axis) is not None
 
     @overload
@@ -146,7 +152,10 @@ class NamedArray:
         ...
 
     def resolve_axis(self, axes: AxisSelection) -> AxisSpec:  # type: ignore
-        """Returns the axes corresponding to the given axis selection."""
+        """
+        Returns the axes corresponding to the given axis selection.
+        That is, it return the [haliax.Axis]() values themselves, not just their names.
+        """
         indices = self._lookup_indices(axes)
         if isinstance(indices, int):
             return self.axes[indices]
@@ -263,7 +272,7 @@ class NamedArray:
         ...
 
     def __getitem__(self, idx) -> Union["NamedArray", jnp.ndarray]:
-        """Syntactic sugar for slice_nd, which is the actual implementation.
+        """Syntactic sugar for [haliax.index](), which is the actual implementation.
 
         Supports indexing like:
 

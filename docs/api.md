@@ -8,6 +8,9 @@ arrays (see [haliax.zeros][] and [haliax.ones][]) as well as things like reducti
 ::: haliax.Axis
 ::: haliax.AxisSpec
 ::: haliax.AxisSelection
+
+
+
 ## Array Creation
 ::: haliax.named
 ::: haliax.zeros
@@ -17,6 +20,7 @@ arrays (see [haliax.zeros][] and [haliax.ones][]) as well as things like reducti
 ::: haliax.ones_like
 ::: haliax.full_like
 ::: haliax.arange
+
 
 ### Combining Arrays
 
@@ -203,3 +207,10 @@ The `A` in these operations means [haliax.NamedArray](), `Scalar`, or [jax.numpy
 ::: haliax.right_shift
 ::: haliax.subtract
 ::: haliax.true_divide
+
+## Named Array Reference
+
+Most methods on [haliax.NamedArray][] just call the corresponding `haliax` function with the array as the first argument.
+The exceptions are documented here:
+
+::: haliax.NamedArray
