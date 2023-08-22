@@ -20,6 +20,9 @@ arrays (see [haliax.zeros][] and [haliax.ones][]) as well as things like reducti
 ::: haliax.ones_like
 ::: haliax.full_like
 ::: haliax.arange
+::: haliax.linspace
+::: haliax.logspace
+::: haliax.geomspace
 
 
 ### Combining Arrays

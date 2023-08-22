@@ -98,6 +98,49 @@ def arange(axis: Axis, *, start: int = 0, step: int = 1, dtype: Optional[DTypeLi
     return NamedArray(arr, (axis,))
 
 
+# TODO: add overrides for arraylike start/stop to linspace, logspace, geomspace
+def linspace(
+    axis: AxisSelector, *, start: float, stop: float, endpoint: bool = True, dtype: Optional[DTypeLike] = None
+) -> NamedArray:
+    """
+    Version of jnp.linspace that returns a NamedArray.
+    If `axis` is a string, the default number of samples (50, per numpy) will be used.
+    """
+    if isinstance(axis, str):
+        axis = Axis(axis, 50)
+    return NamedArray(jnp.linspace(start, stop, axis.size, endpoint=endpoint, dtype=dtype), (axis,))
+
+
+def logspace(
+    axis: AxisSelector,
+    *,
+    start: float,
+    stop: float,
+    endpoint: bool = True,
+    base: float = 10.0,
+    dtype: Optional[DTypeLike] = None,
+) -> NamedArray:
+    """
+    Version of jnp.logspace that returns a NamedArray.
+    If `axis` is a string, the default number of samples (50, per numpy) will be used.
+    """
+    if isinstance(axis, str):
+        axis = Axis(axis, 50)
+    return NamedArray(jnp.logspace(start, stop, axis.size, endpoint=endpoint, base=base, dtype=dtype), (axis,))
+
+
+def geomspace(
+    axis: AxisSelector, *, start: float, stop: float, endpoint: bool = True, dtype: Optional[DTypeLike] = None
+) -> NamedArray:
+    """
+    Version of jnp.geomspace that returns a NamedArray.
+    If `axis` is a string, the default number of samples (50, per numpy) will be used.
+    """
+    if isinstance(axis, str):
+        axis = Axis(axis, 50)
+    return NamedArray(jnp.geomspace(start, stop, axis.size, endpoint=endpoint, dtype=dtype), (axis,))
+
+
 def stack(axis: AxisSelector, arrays: Sequence[NamedArray]) -> NamedArray:
     """Version of [jax.numpy.stack]() that returns a NamedArray"""
     if isinstance(axis, str):
