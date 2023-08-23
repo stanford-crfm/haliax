@@ -72,6 +72,8 @@ watch:
 nav:
   - Home: 'index.md'
   - Tutorial: 'tutorial.md'
-  - Broadcasting: 'broadcasting.md'
-  - Indexing and Slicing: 'indexing.md'
+  - Named Arrays:
+    - Broadcasting: 'broadcasting.md'
+    - Indexing and Slicing: 'indexing.md'
+  - Partitioning: 'partitioning.md'
   - API Reference: 'api.md'

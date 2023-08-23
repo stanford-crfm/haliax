@@ -24,10 +24,8 @@ from .tree_util import hashable_combine, hashable_partition
 from .util import StringHolderEnum, ensure_tuple, is_named_array
 
 
-LogicalAxisName = str
-PhysicalAxis = str
-PhysicalAxisSpec = Union[PhysicalAxis, Sequence[PhysicalAxis]]
-ResourceMapping = Mapping[LogicalAxisName, PhysicalAxisSpec]
+PhysicalAxisSpec = Union[(str), Sequence[str]]
+ResourceMapping = Mapping[(str), PhysicalAxisSpec]
 """Mapping from logical axis names to physical axis names"""
 
 F = typing.TypeVar("F", bound=typing.Callable)
@@ -216,32 +214,40 @@ def named_jit(
     **pjit_args,
 ):
     """
-    A version of pjit that uses NamedArrays and the provided resource mapping to infer the resource partitions.
+    A version of pjit that uses NamedArrays and the provided resource mapping to infer resource partitions for
+    sharded computation for.
 
-    If no resource mapping is provided, this function attempts to use the global resource mapping.
-    axis_resources will be used for a context-specific resource mapping. In addition, if in_axis_resources is not
-    provided, the arguments' own (pre-existing) shardings will be used as the in_axis_resources.
+    `axis_resources` will be used for a context-specific resource mapping when the function is invoked.
+    In addition, if in_axis_resources is not provided, the arguments' own (pre-existing) shardings will be used as the in_axis_resources.
     If out_axis_resources is not provided, axis_resources will be used as the out_axis_resources.
 
-    functionally this is very similar to something like:
+    If no resource mapping is provided, this function attempts to use the context resource mapping.
+
+    Functionally this is very similar to something like:
 
     ```python
      arg = hax.shard_with_axis_mapping(arg, in_axis_resources)
-     with hax.use_resource_mapping(axis_resources):
-        result = jit(fn, **pjit_args)(arg)
+     with hax.axis_mapping(axis_resources):
+        result = jax.jit(fn, **pjit_args)(arg)
     result = hax.shard_with_axis_mapping(result, out_axis_resources)
     return result
     ```
-    but it uses the jit decorator directly
 
-    :param fn: The function to be jit'd
-    :param axis_resources: A mapping from logical axis names to physical axis names use for the contextual resource mapping
-    :param in_axis_resources: A mapping from logical axis names to physical axis names for arguments. If not passed, it uses the arguments' own shardings
-    :param out_axis_resources: A mapping from logical axis names to physical axis names for the result, defaults to axis_resources
-    :param donate_args: A PyTree of booleans or function leaf->bool, indicating whether to donate arguments to the
-     computation
-    :param donate_kwargs: A PyTree of booleans or function leaf->bool, indicating whether to donate keyword arguments to
-        the computation
+    Args:
+        fn (Function, optional): The function to be jit'd.
+        axis_resources (ResourceMapping, optional): A mapping from logical axis names to physical axis names use for th
+                e context-specific resource mapping.
+        in_axis_resources (ResourceMapping, optional): A mapping from logical axis names to physical axis names for
+                arguments. If not passed, it uses the argument's own shardings.
+        out_axis_resources (ResourceMapping, optional): A mapping from logical axis names to physical axis names for the
+                result, defaults to axis_resources.
+        donate_args (PyTree, optional): A PyTree of booleans or function leaf->bool, indicating if the arguments should
+                be donated to the computation.
+        donate_kwargs (PyTree, optional): A PyTree of booleans or function leaf->bool, indication if the keyword
+                arguments should be donated to the computation.
+
+    Returns:
+        Function: A jit'd version of the function.
     """
 
     if fn is None:
@@ -478,8 +484,6 @@ def _is_jit_tracer(x) -> bool:
 
 
 __all__ = [
-    "LogicalAxisName",
-    "PhysicalAxis",
     "PhysicalAxisSpec",
     "ResourceAxis",
     "ResourceMapping",

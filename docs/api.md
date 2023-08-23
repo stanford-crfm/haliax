@@ -1,11 +1,27 @@
-# API Reference
+# Main API Reference
 In general, the API is designed to be similar to JAX's version of NumPy's API, with the main difference being
 that we use names (either strings or [haliax.Axis][] objects) to specify axes instead of integers. This shows up for creating
 arrays (see [haliax.zeros][] and [haliax.ones][]) as well as things like reductions (see [haliax.sum][] and
 [haliax.mean][]).
 
 ## Axis Types
+
+There are four types related to [haliax.Axis][] you will see in the API reference:
+
+* [haliax.Axis][]: This is the main type for representing axes. It is a dataclass with a name and a size.
+* [haliax.AxisSelector][]: This is a type alias for either [haliax.Axis][] or a `str`. This type is used when we want
+  one axis and the size can be inferred from the inputs.
+* [haliax.AxisSpec][]: This is a type alias for either [haliax.Axis][] or a tuple/list of [haliax.Axis][]. This type is
+  used when we want one or more axes and the sizes cannot be inferred from the inputs, for instance when creating arrays.
+* [haliax.AxisSelection][]: This is a type alias for either [haliax.AxisSelector][] or a tuple/list of [haliax.AxisSelector][].
+    This type is used when we want one or more axes and the sizes can be inferred from the inputs, for instance when
+    reducing an array.
+
+Occasionally, an axis size can be inferred in some circumstances but not others. When this happens, we still use
+`AxisSelector` but document the behavior in the docstring. A RuntimeError will be raised if the size cannot be inferred.
+
 ::: haliax.Axis
+::: haliax.AxisSelector
 ::: haliax.AxisSpec
 ::: haliax.AxisSelection
 
@@ -72,7 +88,7 @@ The only difference is they operate on named arrays instead.
 ### Reductions
 
 Reduction operations are things like [haliax.sum][] and [haliax.mean][] that reduce an array along one or more axes.
-Except for [haliax.argmin]() and [haliax.argmax](), they all have the form:
+Except for [haliax.argmin][] and [haliax.argmax][], they all have the form:
 
 ```python
 def sum(x, axis: Optional[AxisSelection] = None, where: Optional[NamedArray] = None) -> haliax.NamedArray:
@@ -109,7 +125,8 @@ don't reduce it.
 
 ### Unary Operations
 
-The `A` in these operations means [haliax.NamedArray](), `Scalar`, or [jax.numpy.ndarray]().
+The `A` in these operations means [haliax.NamedArray][], a `Scalar`, or [jax.numpy.ndarray][].
+These are al
 
 ::: haliax.abs
 ::: haliax.absolute
@@ -213,7 +230,8 @@ The `A` in these operations means [haliax.NamedArray](), `Scalar`, or [jax.numpy
 
 ## Named Array Reference
 
-Most methods on [haliax.NamedArray][] just call the corresponding `haliax` function with the array as the first argument.
+Most methods on [haliax.NamedArray][] just call the corresponding `haliax` function with the array as the first argument,
+just as with Numpy.
 The exceptions are documented here:
 
 ::: haliax.NamedArray

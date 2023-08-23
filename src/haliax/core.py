@@ -154,7 +154,7 @@ class NamedArray:
     def resolve_axis(self, axes: AxisSelection) -> AxisSpec:  # type: ignore
         """
         Returns the axes corresponding to the given axis selection.
-        That is, it return the [haliax.Axis]() values themselves, not just their names.
+        That is, it return the [haliax.Axis][] values themselves, not just their names.
         """
         indices = self._lookup_indices(axes)
         if isinstance(indices, int):
@@ -272,7 +272,7 @@ class NamedArray:
         ...
 
     def __getitem__(self, idx) -> Union["NamedArray", jnp.ndarray]:
-        """Syntactic sugar for [haliax.index](), which is the actual implementation.
+        """Syntactic sugar for [haliax.index][], which is the actual implementation.
 
         Supports indexing like:
 

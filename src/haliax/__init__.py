@@ -142,7 +142,7 @@ def geomspace(
 
 
 def stack(axis: AxisSelector, arrays: Sequence[NamedArray]) -> NamedArray:
-    """Version of [jax.numpy.stack]() that returns a NamedArray"""
+    """Version of [jax.numpy.stack][] that returns a NamedArray"""
     if isinstance(axis, str):
         axis = Axis(axis, len(arrays))
     if len(arrays) == 0:
@@ -152,7 +152,7 @@ def stack(axis: AxisSelector, arrays: Sequence[NamedArray]) -> NamedArray:
 
 
 def concatenate(axis: AxisSelector, arrays: Sequence[NamedArray]) -> NamedArray:
-    """Version of [jax.numpy.concatenate]() that returns a NamedArray. The returns array will have the same axis names in the
+    """Version of [jax.numpy.concatenate][] that returns a NamedArray. The returns array will have the same axis names in the
     same order as the first, with the selected axis extended by the sum of the sizes of the selected axes in the
     concatenated arrays."""
     total_size: int = _sum(a.resolve_axis(axis).size for a in arrays)  # type: ignore
