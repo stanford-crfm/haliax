@@ -81,7 +81,7 @@ our companion library for training large language models and other foundation mo
 and up to a TPU v3-256 pod slice.
 
 
-Haliax was created by [Stanford's Center for Research on Foundation Models (CRFM)](https://crfm.stanford.edu/)'s research engineering team. ([We're hiring!](https://crfm.stanford.edu/apply.html))
+Haliax was created by [Stanford's Center for Research on Foundation Models (CRFM)](https://crfm.stanford.edu/)'s research engineering team.
 You can find us in the #levanter channel on the unofficial [Jax LLM Discord](https://discord.gg/FkRGNX3ND).
 
 <!--haliax-intro-end-->
