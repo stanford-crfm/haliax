@@ -17,7 +17,7 @@ from haliax.jax_utils import is_jax_array_like
 from haliax.util import ensure_tuple, index_where, py_slice, slice_t
 
 from .axis import Axis, AxisSelection, AxisSelector, AxisSpec, eliminate_axes, selects_axis, union_axes
-from .types import PrecisionLike, Scalar
+from .types import IntScalar, PrecisionLike, Scalar
 
 
 NamedOrNumeric = Union[Scalar, "NamedArray"]
@@ -78,6 +78,7 @@ class NamedArray:
                 raise ValueError(f"Shape of underlying array {s} does not match shape of axes {self.axes}")
 
     def item(self):
+        """Returns the value of this NamedArray as a python scalar."""
         return self.array.item()
 
     def scalar(self) -> jnp.ndarray:
@@ -97,9 +98,13 @@ class NamedArray:
 
     # shape = property(lambda self: self.array.shape)
     dtype = property(lambda self: self.array.dtype)
+    """The dtype of the underlying array"""
     ndim = property(lambda self: self.array.ndim)
+    """The number of dimensions of the underlying array"""
     size = property(lambda self: self.array.size)
+    """The number of elements in the underlying array"""
     nbytes = property(lambda self: self.array.nbytes)
+    """The number of bytes in the underlying array"""
 
     def tree_flatten(self) -> Any:
         return ((self.array,), self.axes)
@@ -110,6 +115,7 @@ class NamedArray:
         return cls(tree[0], axes=aux)
 
     def has_axis(self, axis: AxisSelection) -> bool:
+        """Returns true if the given axis is present in this NamedArray."""
         return self._lookup_indices(axis) is not None
 
     @overload
@@ -146,7 +152,10 @@ class NamedArray:
         ...
 
     def resolve_axis(self, axes: AxisSelection) -> AxisSpec:  # type: ignore
-        """Returns the axes corresponding to the given axis selection."""
+        """
+        Returns the axes corresponding to the given axis selection.
+        That is, it return the [haliax.Axis][] values themselves, not just their names.
+        """
         indices = self._lookup_indices(axes)
         if isinstance(indices, int):
             return self.axes[indices]
@@ -249,7 +258,7 @@ class NamedArray:
         return haliax.take(self, axis=axis, index=index)
 
     @overload
-    def __getitem__(self, item: Tuple[str, Union[int, slice_t, "NamedArray"]]) -> Union["NamedArray", jnp.ndarray]:
+    def __getitem__(self, item: Tuple[str, Union[int, slice_t, "NamedArray"]]) -> Union["NamedArray", Scalar]:
         ...  # pragma: no cover
 
     @overload
@@ -263,7 +272,7 @@ class NamedArray:
         ...
 
     def __getitem__(self, idx) -> Union["NamedArray", jnp.ndarray]:
-        """Syntactic sugar for slice_nd, which is the actual implementation.
+        """Syntactic sugar for [haliax.index][], which is the actual implementation.
 
         Supports indexing like:
 
@@ -334,10 +343,10 @@ class NamedArray:
     def copy(self) -> "NamedArray":
         return NamedArray(self.array.copy(), self.axes)
 
-    def cumprod(self, axis: Optional[AxisSelection] = None, *, dtype=None) -> "NamedArray":
+    def cumprod(self, axis: Optional[AxisSelector] = None, *, dtype=None) -> "NamedArray":
         return haliax.cumprod(self, axis=axis, dtype=dtype)
 
-    def cumsum(self, axis: Optional[AxisSelection] = None, *, dtype=None) -> "NamedArray":
+    def cumsum(self, axis: Optional[AxisSelector] = None, *, dtype=None) -> "NamedArray":
         return haliax.cumsum(self, axis=axis, dtype=dtype)
 
     def dot(self, axis: AxisSelection, b, *, precision: PrecisionLike = None) -> "NamedArray":
@@ -351,10 +360,9 @@ class NamedArray:
         self,
         axis: Optional[AxisSelection] = None,
         *,
-        initial=None,
         where=None,
     ) -> "NamedArray":
-        return haliax.max(self, axis=axis, initial=initial, where=where)
+        return haliax.max(self, axis=axis, where=where)
 
     def mean(
         self,
@@ -369,24 +377,21 @@ class NamedArray:
         self,
         axis: Optional[AxisSelection] = None,
         *,
-        initial=None,
         where=None,
     ) -> "NamedArray":
-        return haliax.min(self, axis=axis, initial=initial, where=where)
+        return haliax.min(self, axis=axis, where=where)
 
     def prod(
         self,
         axis: Optional[AxisSelection] = None,
         *,
         dtype=None,
-        initial=None,
         where=None,
     ) -> "NamedArray":
         return haliax.prod(
             self,
             axis=axis,
             dtype=dtype,
-            initial=initial,
             where=where,
         )
 
@@ -408,8 +413,8 @@ class NamedArray:
     def round(self, decimals=0) -> "NamedArray":
         return haliax.round(self, decimals=decimals)
 
-    def sort(self, axis: AxisSelector, kind="quicksort") -> Any:
-        return haliax.sort(self, axis=axis, kind=kind)
+    def sort(self, axis: AxisSelector) -> Any:
+        return haliax.sort(self, axis=axis)
 
     def std(self, axis: Optional[AxisSelection] = None, *, dtype=None, ddof=0, where=None) -> "NamedArray":
         return haliax.std(self, axis=axis, dtype=dtype, ddof=ddof, where=where)
@@ -419,14 +424,12 @@ class NamedArray:
         axis: Optional[AxisSelection] = None,
         *,
         dtype=None,
-        initial=None,
         where=None,
     ) -> "NamedArray":
         return haliax.sum(
             self,
             axis=axis,
             dtype=dtype,
-            initial=initial,
             where=where,
         )
 
@@ -659,14 +662,15 @@ def slice(
 @typing.overload
 def slice(
     array: NamedArray,
-    start: Mapping[AxisSelector, Union[int, jnp.ndarray]],
-    length: Optional[Mapping[AxisSelector, int]],
+    start: Mapping[AxisSelector, IntScalar],
+    length: Optional[Mapping[AxisSelector, int]] = None,
 ) -> NamedArray:
     """
     Slices the array along the specified axes, replacing them with new axes (or a shortened version of the old one)
 
-    :arg start: the starting index of each axis to slice
-    :arg length: the length of each axis to slice. If not specified, the length of the new axis will be the same as the old one
+    Args:
+        start (Mapping[AxisSelector, Union[int, jnp.ndarray]]): the start index of each axis to slice. If an int, the axis will be sliced at that index. If a NamedArray, the axis will be sliced at the indices in the NamedArray
+        length (Mapping[AxisSelector, int]): the length of the dimension for that slice.
     """
     pass
 
@@ -676,8 +680,9 @@ def slice(array: NamedArray, *args, **kwargs) -> NamedArray:
     Slices the array along the specified axis or axes, replacing them with new axes (or a shortened version of the old one)
 
     This method has two signatures:
-    slice(array, axis, new_axis=None, start=0, length=None)
-    slice(array, start: Mapping[AxisSelector, Union[int, jnp.ndarray]], length: Mapping[AxisSelector, int])
+
+    * `slice(array, axis, new_axis=None, start=0, length=None)`
+    * `slice(array, start: Mapping[AxisSelector, IntScalar], length: Mapping[AxisSelector, int])`
 
     They both do similar things. The former slices an array along a single axis, replacing it with a new axis.
     The latter slices an array along multiple axes, replacing them with new axes.
@@ -701,15 +706,19 @@ def _slice_old(
     length: Optional[int] = None,
 ) -> NamedArray:
     """
-    Selects elements from an array along an axis, by an index or by another named array
-    This is somewhat better than take if you want a contiguous slice of an array
+    Selects elements from an array along an axis, either by an index or by another named array.
+    This method offers an advantage over 'take' when a contiguous slice of an array is wanted.
 
-    :arg axis: the axis to slice
-    :arg new_axis: the name of the new axis that replaces the old one. If none, the old name will be used
-    :arg start: the index to start the slice at
-    :arg length: the length of the slice. either new_axis must be an Axis or length must be specified
+    Args:
+        axis (AxisSelector): The axis to slice.
+        new_axis (str, optional): The name of the new axis that replaces the old one.
+                                  If none, the old name will be used.
+        start (int): The index at which the slice will start.
+        length (int, optional): The length of the slice. Either new_axis must be an `Axis` or
+                      `length` must be specified.
 
-    Note: this method is basically a wrapper around jax.lax.dynamic_slice_in_dim
+    Note:
+        This method is basically a wrapper around jax.lax.dynamic_slice_in_dim.
     """
     axis_index = array._lookup_indices(axis)
     if axis_index is None:
@@ -777,11 +786,15 @@ def updated_slice(
     array: NamedArray, start: Mapping[AxisSelector, Union[int, jnp.ndarray]], update: NamedArray
 ) -> NamedArray:
     """
-    Updates a slice of an array with another array
+    Updates a slice of an array with another array.
 
-    :arg array: the array to update
-    :arg start: the starting index of each axis to update
-    :arg update: the array to update with
+    Args:
+        array (NamedArray): The array to update.
+        start (Mapping[AxisSelector, Union[int, jnp.ndarray]]): The starting index of each axis to update.
+        update (NamedArray): The array to update with.
+
+    Returns:
+        NamedArray: The updated array.
     """
 
     array_slice_indices = [0] * len(array.axes)
@@ -820,14 +833,17 @@ def updated_slice(
 
 def index(
     array: NamedArray, slices: Mapping[AxisSelector, Union[int, slice_t, NamedArray]]
-) -> Union[NamedArray, jnp.ndarray]:
+) -> Union[NamedArray, Scalar]:
     """
-    Selects elements from an array along an axis, by an index or by another named array.
-    Typically, you would call this via `array[...]` syntax. For example, you might call
-    `array[{"batch": slice(0, 10)}]` to select the first 10 elements of the batch axis.
-    :param array:
-    :param slices:
-    :return: a scalar jnp.ndarray is all axes are sliced with ints, otherwise a NamedArray
+    Selects elements from an array along an axis via index or another named array.
+
+    This function is typically invoked using `array[...]` syntax. For instance,
+    you might use `array[{"batch": slice(0, 10)}]` or `array["batch", 0:10]` to select the first 10 elements
+    of the 'batch' axis.
+
+    Returns:
+        NamedArray or jnp.ndarray: A NamedArray is returned if there are any axes remaining after selection,
+        otherwise a scalar (0-dimensional) jnp.ndarray is returned if all axes are indexed out.
     """
     # indices where we have array args
     array_slice_indices = []
@@ -906,6 +922,15 @@ def dot(axis: AxisSelection, *arrays: NamedArray, precision: PrecisionLike = Non
     """Returns the tensor product of two NamedArrays. The axes `axis` are contracted over,
     and any other axes that are shared between the arrays are batched over. Non-contracted Axes in one
     that are not in the other are preserved.
+
+    Args:
+        axis (AxisSelection): The axes to contract over.
+        *arrays (NamedArray): The arrays to contract.
+        precision (PrecisionLike, optional): The precision to use. Defaults to None. This argument is passed to `jax.numpy.einsum`,
+            which in turn passes it to jax.lax.dot_general.
+
+    Returns:
+        NamedArray: The result of the contraction.
     """
     _ensure_no_mismatched_axes(*arrays)
     output_axes: Tuple[Axis, ...] = ft.reduce(union_axes, (a.axes for a in arrays), ())  # type: ignore
@@ -944,6 +969,14 @@ def dot(axis: AxisSelection, *arrays: NamedArray, precision: PrecisionLike = Non
 
 
 def split(a: NamedArray, axis: AxisSelector, new_axes: Sequence[Axis]) -> Sequence[NamedArray]:
+    """
+    Splits an array along an axis into multiple arrays, one for each element of new_axes.
+
+    Args:
+        a (NamedArray): the array to split
+        axis (AxisSelector): the axis to split along
+        new_axes (Sequence[Axis]): the axes to split into. Must have the same total length as the axis being split.
+    """
     # check the lengths of the new axes
     index = a._lookup_indices(axis)
     if index is None:
@@ -974,6 +1007,13 @@ def rearrange(array: NamedArray, axes: Sequence[Union[AxisSelector, EllipsisType
     Rearrange an array so that its underlying storage conforms to axes.
     axes may include up to 1 ellipsis, indicating that the remaining axes should be
     permuted in the same order as the array's axes.
+
+    For example, if array has axes (a, b, c, d, e, f) and axes is (e, f, a, ..., c),
+    then the output array will have axes (e, f, a, b, c, d).
+
+    Args:
+        array (NamedArray): The array to rearrange.
+        axes (Sequence[Union[AxisSelector, EllipsisType]]): The axes to rearrange to.
     """
     if len(axes) == 0 and len(array.axes) != 0:
         raise ValueError("No axes specified")
@@ -1027,7 +1067,8 @@ def rearrange(array: NamedArray, axes: Sequence[Union[AxisSelector, EllipsisType
 
 def unbind(array: NamedArray, axis: AxisSelector) -> List[NamedArray]:
     """
-    Unbind an array along an axis, returning a list of NamedArrays. Analogous to torch.unbind or np.rollaxis
+    Unbind an array along an axis, returning a list of NamedArrays, one for each position on that axis.
+    Analogous to torch.unbind or np.rollaxis
     """
     axis_index = array._lookup_indices(axis)
     if axis_index is None:
@@ -1054,6 +1095,12 @@ def roll(array: NamedArray, shift: Union[int, Tuple[int, ...]], axis: AxisSelect
 
 
 def rename(array: NamedArray, renames: Mapping[AxisSelector, AxisSelector]) -> NamedArray:
+    """
+    Rename the axes of an array.
+    Args:
+        array: the array to rename
+        renames: a mapping from old axes to new axes. If the value is a string, the axis will be renamed to that string.
+    """
     for old, new in renames.items():
         if isinstance(old, Axis) and isinstance(new, Axis) and old.size != new.size:
             raise ValueError(f"Cannot rename axis {old} to {new}: size mismatch")
@@ -1085,7 +1132,8 @@ def rename(array: NamedArray, renames: Mapping[AxisSelector, AxisSelector]) -> N
 def flatten_axes(array: NamedArray, old_axes: AxisSelection, new_axis: AxisSelector) -> NamedArray:
     """
     Merge a sequence of axes into a single axis. The new axis must have the same size as the product of the old axes.
-    For now the new axis will always be the last axis
+
+    The new axis is always inserted starting at the index of the first old axis in theunderlying array.
     """
     old_axes = ensure_tuple(old_axes)
     old_axes = array.resolve_axis(old_axes)
@@ -1152,7 +1200,7 @@ def unflatten_axis(array: NamedArray, axis: AxisSelector, new_axes: AxisSpec) ->
 
 
 def named(a: jnp.ndarray, axis: AxisSelection) -> NamedArray:
-    """Creates a NamedArray from a numpy array and a list of axes"""
+    """Creates a NamedArray from a numpy array and a list of axes."""
     axes = check_shape(a.shape, axis)
     return NamedArray(a, axes)
 
@@ -1284,6 +1332,20 @@ def broadcast_arrays(
     require_subset: bool = True,
     ensure_order: bool = True,
 ) -> Tuple[Optional[NamedOrNumeric], ...]:
+    """
+    Broadcasts a sequence of arrays to a common set of axes.
+    Args:
+        *arrays: Arrays, Scalars, or None. If None, then None is returned. Scalars and None are supported for convenience.
+        require_subset: If true, then one of the arrays must be a subset of the others. This is a bit stricter than numpy's broadcasting
+            rules, but I've been bitten by numpy's rules too many times. False is looser than numpy's rules, and allows
+            broadcasting any pair of arrays (so long as the axes don't overtly conflict with different sizes for the same
+            name.)
+        ensure_order: If true, then the returned arrays will be reordered to all have the same axes in the same order.
+
+    Returns:
+        The arrays, broadcast to a common set of axes, reordered if necessary.
+
+    """
     return broadcast_arrays_and_return_axes(*arrays, require_subset=require_subset, ensure_order=ensure_order)[0]
 
 
@@ -1351,8 +1413,10 @@ def broadcast_arrays_and_return_axes(
 # TODO: convert to AxisSelection?
 def broadcast_axis(a: NamedArray, axis: AxisSpec) -> NamedArray:
     """
-    Broadcasts a, ensuring that it has all the axes in axis.
-     broadcast_axis is an alias for broadcast_to(a, axis, enforce_no_extra_axes=False, ensure_order=True)
+    Broadcasts `a`, ensuring that it has all the axes in `axis`.
+     `broadcast_axis` is an alias for `broadcast_to(a, axis, enforce_no_extra_axes=False, ensure_order=True)`
+
+     You typically use this function when you want to broadcast an array to a common set of axes.
     """
     if isinstance(axis, Axis) and axis in a.axes:
         return a

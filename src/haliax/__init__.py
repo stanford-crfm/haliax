@@ -1,7 +1,9 @@
+import typing
 from typing import Optional, Sequence
 
 import jax
 import jax.numpy as jnp
+from jax._src.typing import DTypeLike
 
 import haliax.nn as nn
 import haliax.random as random
@@ -10,6 +12,7 @@ import haliax.tree_util as tree_util
 from .axis import Axis, AxisSelection, AxisSelector, AxisSpec, concat_axes, eliminate_axes, selects_axis
 from .core import (
     NamedArray,
+    NamedOrNumeric,
     are_shape_checks_enabled,
     broadcast_arrays,
     broadcast_axis,
@@ -32,6 +35,7 @@ from .core import (
 from .hof import fold, map, scan, vmap
 from .ops import clip, isclose, pad_left, trace, tril, triu, where
 from .partitioning import auto_sharded, axis_mapping, fsdp, named_jit, shard_with_axis_mapping
+from .types import Scalar
 from .wrap import (
     ReductionFunction,
     SimpleReductionFunction,
@@ -42,22 +46,26 @@ from .wrap import (
 )
 
 
+T = typing.TypeVar("T")
+A = typing.TypeVar("A", Scalar, NamedArray, jnp.ndarray)
+
+
 # creation routines
-def zeros(shape: AxisSpec, dtype=None) -> NamedArray:
+def zeros(shape: AxisSpec, dtype: Optional[DTypeLike] = None) -> NamedArray:
     """Creates a NamedArray with all elements set to 0"""
     if dtype is None:
         dtype = jnp.float32
     return full(shape, 0, dtype)
 
 
-def ones(shape: AxisSpec, dtype=None) -> NamedArray:
+def ones(shape: AxisSpec, dtype: Optional[DTypeLike] = None) -> NamedArray:
     """Creates a NamedArray with all elements set to 1"""
     if dtype is None:
         dtype = jnp.float32
     return full(shape, 1, dtype)
 
 
-def full(shape: AxisSpec, fill_value, dtype=None) -> NamedArray:
+def full(shape: AxisSpec, fill_value: T, dtype: Optional[DTypeLike] = None) -> NamedArray:
     """Creates a NamedArray with all elements set to `fill_value`"""
     if isinstance(shape, Axis):
         return NamedArray(jnp.full(shape=shape.size, fill_value=fill_value, dtype=dtype), (shape,))
@@ -76,12 +84,12 @@ def ones_like(a: NamedArray, dtype=None) -> NamedArray:
     return NamedArray(jnp.ones_like(a.array, dtype=dtype), a.axes)
 
 
-def full_like(a: NamedArray, fill_value, dtype=None) -> NamedArray:
+def full_like(a: NamedArray, fill_value: T, dtype: Optional[DTypeLike] = None) -> NamedArray:
     """Creates a NamedArray with all elements set to `fill_value`"""
     return NamedArray(jnp.full_like(a.array, fill_value, dtype=dtype), a.axes)
 
 
-def arange(axis: Axis, *, start=0, step=1, dtype=None) -> NamedArray:
+def arange(axis: Axis, *, start: int = 0, step: int = 1, dtype: Optional[DTypeLike] = None) -> NamedArray:
     """Version of jnp.arange that returns a NamedArray"""
     # if start is a tracer, we need to be a bit cleverer since arange doesn't support tracers
     # return NamedArray(jnp.arange(start, stop, step, dtype=dtype), (axis,))
@@ -90,8 +98,51 @@ def arange(axis: Axis, *, start=0, step=1, dtype=None) -> NamedArray:
     return NamedArray(arr, (axis,))
 
 
+# TODO: add overrides for arraylike start/stop to linspace, logspace, geomspace
+def linspace(
+    axis: AxisSelector, *, start: float, stop: float, endpoint: bool = True, dtype: Optional[DTypeLike] = None
+) -> NamedArray:
+    """
+    Version of jnp.linspace that returns a NamedArray.
+    If `axis` is a string, the default number of samples (50, per numpy) will be used.
+    """
+    if isinstance(axis, str):
+        axis = Axis(axis, 50)
+    return NamedArray(jnp.linspace(start, stop, axis.size, endpoint=endpoint, dtype=dtype), (axis,))
+
+
+def logspace(
+    axis: AxisSelector,
+    *,
+    start: float,
+    stop: float,
+    endpoint: bool = True,
+    base: float = 10.0,
+    dtype: Optional[DTypeLike] = None,
+) -> NamedArray:
+    """
+    Version of jnp.logspace that returns a NamedArray.
+    If `axis` is a string, the default number of samples (50, per numpy) will be used.
+    """
+    if isinstance(axis, str):
+        axis = Axis(axis, 50)
+    return NamedArray(jnp.logspace(start, stop, axis.size, endpoint=endpoint, base=base, dtype=dtype), (axis,))
+
+
+def geomspace(
+    axis: AxisSelector, *, start: float, stop: float, endpoint: bool = True, dtype: Optional[DTypeLike] = None
+) -> NamedArray:
+    """
+    Version of jnp.geomspace that returns a NamedArray.
+    If `axis` is a string, the default number of samples (50, per numpy) will be used.
+    """
+    if isinstance(axis, str):
+        axis = Axis(axis, 50)
+    return NamedArray(jnp.geomspace(start, stop, axis.size, endpoint=endpoint, dtype=dtype), (axis,))
+
+
 def stack(axis: AxisSelector, arrays: Sequence[NamedArray]) -> NamedArray:
-    """Version of jnp.stack that returns a NamedArray"""
+    """Version of [jax.numpy.stack][] that returns a NamedArray"""
     if isinstance(axis, str):
         axis = Axis(axis, len(arrays))
     if len(arrays) == 0:
@@ -101,8 +152,10 @@ def stack(axis: AxisSelector, arrays: Sequence[NamedArray]) -> NamedArray:
 
 
 def concatenate(axis: AxisSelector, arrays: Sequence[NamedArray]) -> NamedArray:
-    """Version of jnp.concatenate that returns a NamedArray"""
-    total_size = _sum(a.resolve_axis(axis).size for a in arrays)
+    """Version of [jax.numpy.concatenate][] that returns a NamedArray. The returns array will have the same axis names in the
+    same order as the first, with the selected axis extended by the sum of the sizes of the selected axes in the
+    concatenated arrays."""
+    total_size: int = _sum(a.resolve_axis(axis).size for a in arrays)  # type: ignore
     if isinstance(axis, str):
         axis = Axis(axis, total_size)
     elif total_size != axis.size:
@@ -124,131 +177,627 @@ def concatenate(axis: AxisSelector, arrays: Sequence[NamedArray]) -> NamedArray:
 
 
 # elementwise unary operations
-abs = wrap_elemwise_unary(jnp.abs)
-absolute = wrap_elemwise_unary(jnp.absolute)
-angle = wrap_elemwise_unary(jnp.angle)
-arccos = wrap_elemwise_unary(jnp.arccos)
-arccosh = wrap_elemwise_unary(jnp.arccosh)
-arcsin = wrap_elemwise_unary(jnp.arcsin)
-arcsinh = wrap_elemwise_unary(jnp.arcsinh)
-arctan = wrap_elemwise_unary(jnp.arctan)
-arctanh = wrap_elemwise_unary(jnp.arctanh)
-around = wrap_elemwise_unary(jnp.around)
-bitwise_not = wrap_elemwise_unary(jnp.bitwise_not)
-cbrt = wrap_elemwise_unary(jnp.cbrt)
-ceil = wrap_elemwise_unary(jnp.ceil)
-conj = wrap_elemwise_unary(jnp.conj)
-conjugate = wrap_elemwise_unary(jnp.conjugate)
-copy = wrap_elemwise_unary(jnp.copy)
-cos = wrap_elemwise_unary(jnp.cos)
-cosh = wrap_elemwise_unary(jnp.cosh)
-deg2rad = wrap_elemwise_unary(jnp.deg2rad)
-degrees = wrap_elemwise_unary(jnp.degrees)
-exp = wrap_elemwise_unary(jnp.exp)
-exp2 = wrap_elemwise_unary(jnp.exp2)
-expm1 = wrap_elemwise_unary(jnp.expm1)
-fabs = wrap_elemwise_unary(jnp.fabs)
-fix = wrap_elemwise_unary(jnp.fix)
-floor = wrap_elemwise_unary(jnp.floor)
-frexp = wrap_elemwise_unary(jnp.frexp)
-i0 = wrap_elemwise_unary(jnp.i0)
-imag = wrap_elemwise_unary(jnp.imag)
-invert = wrap_elemwise_unary(jnp.invert)
-iscomplex = wrap_elemwise_unary(jnp.iscomplex)
-isfinite = wrap_elemwise_unary(jnp.isfinite)
-isinf = wrap_elemwise_unary(jnp.isinf)
-isnan = wrap_elemwise_unary(jnp.isnan)
-isneginf = wrap_elemwise_unary(jnp.isneginf)
-isposinf = wrap_elemwise_unary(jnp.isposinf)
-isreal = wrap_elemwise_unary(jnp.isreal)
-log = wrap_elemwise_unary(jnp.log)
-log10 = wrap_elemwise_unary(jnp.log10)
-log1p = wrap_elemwise_unary(jnp.log1p)
-log2 = wrap_elemwise_unary(jnp.log2)
-logical_not = wrap_elemwise_unary(jnp.logical_not)
-ndim = wrap_elemwise_unary(jnp.ndim)
-negative = wrap_elemwise_unary(jnp.negative)
-positive = wrap_elemwise_unary(jnp.positive)
-rad2deg = wrap_elemwise_unary(jnp.rad2deg)
-radians = wrap_elemwise_unary(jnp.radians)
-real = wrap_elemwise_unary(jnp.real)
-reciprocal = wrap_elemwise_unary(jnp.reciprocal)
-rint = wrap_elemwise_unary(jnp.rint)
-round = wrap_elemwise_unary(jnp.round)
-rsqrt = wrap_elemwise_unary(jax.lax.rsqrt)  # nb this is in lax
-sign = wrap_elemwise_unary(jnp.sign)
-signbit = wrap_elemwise_unary(jnp.signbit)
-sin = wrap_elemwise_unary(jnp.sin)
-sinc = wrap_elemwise_unary(jnp.sinc)
-sinh = wrap_elemwise_unary(jnp.sinh)
-square = wrap_elemwise_unary(jnp.square)
-sqrt = wrap_elemwise_unary(jnp.sqrt)
-tan = wrap_elemwise_unary(jnp.tan)
-tanh = wrap_elemwise_unary(jnp.tanh)
-trunc = wrap_elemwise_unary(jnp.trunc)
+def abs(a: A) -> A:
+    return wrap_elemwise_unary(jnp.abs, a)
+
+
+def absolute(a: A) -> A:
+    return wrap_elemwise_unary(jnp.absolute, a)
+
+
+def angle(a: A) -> A:
+    return wrap_elemwise_unary(jnp.angle, a)
+
+
+def arccos(a: A) -> A:
+    return wrap_elemwise_unary(jnp.arccos, a)
+
+
+def arccosh(a: A) -> A:
+    return wrap_elemwise_unary(jnp.arccosh, a)
+
+
+def arcsin(a: A) -> A:
+    return wrap_elemwise_unary(jnp.arcsin, a)
+
+
+def arcsinh(a: A) -> A:
+    return wrap_elemwise_unary(jnp.arcsinh, a)
+
+
+def arctan(a: A) -> A:
+    return wrap_elemwise_unary(jnp.arctan, a)
+
+
+def arctanh(a: A) -> A:
+    return wrap_elemwise_unary(jnp.arctanh, a)
+
+
+def around(a: A) -> A:
+    return wrap_elemwise_unary(jnp.around, a)
+
+
+def bitwise_not(a: A) -> A:
+    return wrap_elemwise_unary(jnp.bitwise_not, a)
+
+
+def cbrt(a: A) -> A:
+    return wrap_elemwise_unary(jnp.cbrt, a)
+
+
+def ceil(a: A) -> A:
+    return wrap_elemwise_unary(jnp.ceil, a)
+
+
+def conj(a: A) -> A:
+    return wrap_elemwise_unary(jnp.conj, a)
+
+
+def conjugate(a: A) -> A:
+    return wrap_elemwise_unary(jnp.conjugate, a)
+
+
+def copy(a: A) -> A:
+    return wrap_elemwise_unary(jnp.copy, a)
+
+
+def cos(a: A) -> A:
+    return wrap_elemwise_unary(jnp.cos, a)
+
+
+def cosh(a: A) -> A:
+    return wrap_elemwise_unary(jnp.cosh, a)
+
+
+def deg2rad(a: A) -> A:
+    return wrap_elemwise_unary(jnp.deg2rad, a)
+
+
+def degrees(a: A) -> A:
+    return wrap_elemwise_unary(jnp.degrees, a)
+
+
+def exp(a: A) -> A:
+    return wrap_elemwise_unary(jnp.exp, a)
+
+
+def exp2(a: A) -> A:
+    return wrap_elemwise_unary(jnp.exp2, a)
+
+
+def expm1(a: A) -> A:
+    return wrap_elemwise_unary(jnp.expm1, a)
+
+
+def fabs(a: A) -> A:
+    return wrap_elemwise_unary(jnp.fabs, a)
+
+
+def fix(a: A) -> A:
+    return wrap_elemwise_unary(jnp.fix, a)
+
+
+def floor(a: A) -> A:
+    return wrap_elemwise_unary(jnp.floor, a)
+
+
+def frexp(a: A) -> A:
+    return wrap_elemwise_unary(jnp.frexp, a)
+
+
+def i0(a: A) -> A:
+    return wrap_elemwise_unary(jnp.i0, a)
+
+
+def imag(a: A) -> A:
+    return wrap_elemwise_unary(jnp.imag, a)
+
+
+def invert(a: A) -> A:
+    return wrap_elemwise_unary(jnp.invert, a)
+
+
+def iscomplex(a: A) -> A:
+    return wrap_elemwise_unary(jnp.iscomplex, a)
+
+
+def isfinite(a: A) -> A:
+    return wrap_elemwise_unary(jnp.isfinite, a)
+
+
+def isinf(a: A) -> A:
+    return wrap_elemwise_unary(jnp.isinf, a)
+
+
+def isnan(a: A) -> A:
+    return wrap_elemwise_unary(jnp.isnan, a)
+
+
+def isneginf(a: A) -> A:
+    return wrap_elemwise_unary(jnp.isneginf, a)
+
+
+def isposinf(a: A) -> A:
+    return wrap_elemwise_unary(jnp.isposinf, a)
+
+
+def isreal(a: A) -> A:
+    return wrap_elemwise_unary(jnp.isreal, a)
+
+
+def log(a: A) -> A:
+    return wrap_elemwise_unary(jnp.log, a)
+
+
+def log10(a: A) -> A:
+    return wrap_elemwise_unary(jnp.log10, a)
+
+
+def log1p(a: A) -> A:
+    return wrap_elemwise_unary(jnp.log1p, a)
+
+
+def log2(a: A) -> A:
+    return wrap_elemwise_unary(jnp.log2, a)
+
+
+def logical_not(a: A) -> A:
+    return wrap_elemwise_unary(jnp.logical_not, a)
+
+
+def ndim(a: A) -> A:
+    return wrap_elemwise_unary(jnp.ndim, a)
+
+
+def negative(a: A) -> A:
+    return wrap_elemwise_unary(jnp.negative, a)
+
+
+def positive(a: A) -> A:
+    return wrap_elemwise_unary(jnp.positive, a)
+
+
+def rad2deg(a: A) -> A:
+    return wrap_elemwise_unary(jnp.rad2deg, a)
+
+
+def radians(a: A) -> A:
+    return wrap_elemwise_unary(jnp.radians, a)
+
+
+def real(a: A) -> A:
+    return wrap_elemwise_unary(jnp.real, a)
+
+
+def reciprocal(a: A) -> A:
+    return wrap_elemwise_unary(jnp.reciprocal, a)
+
+
+def rint(a: A) -> A:
+    return wrap_elemwise_unary(jnp.rint, a)
+
+
+def round(a: A, decimals: int = 0) -> A:
+    return wrap_elemwise_unary(jnp.round, a, decimals=decimals)
+
+
+def rsqrt(a: A) -> A:
+    return wrap_elemwise_unary(jax.lax.rsqrt, a)  # nb this is in lax
+
+
+def sign(a: A) -> A:
+    return wrap_elemwise_unary(jnp.sign, a)
+
+
+def signbit(a: A) -> A:
+    return wrap_elemwise_unary(jnp.signbit, a)
+
+
+def sin(a: A) -> A:
+    return wrap_elemwise_unary(jnp.sin, a)
+
+
+def sinc(a: A) -> A:
+    return wrap_elemwise_unary(jnp.sinc, a)
+
+
+def sinh(a: A) -> A:
+    return wrap_elemwise_unary(jnp.sinh, a)
+
+
+def square(a: A) -> A:
+    return wrap_elemwise_unary(jnp.square, a)
+
+
+def sqrt(a: A) -> A:
+    return wrap_elemwise_unary(jnp.sqrt, a)
+
+
+def tan(a: A) -> A:
+    return wrap_elemwise_unary(jnp.tan, a)
+
+
+def tanh(a: A) -> A:
+    return wrap_elemwise_unary(jnp.tanh, a)
+
+
+def trunc(a: A) -> A:
+    return wrap_elemwise_unary(jnp.trunc, a)
+
 
 # Reduction functions
-all: ReductionFunction = wrap_reduction_call(jnp.all)
-amax: ReductionFunction = wrap_reduction_call(jnp.amax)
-any: ReductionFunction = wrap_reduction_call(jnp.any)
-argmax: SimpleReductionFunction = wrap_reduction_call(jnp.argmax, single_axis_only=True, supports_where=False)
-argmin: SimpleReductionFunction = wrap_reduction_call(jnp.argmin, single_axis_only=True, supports_where=False)
-max: ReductionFunction = wrap_reduction_call(jnp.max)
-mean: ReductionFunction = wrap_reduction_call(jnp.mean)
-min: ReductionFunction = wrap_reduction_call(jnp.min)
-prod: ReductionFunction = wrap_reduction_call(jnp.prod)
-ptp: ReductionFunction = wrap_reduction_call(jnp.ptp)
-product: ReductionFunction = wrap_reduction_call(jnp.product)
-sometrue: ReductionFunction = wrap_reduction_call(jnp.sometrue)
-std: ReductionFunction = wrap_reduction_call(jnp.std)
+def all(array: NamedArray, axis: Optional[AxisSelection] = None, *, where: Optional[NamedArray] = None) -> NamedArray:
+    """
+    Named version of [jax.numpy.all](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.all.html#jax.numpy.all).
+    """
+    return wrap_reduction_call(jnp.all, array, axis, where, single_axis_only=False, supports_where=True)
+
+
+def amax(array: NamedArray, axis: Optional[AxisSelection] = None, *, where: Optional[NamedArray] = None) -> NamedArray:
+    """
+    Aliax for max. See max for details.
+    """
+    return wrap_reduction_call(jnp.amax, array, axis, where, single_axis_only=False, supports_where=True)
+
+
+def any(array: NamedArray, axis: Optional[AxisSelection] = None, *, where: Optional[NamedArray] = None) -> NamedArray:
+    """True if any elements along a given axis or axes are True. If axis is None, any elements are True."""
+    return wrap_reduction_call(jnp.any, array, axis, where, single_axis_only=False, supports_where=True)
+
+
+def argmax(array: NamedArray, axis: Optional[AxisSelector] = None) -> NamedArray:
+    return wrap_reduction_call(jnp.argmax, array, axis, None, single_axis_only=True, supports_where=False)
+
+
+def argmin(array: NamedArray, axis: Optional[AxisSelector] = None) -> NamedArray:
+    return wrap_reduction_call(jnp.argmin, array, axis, None, single_axis_only=True, supports_where=False)
+
+
+def max(array: NamedArray, axis: Optional[AxisSelection] = None, *, where: Optional[NamedArray] = None) -> NamedArray:
+    return wrap_reduction_call(jnp.max, array, axis, where, single_axis_only=False, supports_where=True)
+
+
+def mean(
+    array: NamedArray,
+    axis: Optional[AxisSelection] = None,
+    *,
+    where: Optional[NamedArray] = None,
+    dtype: Optional[DTypeLike] = None,
+) -> NamedArray:
+    return wrap_reduction_call(jnp.mean, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype)
+
+
+def min(array: NamedArray, axis: Optional[AxisSelection] = None, *, where: Optional[NamedArray] = None) -> NamedArray:
+    return wrap_reduction_call(jnp.min, array, axis, where, single_axis_only=False, supports_where=True)
+
+
+def prod(
+    array: NamedArray,
+    axis: Optional[AxisSelection] = None,
+    *,
+    where: Optional[NamedArray] = None,
+    dtype: Optional[DTypeLike] = None,
+) -> NamedArray:
+    return wrap_reduction_call(jnp.prod, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype)
+
+
+def ptp(array: NamedArray, axis: Optional[AxisSelection] = None, *, where: Optional[NamedArray] = None) -> NamedArray:
+    return wrap_reduction_call(jnp.ptp, array, axis, where, single_axis_only=False, supports_where=True)
+
+
+def product(
+    array: NamedArray, axis: Optional[AxisSelection] = None, *, where: Optional[NamedArray] = None
+) -> NamedArray:
+    return wrap_reduction_call(jnp.product, array, axis, where, single_axis_only=False, supports_where=True)
+
+
+def std(
+    array: NamedArray,
+    axis: Optional[AxisSelection] = None,
+    *,
+    where: Optional[NamedArray] = None,
+    ddof: int = 0,
+    dtype: Optional[DTypeLike] = None,
+) -> NamedArray:
+    return wrap_reduction_call(
+        jnp.std, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype, ddof=ddof
+    )
+
+
 _sum = sum
-sum: ReductionFunction = wrap_reduction_call(jnp.sum)
-var: ReductionFunction = wrap_reduction_call(jnp.var)
+
+
+def sum(
+    array: NamedArray,
+    axis: Optional[AxisSelection] = None,
+    *,
+    where: Optional[NamedArray] = None,
+    dtype: Optional[DTypeLike] = None,
+) -> NamedArray:
+    return wrap_reduction_call(jnp.sum, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype)
+
+
+def var(
+    array: NamedArray,
+    axis: Optional[AxisSelection] = None,
+    *,
+    where: Optional[NamedArray] = None,
+    ddof: int = 0,
+    dtype: Optional[DTypeLike] = None,
+) -> NamedArray:
+    return wrap_reduction_call(
+        jnp.var, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype, ddof=ddof
+    )
 
 
 # "Normalization" functions that use an axis but don't change the shape
-cumsum = wrap_axiswise_call(jnp.cumsum, True)
-cumprod = wrap_axiswise_call(jnp.cumprod, True)
-cumproduct = wrap_axiswise_call(jnp.cumproduct, True)
-sort = wrap_axiswise_call(jnp.sort, True)
-argsort = wrap_axiswise_call(jnp.argsort, True)
+
+
+def cumsum(a: NamedArray, axis: Optional[AxisSelector] = None, dtype: Optional[DTypeLike] = None) -> NamedArray:
+    """
+    Named version of [jax.numpy.cumsum](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.cumsum.html)
+    """
+    return wrap_axiswise_call(jnp.cumsum, a, axis, dtype=dtype, single_axis_only=True)
+
+
+def cumprod(a: NamedArray, axis: Optional[AxisSelector] = None, dtype: Optional[DTypeLike] = None) -> NamedArray:
+    """
+    Named version of [jax.numpy.cumprod](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.cumprod.html)
+    """
+    return wrap_axiswise_call(jnp.cumprod, a, axis, dtype=dtype, single_axis_only=True)
+
+
+def sort(a: NamedArray, axis: Optional[AxisSelector] = None) -> NamedArray:
+    """
+    Named version of [jax.numpy.sort](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.sort.html)
+    """
+    return wrap_axiswise_call(jnp.sort, a, axis, single_axis_only=True)
+
+
+def argsort(a: NamedArray, axis: Optional[AxisSelector] = None) -> NamedArray:
+    """
+    Named version of [jax.numpy.argsort](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.argsort.html)
+    """
+    return wrap_axiswise_call(jnp.argsort, a, axis, single_axis_only=True)
+
 
 # elemwise binary ops
-add = wrap_elemwise_binary(jnp.add)
-arctan2 = wrap_elemwise_binary(jnp.arctan2)
-bitwise_and = wrap_elemwise_binary(jnp.bitwise_and)
-bitwise_or = wrap_elemwise_binary(jnp.bitwise_or)
-bitwise_xor = wrap_elemwise_binary(jnp.bitwise_xor)
-divide = wrap_elemwise_binary(jnp.divide)
-divmod = wrap_elemwise_binary(jnp.divmod)
-equal = wrap_elemwise_binary(jnp.equal)
-float_power = wrap_elemwise_binary(jnp.float_power)
-floor_divide = wrap_elemwise_binary(jnp.floor_divide)
-fmax = wrap_elemwise_binary(jnp.fmax)
-fmin = wrap_elemwise_binary(jnp.fmin)
-fmod = wrap_elemwise_binary(jnp.fmod)
-greater = wrap_elemwise_binary(jnp.greater)
-greater_equal = wrap_elemwise_binary(jnp.greater_equal)
-hypot = wrap_elemwise_binary(jnp.hypot)
-left_shift = wrap_elemwise_binary(jnp.left_shift)
-less = wrap_elemwise_binary(jnp.less)
-less_equal = wrap_elemwise_binary(jnp.less_equal)
-logaddexp = wrap_elemwise_binary(jnp.logaddexp)
-logaddexp2 = wrap_elemwise_binary(jnp.logaddexp2)
-logical_and = wrap_elemwise_binary(jnp.logical_and)
-logical_or = wrap_elemwise_binary(jnp.logical_or)
-logical_xor = wrap_elemwise_binary(jnp.logical_xor)
-maximum = wrap_elemwise_binary(jnp.maximum)
-minimum = wrap_elemwise_binary(jnp.minimum)
-mod = wrap_elemwise_binary(jnp.mod)
-multiply = wrap_elemwise_binary(jnp.multiply)
-nextafter = wrap_elemwise_binary(jnp.nextafter)
-not_equal = wrap_elemwise_binary(jnp.not_equal)
-power = wrap_elemwise_binary(jnp.power)
-remainder = wrap_elemwise_binary(jnp.remainder)
-right_shift = wrap_elemwise_binary(jnp.right_shift)
-subtract = wrap_elemwise_binary(jnp.subtract)
-true_divide = wrap_elemwise_binary(jnp.true_divide)
+
+# Note that all the heavy lifting is done by the `wrap_elemwise_binary` decorator
+@wrap_elemwise_binary
+def add(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    """
+    Named version of [jax.numpy.add](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.add.html)
+    """
+    return jnp.add(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def arctan2(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    """
+    Named version of [jax.numpy.arctan2](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.arctan2.html)
+    """
+    return jnp.arctan2(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def bitwise_and(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    """
+    Named version of [jax.numpy.bitwise_and](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.bitwise_and.html)
+    """
+    return jnp.bitwise_and(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def bitwise_or(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    """
+    Named version of [jax.numpy.bitwise_or](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.bitwise_or.html)
+    """
+    return jnp.bitwise_or(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def bitwise_xor(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    """
+    Named version of [jax.numpy.bitwise_xor](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.bitwise_xor.html)
+    """
+    return jnp.bitwise_xor(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def divide(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    """
+    Named version of [jax.numpy.divide](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.divide.html)
+    """
+    return jnp.divide(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def divmod(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    """
+    Named version of [jax.numpy.divmod](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.divmod.html)
+    """
+    return jnp.divmod(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def equal(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    """
+    Named version of [jax.numpy.equal](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.equal.html)
+    """
+    return jnp.equal(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def float_power(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    """
+    Named version of [jax.numpy.float_power](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.float_power.html)
+    """
+    return jnp.float_power(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def floor_divide(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    """
+    Named version of [jax.numpy.floor_divide](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.floor_divide.html)
+    """
+    return jnp.floor_divide(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def fmax(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    """
+    Named version of [jax.numpy.fmax](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.fmax.html)
+    """
+    return jnp.fmax(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def fmin(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    """
+    Named version of [jax.numpy.fmin](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.fmin.html)
+    """
+    return jnp.fmin(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def fmod(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    """
+    Named version of [jax.numpy.fmod](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.fmod.html)
+    """
+    return jnp.fmod(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def greater(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    """
+    Named version of [jax.numpy.greater](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.greater.html)
+    """
+    return jnp.greater(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def greater_equal(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    """
+    Named version of [jax.numpy.greater_equal](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.greater_equal.html)
+    """
+    return jnp.greater_equal(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def hypot(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    """
+    Named version of [jax.numpy.hypot](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.hypot.html)
+    """
+    return jnp.hypot(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def left_shift(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    """
+    Named version of [jax.numpy.left_shift](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.left_shift.html)
+    """
+    return jnp.left_shift(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def less(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    """
+    Named version of [jax.numpy.less](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.less.html)
+    """
+    return jnp.less(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def less_equal(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    """
+    Named version of [jax.numpy.less_equal](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.less_equal.html)
+    """
+    return jnp.less_equal(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def logaddexp(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    """
+    Named version of [jax.numpy.logaddexp](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.logaddexp.html)
+    """
+    return jnp.logaddexp(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def logaddexp2(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    return jnp.logaddexp2(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def logical_and(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    return jnp.logical_and(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def logical_or(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    return jnp.logical_or(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def logical_xor(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    return jnp.logical_xor(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def maximum(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    return jnp.maximum(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def minimum(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    return jnp.minimum(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def mod(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    return jnp.mod(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def multiply(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    return jnp.multiply(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def nextafter(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    return jnp.nextafter(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def not_equal(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    return jnp.not_equal(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def power(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    return jnp.power(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def remainder(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    return jnp.remainder(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def right_shift(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    return jnp.right_shift(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def subtract(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    return jnp.subtract(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def true_divide(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    return jnp.true_divide(x1, x2)  # type: ignore
+
 
 # deprecated name
 concat_axis_specs = concat_axes
@@ -357,13 +906,11 @@ __all__ = [
     "prod",
     "product",
     "ptp",
-    "sometrue",
     "std",
     "sum",
     "var",
     "cumsum",
     "cumprod",
-    "cumproduct",
     "sort",
     "scan",
     "fold",

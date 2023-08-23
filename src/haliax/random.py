@@ -1,6 +1,7 @@
 """Wrappers around jax.random functions."""
 import functools
 import inspect
+import warnings
 from typing import Optional
 
 import jax
@@ -131,6 +132,7 @@ _enforce_sharded_generate = False
 
 def generate_sharded(fn, axis: Optional[AxisSelector] = None):
     """
+    DEPRECATED: use jax.config.update("jax_threefry_partitionable", True) instead
     Create a wrapped version of fn (which should be a random generator) that generates the random array in a sharded
     manner, using vmap over the provided axis, or inferring the "best" one if not provided.
 
@@ -141,14 +143,15 @@ def generate_sharded(fn, axis: Optional[AxisSelector] = None):
     not a [1024] vector but a [1600, 6400] matrix (for say, gpt-2). So we split the key here, and then let
     vmap hopefully only generate the random numbers for the local shard.
 
-
-
     However, we don't want to oversplit or it kind of ruins the whole point since we have to split the key on
     every node... So instead we just split along the *largest* physical axis, or the provided axis if it's
     provided.
     """
-    # TODO: we won't need to do this when they add better splitting for random numbers
-    #  (froystig is maybe going to do this?)
+    if not _enforce_sharded_generate:
+        warnings.warn(
+            'generate_sharded is deprecated. Use jax.config.update("jax_threefry_partitionable", True) instead',
+            DeprecationWarning,
+        )
 
     @functools.wraps(fn)
     def wrapped_fn(*args, **kwargs):
@@ -243,7 +246,7 @@ def categorical(key, logits: NamedArray, axis: AxisSelector, shape: Optional[Axi
         so that `softmax(logits, axis)` gives the corresponding probabilities.
       axis: Axis along which logits belong to the same categorical distribution.
       shape: A tuple of axes representing the result shape, or None. if None, the shape is
-        logits.axes \ {axis}. If not None, logits.axes \ {axis}  must be a subset of shape.
+        `logits.axes - {axis}`. If not None, `logits.axes - {axis}`  must be a subset of shape.
     Returns:
       A random array with int dtype and shape given by ``shape``
     """

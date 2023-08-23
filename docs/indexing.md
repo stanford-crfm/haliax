@@ -1,7 +1,8 @@
-# Indexing in Haliax
+# Indexing and Slicing
 
-Haliax supports Numpy-style indexing, including advanced indexing, though the syntax is necessarily different.
-Most forms of indexing are supporting, except we don't support indexing with booleans right now. (JAX doesn't support indexing with non-constant bool arrays anyway,
+Haliax supports Numpy-style indexing, including so-called [Advanced Indexing](https://numpy.org/doc/stable/user/basics.indexing.html#advanced-indexing),
+though the syntax is necessarily different. Most forms of indexing are supporting, except we don't support indexing with
+booleans right now. (JAX doesn't support indexing with non-constant bool arrays anyway,
 so I don't think it's worth the effort to implement it in Haliax.)
 
 ## Basic Indexing
@@ -35,6 +36,39 @@ This is why we have the second syntax, which is a bit less idiomatic in some way
 Otherwise, the idea is pretty straightforward: any unspecified axes are treated as though indexed with `:` in NumPy,
 slices are kept in reduced dimensions, and integers eliminate dimensions. If all dimensions are eliminated, a scalar
 JAX ndarray is returned.
+
+## Dynamic Slices
+
+### Shapes in JAX
+
+Before we continue note on shapes in JAX. Most JAX code will be used inside `jit`, which means that the sizes of all arrays
+must be determined at compile time (i.e. when JAX interprets your functions abstractly). This is a hard requirement in
+XLA.
+
+A consequence of this restriction is that certain indexing patterns aren't allowed in `jit`-ed JAX code:
+
+```python
+import jax.numpy as jnp
+import jax
+
+@jax.jit
+def f(x, slice_size: int):
+    num_blocks = x.shape[0] // slice_size
+    jax.lax.fori_loop(0, num_blocks, lambda i, x: x[i * slice_size : (i + 1) * slice_size], x)
+
+
+f(jnp.arange(10), 2)
+# IndexError: Array slice indices must have static start/stop/step to be used with NumPy indexing syntax.
+# Found slice(Traced<ShapedArray(int32[], weak_type=True)>with<DynamicJaxprTrace(level=2/0)>,
+# Traced<ShapedArray(int32[], weak_type=True)>with<DynamicJaxprTrace(level=2/0)>, None). To index a statically sized
+# array at a dynamic position, try lax.dynamic_slice/dynamic_update_slice (JAX does not support dynamically sized
+# arrays within JIT compiled functions).
+```
+
+This is a not-uncommon pattern in situations where you want to process a large array in chunks. In Haliax, we provide
+two solutions: [haliax.slice][]
+
+
 
 ## Advanced Indexing
 

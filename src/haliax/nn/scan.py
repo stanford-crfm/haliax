@@ -24,7 +24,7 @@ class Stacked(eqx.Module, Generic[M]):
     where you have multiple instances of the same transformer block and the input is applied in a fold/for loop
     in sequence.
 
-    It's similar in spirit to an equinox.nn.Sequential, but it must be homogeneous. In Jax, this is much cheaper to
+    It's similar in spirit to an [equinox.nn.Sequential], but it must be homogeneous. In Jax, this is much cheaper to
     compile than a sequential (or moral equivalent), because Jax compiles the module's method once, instead of unrolling
     the sequential and compiling everything as a giant graph. In Jax, this pattern is often called "scan layers" or
     "scan over layers".
