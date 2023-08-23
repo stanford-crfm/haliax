@@ -247,7 +247,7 @@ def named_jit(
                 arguments should be donated to the computation.
 
     Returns:
-        Callable: A jit'd version of the function.
+        A jit'd version of the function.
     """
 
     if fn is None:

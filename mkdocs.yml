@@ -41,6 +41,7 @@ plugins:
           import:
             - https://docs.python.org/3/objects.inv
             - https://jax.readthedocs.io/en/latest/objects.inv
+            - https://docs.kidger.site/equinox/objects.inv
           options:
             docstring_options:
               ignore_init_summary: true
@@ -52,10 +53,10 @@ plugins:
             merge_init_into_class: true
             load_external_modules: true
             preload_modules: [haliax, haliax.core]
-            separate_signature: true
+#            separate_signature: true
             show_root_heading: true
             show_root_full_path: false
-            show_signature_annotations: true
+#            show_signature_annotations: true
             show_symbol_type_heading: false
             show_symbol_type_toc: false
             signature_crossrefs: true
@@ -75,5 +76,7 @@ nav:
   - Named Arrays:
     - Broadcasting: 'broadcasting.md'
     - Indexing and Slicing: 'indexing.md'
+  - Neural Network: 'nn.md'
   - Partitioning: 'partitioning.md'
+  - Higher Order Functions: 'hof.md'
   - API Reference: 'api.md'

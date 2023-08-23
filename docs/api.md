@@ -25,6 +25,16 @@ Occasionally, an axis size can be inferred in some circumstances but not others.
 ::: haliax.AxisSpec
 ::: haliax.AxisSelection
 
+### Axis Manipulation
+
+::: haliax.axis.concat_axes
+::: haliax.axis.union_axes
+::: haliax.axis.eliminate_axes
+::: haliax.axis.overlapping_axes
+::: haliax.axis.selects_axis
+::: haliax.axis.is_axis_compatible
+
+
 
 
 ## Array Creation
@@ -126,7 +136,7 @@ don't reduce it.
 ### Unary Operations
 
 The `A` in these operations means [haliax.NamedArray][], a `Scalar`, or [jax.numpy.ndarray][].
-These are al
+These are all more or less directly from JAX's NumPy API.
 
 ::: haliax.abs
 ::: haliax.absolute
@@ -227,6 +237,17 @@ These are al
 ::: haliax.right_shift
 ::: haliax.subtract
 ::: haliax.true_divide
+
+### Other Operations
+
+::: haliax.clip
+::: haliax.isclose
+::: haliax.trace
+::: haliax.tril
+::: haliax.triu
+::: haliax.where
+
+
 
 ## Named Array Reference
 
