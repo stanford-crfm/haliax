@@ -35,8 +35,6 @@ Occasionally, an axis size can be inferred in some circumstances but not others.
 ::: haliax.axis.is_axis_compatible
 
 
-
-
 ## Array Creation
 ::: haliax.named
 ::: haliax.zeros

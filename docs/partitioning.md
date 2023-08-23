@@ -12,7 +12,6 @@ This page is designed to be more of a reference than a tutorial, and we assume y
 
 ## Device Meshes in JAX
 
-
 See also JAX's tutorial [Distributed Arrays and Automatic Parallelization](https://jax.readthedocs.io/en/latest/notebooks/Distributed_arrays_and_automatic_parallelization.html)
 for more details.
 

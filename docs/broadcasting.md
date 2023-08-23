@@ -60,7 +60,7 @@ The second condition is there to avoid bugs: we want to be sure that the arrays 
 To satisfy the second condition, it is not uncommon to use [haliax.broadcast_axis][], like we did above.
 This method takes one or more axes and adds them to the array.
 
-## Explicit Broadacasting Functions
+## Explicit Broadcasting Functions
 
 ::: haliax.broadcast_axis
 ::: haliax.broadcast_to

@@ -66,3 +66,8 @@ We don't provide an explicit attention module, but we do provide an attention fu
 
 ::: haliax.nn.attention.mask_to_bias
 ::: haliax.nn.attention.alibi_attention_bias
+
+
+## API Reference
+
+::: haliax.nn
