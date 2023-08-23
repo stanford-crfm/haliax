@@ -32,17 +32,17 @@ def scan(
     """
     Scan over a named axis. Arrays that are not part of a NamedArray will have their 0th dim scanned over
 
-    Unlike jax.lax.scan, this function is curried: it takes the function, axis, and configuration arguments first, and
+    Unlike [jax.lax.scan][], this function is curried: it takes the function, axis, and configuration arguments first, and
     then the initial carry and then any arguments to scan over as a separate curried function call.
 
-    That is, scan(f, axis)(init, xs) is equivalent to jax.lax.scan(f, init, xs)
+    That is, `scan(f, axis)(init, xs)` is equivalent to `jax.lax.scan(f, init, xs)`
 
     Args:
-        :param f: function to scan over
-        :param axis: axis to scan over
-        :param reverse: if True, scan in reverse
-        :param unroll: unroll the loop by this amount
-        :param is_scanned: a function that takes a leaf of the tree and returns True if it should be scanned over,
+        f (Callable): function to scan over
+        axis (AxisSelector): axis to scan over
+        reverse (bool): if True, scan in reverse
+        unroll (int): unroll the loop by this amount
+        is_scanned (BoolAxisSpec): a function that takes a leaf of the tree and returns True if it should be scanned over,
                     False otherwise. Behaves similarly to the `default` argument in filter_jit
     """
 
@@ -114,6 +114,9 @@ def fold(
         :param unroll: unroll the loop by this amount
         :param is_scanned: a function that takes a leaf of the tree and returns True if it should be scanned over,
                     False otherwise. Behaves similarly to the `default` argument in filter_jit
+
+    Returns:
+        A function that takes the initial carry and then the arguments to reduce over, and returns the final carry
     """
 
     def scan_compatible_fn(carry, *args, **kwargs):
@@ -140,6 +143,13 @@ def map(
 
     You'll typically want to use map (instead of a vmap or just vectorized code) when you want to encourage XLA to
     loop over the axis to control memory.
+
+    Args:
+        fn (Callable):  function to map over
+        axis (Axis): axis to map over
+        reverse (bool): if True, map in reverse
+        unroll (int): unroll the loop by this amount
+
     """
 
     def scan_compatible_fn(_, x):
@@ -171,18 +181,21 @@ def vmap(
     kwargs: PyTree[UnnamedAxisSpec] = None,
 ):
     """
-    NamedArray aware version of jax.vmap. Normal arrays are mapped according to the specs as in equinox.filter_vmap,
-    except that the output axis is always 0 b/c it's annoying to make anything else work
+    [haliax.NamedArray][]-aware version of [jax.vmap][]. Normal arrays are mapped according to the specs as in
+     [equinox.filter_vmap][], except that the output axis is always 0 b/c it's annoying to make anything else work
 
-    Because of NamedArrays, vmap is typically less useful than in vanilla jax, but it is sometimes
-    useful for initializing modules that will be scanned over.
+    Because of NamedArrays, vmap is typically less useful than in vanilla JAX, but it is sometimes
+    useful for initializing modules that will be scanned over. See [haliax.nn.Stacked][] for an example.
 
-    default: how to handle (unnamed) arrays by default. Should be either an integer or None, or a callable that takes a PyTree leaf
-        and returns an integer or None, or a PyTree prefix of the same. If an integer, the array will be mapped over that axis. If None, the array will not be mapped over.
-    args: optional per-argument overrides for how to handle arrays. Should be a PyTree prefix of the same type as default.
-    kwargs: optional per-keyword-argument overrides for how to handle arrays. Should be a PyTree prefix of the same type as default.
-    out: optional override for how to handle the output. Should be a PyTree prefix of the same type as default. Defaults
-    to 0 if the output is an unnamed array, and the Axis otherwise.
+    Args:
+        fn: function to vmap over
+        axis: axis to vmap over
+        default: how to handle (unnamed) arrays by default. Should be either an integer or None, or a callable that takes a PyTree leaf
+            and returns an integer or None, or a PyTree prefix of the same. If an integer, the array will be mapped over that axis. If None, the array will not be mapped over.
+        args: optional per-argument overrides for how to handle arrays. Should be a PyTree prefix of the same type as default.
+        kwargs: optional per-keyword-argument overrides for how to handle arrays. Should be a PyTree prefix of the same type as default.
+        out: optional override for how to handle the output. Should be a PyTree prefix of the same type as default. Defaults
+            to 0 if the output is an unnamed array, and the Axis otherwise.
     """
 
     if kwargs is None:
