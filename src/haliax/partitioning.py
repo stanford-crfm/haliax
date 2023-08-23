@@ -3,7 +3,7 @@ import functools
 import threading
 import typing
 from math import prod
-from typing import Mapping, Optional, Sequence, TypeVar, Union
+from typing import Callable, Mapping, Optional, Sequence, TypeVar, Union
 
 import equinox as eqx
 import jax
@@ -204,7 +204,7 @@ def infer_resource_partitions(
 
 
 def named_jit(
-    fn=None,
+    fn: Callable = None,
     axis_resources: Optional[ResourceMapping] = None,
     *,
     in_axis_resources: Optional[ResourceMapping] = None,
@@ -234,7 +234,7 @@ def named_jit(
     ```
 
     Args:
-        fn (Function, optional): The function to be jit'd.
+        fn (Callable, optional): The function to be jit'd.
         axis_resources (ResourceMapping, optional): A mapping from logical axis names to physical axis names use for th
                 e context-specific resource mapping.
         in_axis_resources (ResourceMapping, optional): A mapping from logical axis names to physical axis names for
@@ -247,7 +247,7 @@ def named_jit(
                 arguments should be donated to the computation.
 
     Returns:
-        Function: A jit'd version of the function.
+        Callable: A jit'd version of the function.
     """
 
     if fn is None:

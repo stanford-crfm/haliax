@@ -235,3 +235,18 @@ just as with Numpy.
 The exceptions are documented here:
 
 ::: haliax.NamedArray
+
+
+## Partitioning API
+
+See also the section on [Partitioning](partitioning.md).
+
+::: haliax.partitioning.axis_mapping
+::: haliax.shard_with_axis_mapping
+::: haliax.auto_sharded
+::: haliax.named_jit
+::: haliax.fsdp
+::: haliax.partitioning.round_axis_for_partitioning
+::: haliax.partitioning.physical_axis_name
+::: haliax.partitioning.physical_axis_size
+::: haliax.partitioning.sharding_for_axis
