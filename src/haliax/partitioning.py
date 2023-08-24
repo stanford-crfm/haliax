@@ -285,6 +285,9 @@ def named_jit(
             else:
                 dargs = donate_args
 
+            if len(dargs) < len(args):
+                dargs = dargs + (False,) * (len(args) - len(dargs))
+
             if len(dargs) != len(args):
                 raise ValueError(f"Expected {len(args)} donate_args, got {len(dargs)}")
 
