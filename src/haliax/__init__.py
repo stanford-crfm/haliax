@@ -166,11 +166,14 @@ def concatenate(axis: AxisSelector, arrays: Sequence[NamedArray]) -> NamedArray:
     if len(arrays) == 0:
         return zeros(axis)
 
-    arrays = [a.rearrange(arrays[0].axes) for a in arrays]
     axis_index = arrays[0]._lookup_indices(axis.name)
-
     if axis_index is None:
         raise ValueError(f"Axis {axis.name} not found in 0th array {arrays[0]}")
+
+    axes: typing.Tuple[AxisSelector, ...] = arrays[0].axes
+    # we want to use the axis name for `axis`, because it's not uncommon for those to be different lengths in the arrays
+    axes = axes[:axis_index] + (axis.name,) + axes[axis_index + 1 :]
+    arrays = [a.rearrange(axes) for a in arrays]
 
     new_axes = arrays[0].axes[:axis_index] + (axis,) + arrays[0].axes[axis_index + 1 :]
     return NamedArray(jnp.concatenate([a.array for a in arrays], axis=axis_index), new_axes)
