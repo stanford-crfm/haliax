@@ -155,24 +155,25 @@ def concatenate(axis: AxisSelector, arrays: Sequence[NamedArray]) -> NamedArray:
     """Version of [jax.numpy.concatenate][] that returns a NamedArray. The returns array will have the same axis names in the
     same order as the first, with the selected axis extended by the sum of the sizes of the selected axes in the
     concatenated arrays."""
-    total_size: int = _sum(a.resolve_axis(axis).size for a in arrays)  # type: ignore
+    axis_name = axis.name if isinstance(axis, Axis) else axis
+    total_size: int = _sum(a.resolve_axis(axis_name).size for a in arrays)  # type: ignore
     if isinstance(axis, str):
         axis = Axis(axis, total_size)
     elif total_size != axis.size:
         raise ValueError(
-            f"Cannot concatenate arrays along axis {axis.name} of size {axis.size} with total size {total_size}"
+            f"Cannot concatenate arrays along axis {axis_name} of size {axis.size} with total size {total_size}"
         )
 
     if len(arrays) == 0:
         return zeros(axis)
 
-    axis_index = arrays[0]._lookup_indices(axis.name)
+    axis_index = arrays[0]._lookup_indices(axis_name)
     if axis_index is None:
-        raise ValueError(f"Axis {axis.name} not found in 0th array {arrays[0]}")
+        raise ValueError(f"Axis {axis_name} not found in 0th array {arrays[0]}")
 
     axes: typing.Tuple[AxisSelector, ...] = arrays[0].axes
     # we want to use the axis name for `axis`, because it's not uncommon for those to be different lengths in the arrays
-    axes = axes[:axis_index] + (axis.name,) + axes[axis_index + 1 :]
+    axes = axes[:axis_index] + (axis_name,) + axes[axis_index + 1 :]
     arrays = [a.rearrange(axes) for a in arrays]
 
     new_axes = arrays[0].axes[:axis_index] + (axis,) + arrays[0].axes[axis_index + 1 :]
