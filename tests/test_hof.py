@@ -136,6 +136,27 @@ def test_vmap_unmapped_args():
     assert selected.axes == expected_names
 
 
+def test_vmap_non_static_bool_fields():
+    Batch = Axis("Batch", 10)
+    Width = Axis("Width", 3)
+    Depth = Axis("Depth", 4)
+    named1 = hax.random.uniform(PRNGKey(0), (Width, Depth))
+
+    class Foo(eqx.Module):
+        field: NamedArray
+        flag: bool = False
+
+        def __init__(self):
+            super().__init__()
+            self.field = named1
+            self.flag = True
+
+    vmap_foo = hax.vmap(Foo, Batch)()
+
+    assert vmap_foo.field.axes == (Batch, Width, Depth)
+    assert vmap_foo.flag is True
+
+
 def test_vmap_mapped_args():
     Batch = Axis("Batch", 10)
     Width = Axis("Width", 3)
