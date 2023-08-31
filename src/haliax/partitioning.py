@@ -182,7 +182,7 @@ def infer_resource_partitions(
             else:
                 sharding = NamedSharding(mesh, pspec_for_axis(node.axes, resource_mapping))
                 return NamedArray(sharding, node.axes)  # type: ignore
-        else:
+        elif is_jax_array_like(node):
             sharding = getattr(node, "sharding", None)
             # TODO: these are usually replicated. Is there a better way to tell?
             if isinstance(sharding, SingleDeviceSharding):
@@ -199,6 +199,8 @@ def infer_resource_partitions(
             # else:
             #     return AUTO
             return NamedSharding(mesh, PartitionSpec(None))
+        else:
+            return None
 
     return jax.tree_util.tree_map(partition_spec, tree, is_leaf=is_named_array)
 

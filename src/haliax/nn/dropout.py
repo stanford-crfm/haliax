@@ -63,20 +63,23 @@ class Dropout(eqx.Module):
     # key difference from equinox: these are static fields
     pdrop: float = eqx.static_field()
     broadcast_axes: Optional[AxisSpec] = eqx.static_field()
+    inference: bool = False  # note: not static
 
     def __init__(
         self,
         pdrop: float = 0.5,
         broadcast_axes: Optional[AxisSpec] = None,
+        inference: bool = False,
     ):
         self.pdrop = pdrop
         self.broadcast_axes = broadcast_axes
+        self.inference = inference
 
     def __call__(
         self,
         x: NamedArray,
         *,
-        inference: bool,
+        inference: Optional[bool] = None,
         key: Optional[PRNGKeyArray] = None,
     ) -> NamedArray:
         """**Arguments:**
@@ -87,8 +90,10 @@ class Dropout(eqx.Module):
         - `inference`: As per [`equinox.nn.Dropout.__init__`][]. If `True` or
             `False` then it will take priority over `self.inference`. If `None`
             then the value from `self.inference` will be used.
-        - `deterministic`: Deprecated alternative to `inference`.
         """
+        if inference is None:
+            inference = self.inference
+
         return dropout(
             x,
             self.pdrop,

@@ -182,7 +182,7 @@ def vmap(
 ):
     """
     [haliax.NamedArray][]-aware version of [jax.vmap][]. Normal arrays are mapped according to the specs as in
-     [equinox.filter_vmap][], except that the output axis is always 0 b/c it's annoying to make anything else work
+     [equinox.filter_vmap][]
 
     Because of NamedArrays, vmap is typically less useful than in vanilla JAX, but it is sometimes
     useful for initializing modules that will be scanned over. See [haliax.nn.Stacked][] for an example.
@@ -238,19 +238,18 @@ def vmap(
             len(actual_bound.args) - len(axis_spec_bound_sig.args)
         )
 
-        # want to support padded_spec_args being a tree prefix of the actual args, which this enables
-        padded_spec_args = broadcast_prefix(padded_spec_args, actual_bound.args, is_leaf=is_named_array)
-
-        arg_axis_specs = jax.tree_util.tree_map(
-            _index_of_batch_axis, actual_bound.args, padded_spec_args, is_leaf=is_named_array
-        )
-
         padded_spec_kwargs = {
             **axis_spec_bound_sig.kwargs,
             **{k: default for k in actual_bound.kwargs.keys() - axis_spec_bound_sig.kwargs.keys()},
         }
 
+        # want to support padded_spec_args being a tree prefix of the actual args, which this enables
+        padded_spec_args = broadcast_prefix(padded_spec_args, actual_bound.args, is_leaf=is_named_array)
         padded_spec_kwargs = broadcast_prefix(padded_spec_kwargs, actual_bound.kwargs)
+
+        arg_axis_specs = jax.tree_util.tree_map(
+            _index_of_batch_axis, actual_bound.args, padded_spec_args, is_leaf=is_named_array
+        )
 
         kwarg_axis_specs = jax.tree_util.tree_map(
             _index_of_batch_axis, actual_bound.kwargs, padded_spec_kwargs, is_leaf=is_named_array
@@ -260,9 +259,6 @@ def vmap(
         # invariants, because intermediates creating during tracing won't have the axes right
         arg_axis_specs = jax.tree_util.tree_map(_pacify_named_arrays, arg_axis_specs, is_leaf=is_named_array)
         kwarg_axis_specs = jax.tree_util.tree_map(_pacify_named_arrays, kwarg_axis_specs, is_leaf=is_named_array)
-
-        args = jax.tree_util.tree_map(_pacify_named_arrays, actual_bound.args, is_leaf=is_named_array)
-        kwargs = jax.tree_util.tree_map(_pacify_named_arrays, actual_bound.kwargs, is_leaf=is_named_array)
 
         def wrapped_fn(args, kwargs):
             # the args that come in here are pacified. Their names will still have the batch axis even though the array
@@ -276,10 +272,13 @@ def vmap(
 
             # now we need to pacify the output, which may include NamedArrays, and add the batch axis back at the end
             chilled = jax.tree_util.tree_map(_pacify_named_arrays, out, is_leaf=is_named_array)
-            arrays, nonarrays = eqx.partition(chilled, eqx.is_array_like)
+            arrays, nonarrays = eqx.partition(chilled, is_jax_array_like)
             return arrays, Static(nonarrays)
 
         spmd_axis_name = physical_axis_name(axis)
+
+        args = jax.tree_util.tree_map(_pacify_named_arrays, actual_bound.args, is_leaf=is_named_array)
+        kwargs = jax.tree_util.tree_map(_pacify_named_arrays, actual_bound.kwargs, is_leaf=is_named_array)
 
         result_dynamic, result_static = jax.vmap(
             wrapped_fn,

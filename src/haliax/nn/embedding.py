@@ -26,7 +26,7 @@ class Embedding(eqx.Module):
         return Embedding(weight=weight, Vocab=Vocab, Embed=Embed)
 
     @named_call
-    def __call__(self, input_ids, inference, *, key):
+    def __call__(self, input_ids, *, key: Optional[PRNGKeyArray] = None):
         return self.embed(input_ids)
 
     def embed(self, input_ids):
