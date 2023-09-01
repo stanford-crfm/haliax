@@ -19,7 +19,7 @@ from jaxtyping import PyTree
 
 from .axis import Axis, AxisSelection, AxisSelector
 from .core import NamedArray
-from .jax_utils import is_jax_array_like
+from .jax_utils import Static, is_jax_array_like
 from .tree_util import hashable_combine, hashable_partition
 from .util import StringHolderEnum, ensure_tuple, is_named_array
 
@@ -330,7 +330,10 @@ def named_jit(
                 my_pjit_args["out_shardings"] = out_resources
 
             cached_pjitted_fun = _named_pjit_cache(fn, **my_pjit_args)
-            return cached_pjitted_fun(dynamic_donated, dynamic_reserved, static)
+            out, out_static = cached_pjitted_fun(dynamic_donated, dynamic_reserved, static)
+            out = hashable_combine(out, out_static.value)
+
+            return out
 
     return f
 
@@ -387,7 +390,7 @@ def _fsdp_impl(fn: F, parameter_mapping, compute_mapping):
 # returns. This is useful for conserving memory, but we also have to splice them back in.
 # Also recall that a "pytree" can split into leaves and a "treedef", which can then be reconstructed.
 @compile_cache
-def _named_pjit_cache(fun_names, **jitkwargs):
+def _named_pjit_cache(fun_names, in_shardings, out_shardings, **jitkwargs):
     def fun_wrapped(dynamic_donated, dynamic_reserved, static):
         dynamic = eqx.combine(dynamic_donated, dynamic_reserved)
         dynamic_fun, dynamic_spec = dynamic
@@ -396,14 +399,22 @@ def _named_pjit_cache(fun_names, **jitkwargs):
         fun = hashable_combine(dynamic_fun, static_fun)
         args, kwargs = hashable_combine(dynamic_spec, static_spec)
         out = fun(*args, **kwargs)
-        return out
+        out_dynamic, out_static = hashable_partition(out, is_jax_array_like)
+        return out_dynamic, Static(out_static)
 
     fun_name, fun_qualname = fun_names
     fun_wrapped.__name__ = fun_name
     fun_wrapped.__qualname__ = fun_qualname
 
     # TODO: jit should work here, but there's a weird error. see if it goes away on its own
-    return pjit(fun_wrapped, donate_argnums=0, static_argnums=2, **jitkwargs)
+    return pjit(
+        fun_wrapped,
+        donate_argnums=0,
+        static_argnums=2,
+        in_shardings=in_shardings,
+        out_shardings=(out_shardings, None),
+        **jitkwargs,
+    )
 
 
 _eval_shape_cache = {}
