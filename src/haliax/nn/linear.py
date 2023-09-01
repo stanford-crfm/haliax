@@ -36,7 +36,13 @@ class Linear(eqx.Module):
         return Linear(weight, bias, In, Out)
 
     @named_call
-    def __call__(self, inputs):
+    def __call__(self, inputs, *, key=None):
+        """
+        Args:
+            inputs (NamedArray): Input array
+            key: Not used, but there for compat with other modules
+        """
+        del key
         q = inputs.dot(self.In, self.weight)
         q = hax.auto_sharded(q)
 
