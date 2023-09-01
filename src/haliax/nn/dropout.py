@@ -75,6 +75,11 @@ class Dropout(eqx.Module):
         self.broadcast_axes = broadcast_axes
         self.inference = inference
 
+    @property
+    def is_active(self):
+        """Returns `True` if dropout is active (and therefore needs a key), `False` otherwise."""
+        return not self.inference and self.pdrop > 0
+
     def __call__(
         self,
         x: NamedArray,
