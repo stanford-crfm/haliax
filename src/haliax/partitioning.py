@@ -390,7 +390,7 @@ def _fsdp_impl(fn: F, parameter_mapping, compute_mapping):
 # returns. This is useful for conserving memory, but we also have to splice them back in.
 # Also recall that a "pytree" can split into leaves and a "treedef", which can then be reconstructed.
 @compile_cache
-def _named_pjit_cache(fun_names, in_shardings, out_shardings, **jitkwargs):
+def _named_pjit_cache(fun_names, **jitkwargs):
     def fun_wrapped(dynamic_donated, dynamic_reserved, static):
         dynamic = eqx.combine(dynamic_donated, dynamic_reserved)
         dynamic_fun, dynamic_spec = dynamic
@@ -406,13 +406,17 @@ def _named_pjit_cache(fun_names, in_shardings, out_shardings, **jitkwargs):
     fun_wrapped.__name__ = fun_name
     fun_wrapped.__qualname__ = fun_qualname
 
+    jitkwargs = dict(jitkwargs)
+    if "out_shardings" in jitkwargs:
+        out_shardings = jitkwargs["out_shardings"]
+        # None for the static
+        jitkwargs["out_shardings"] = (out_shardings, None)
+
     # TODO: jit should work here, but there's a weird error. see if it goes away on its own
     return pjit(
         fun_wrapped,
         donate_argnums=0,
         static_argnums=2,
-        in_shardings=in_shardings,
-        out_shardings=(out_shardings, None),
         **jitkwargs,
     )
 
