@@ -587,7 +587,7 @@ class NamedArray:
         return haliax.bitwise_or(other, self)
 
     def __bool__(self) -> bool:
-        return bool(self.array)
+        return bool(self.array.all())
 
     def __complex__(self) -> complex:
         return complex(self.array)
