@@ -454,6 +454,19 @@ def test_unflatten_axis():
     assert hax.unflatten_axis(flattened_HD, "Z", (H, D)).axes == (H, D, W)
 
 
+def test_ravel():
+    H = Axis("Height", 2)
+    W = Axis("Width", 3)
+    D = Axis("Depth", 4)
+
+    named1 = hax.random.uniform(PRNGKey(0), (H, W, D))
+    raveled = named1.ravel("Z")
+
+    assert raveled.size == H.size * W.size * D.size
+    assert hax.all(hax.equal(raveled, named1.flatten_axes((H, W, D), "Z")))
+    assert jnp.all(jnp.equal(raveled.array, jnp.ravel(named1.array)))
+
+
 def test_rename():
     H = Axis("H", 2)
     W = Axis("W", 3)
