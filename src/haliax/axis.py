@@ -2,7 +2,9 @@ import typing
 from dataclasses import dataclass
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple, Union, overload
 
-from haliax.util import ensure_tuple, index_where
+from haliax.util import ensure_tuple
+
+from ._src.util import index_where
 
 
 @dataclass(frozen=True)

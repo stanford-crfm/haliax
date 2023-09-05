@@ -6,7 +6,9 @@ import jax.numpy as jnp
 import jax.tree_util as jtu
 
 from haliax.core import NamedArray
-from haliax.util import IdentityMap, is_jax_or_hax_array_like
+from haliax.util import is_jax_or_hax_array_like
+
+from ._src.util import IdentityMap
 
 
 ArrayLike = Union[jnp.ndarray, NamedArray]
