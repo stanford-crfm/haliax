@@ -229,6 +229,9 @@ class NamedArray:
     def unflatten_axis(self, axis: AxisSelector, new_axes: AxisSpec) -> "NamedArray":
         return haliax.unflatten_axis(self, axis=axis, new_axes=new_axes)
 
+    def ravel(self, new_axis_name: AxisSelector) -> "NamedArray":
+        return haliax.ravel(self, new_axis_name=new_axis_name)
+
     def unbind(self, axis: AxisSelector) -> Sequence["NamedArray"]:
         return haliax.unbind(self, axis=axis)
 
@@ -1199,6 +1202,14 @@ def unflatten_axis(array: NamedArray, axis: AxisSelector, new_axes: AxisSpec) ->
     return NamedArray(new_array, resolved_new_axes)
 
 
+def ravel(array: NamedArray, new_axis_name: AxisSelector) -> NamedArray:
+    """
+    Returns a flattened view of the array, with all axes merged into one
+    """
+    flattened = flatten_axes(array, array.axes, new_axis_name)
+    return flattened
+
+
 def named(a: jnp.ndarray, axis: AxisSelection) -> NamedArray:
     """Creates a NamedArray from a numpy array and a list of axes."""
     axes = check_shape(a.shape, axis)
@@ -1471,6 +1482,7 @@ __all__ = [
     "split",
     "flatten_axes",
     "unflatten_axis",
+    "ravel",
     "unbind",
     "roll",
     "_broadcast_order",

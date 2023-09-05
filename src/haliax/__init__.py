@@ -22,6 +22,7 @@ from .core import (
     flatten_axes,
     index,
     named,
+    ravel,
     rearrange,
     rename,
     roll,
