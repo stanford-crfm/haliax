@@ -5,6 +5,7 @@ import jax
 import jax.numpy as jnp
 from jax._src.typing import DTypeLike
 
+import haliax.debug as debug
 import haliax.nn as nn
 import haliax.random as random
 import haliax.tree_util as tree_util
@@ -808,6 +809,7 @@ concat_axis_specs = concat_axes
 
 
 __all__ = [
+    "debug",
     "random",
     "tree_util",
     "nn",
