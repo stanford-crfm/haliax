@@ -8,11 +8,12 @@ import jax
 import jax.lax as lax
 from jaxtyping import PyTree
 
+from ._src.util import index_where
 from .axis import Axis, AxisSelector, selects_axis
 from .core import NamedArray
 from .jax_utils import Static, broadcast_prefix, is_jax_array_like
 from .partitioning import physical_axis_name
-from .util import index_where, is_jax_or_hax_array_like, is_named_array
+from .util import is_jax_or_hax_array_like, is_named_array
 
 
 BoolAxisSpec = Union[bool, Callable[[Any], bool]]

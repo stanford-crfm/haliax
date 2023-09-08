@@ -14,8 +14,9 @@ import numpy as np
 import haliax
 import haliax.axis
 from haliax.jax_utils import is_jax_array_like
-from haliax.util import ensure_tuple, index_where, py_slice, slice_t
+from haliax.util import ensure_tuple
 
+from ._src.util import index_where, py_slice, slice_t
 from .axis import Axis, AxisSelection, AxisSelector, AxisSpec, eliminate_axes, selects_axis, union_axes
 from .types import IntScalar, PrecisionLike, Scalar
 
