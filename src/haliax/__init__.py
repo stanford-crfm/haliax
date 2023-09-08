@@ -977,4 +977,5 @@ __all__ = [
     "selects_axis",
     "concat_axes",
     "concat_axis_specs",
+    "top_k",
 ]
