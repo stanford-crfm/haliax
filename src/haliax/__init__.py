@@ -37,6 +37,7 @@ from .core import (
 from .hof import fold, map, scan, vmap
 from .ops import clip, isclose, pad_left, trace, tril, triu, where
 from .partitioning import auto_sharded, axis_mapping, fsdp, named_jit, shard_with_axis_mapping
+from .specialized_fns import top_k
 from .types import Scalar
 from .wrap import (
     ReductionFunction,
@@ -978,4 +979,5 @@ __all__ = [
     "selects_axis",
     "concat_axes",
     "concat_axis_specs",
+    "top_k",
 ]
