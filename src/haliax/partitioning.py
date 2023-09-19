@@ -222,14 +222,14 @@ class WrappedCallable(typing.Protocol[Args, R]):
 
 class _NamedJitWrapper(Module):
     _fn: Callable  # [Args, R]
-    dynamic_fun: PyTree
-    static_fun: typing.Any
-    axis_resources: Optional[ResourceMapping]
-    in_axis_resources: Optional[ResourceMapping]
-    out_axis_resources: Optional[ResourceMapping]
-    donate_args: Optional[PyTree]
-    donate_kwargs: Optional[PyTree]
-    pjit_args: Mapping[str, typing.Any]
+    _dynamic_fun: PyTree
+    _static_fun: typing.Any
+    _axis_resources: Optional[ResourceMapping]
+    _in_axis_resources: Optional[ResourceMapping]
+    _out_axis_resources: Optional[ResourceMapping]
+    _donate_args: Optional[PyTree]
+    _donate_kwargs: Optional[PyTree]
+    _pjit_args: Mapping[str, typing.Any]
 
     @property
     def __wrapped__(self):
@@ -242,21 +242,21 @@ class _NamedJitWrapper(Module):
         return self._call(True, *args, **kwargs)
 
     def _call(self, is_lower, *args, **kwargs):
-        axis_resources = self.axis_resources
+        axis_resources = self._axis_resources
         if axis_resources is None:
             axis_resources = current_thread_local_mapping()
 
-        in_axis_resources = self.in_axis_resources
-        out_axis_resources = self.out_axis_resources
+        in_axis_resources = self._in_axis_resources
+        out_axis_resources = self._out_axis_resources
 
         if out_axis_resources is None:
             out_axis_resources = axis_resources
 
         dynamic_argspec, static_argspec = hashable_partition((args, kwargs), is_jax_array_like)
-        dynamic = (self.dynamic_fun, dynamic_argspec)
+        dynamic = (self._dynamic_fun, dynamic_argspec)
 
-        donate_args = self.donate_args
-        donate_kwargs = self.donate_kwargs
+        donate_args = self._donate_args
+        donate_kwargs = self._donate_kwargs
 
         if donate_args is not None or donate_kwargs is not None:
             if donate_args is None:
@@ -281,7 +281,7 @@ class _NamedJitWrapper(Module):
             dynamic_donated = jax.tree_util.tree_map(lambda _: None, dynamic)
             dynamic_reserved = dynamic
 
-        static = (self.static_fun, static_argspec)
+        static = (self._static_fun, static_argspec)
 
         if axis_resources is not None:
             cmanager = axis_mapping(axis_resources)
@@ -294,7 +294,7 @@ class _NamedJitWrapper(Module):
             #  https://github.com/google/jax/issues/15600
             # we don't really need in_shardings though
 
-            my_pjit_args = dict(**self.pjit_args)
+            my_pjit_args = dict(**self._pjit_args)
 
             if in_axis_resources is not None or axis_resources is not None:
                 if in_axis_resources is None:
