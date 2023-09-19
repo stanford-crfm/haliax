@@ -221,7 +221,7 @@ class WrappedCallable(typing.Protocol[Args, R]):
 
 
 class _NamedJitWrapper(Module):
-    # _fn: Callable[Args, R]
+    _fn: Callable  # [Args, R]
     dynamic_fun: PyTree
     static_fun: typing.Any
     axis_resources: Optional[ResourceMapping]
