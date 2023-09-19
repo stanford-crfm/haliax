@@ -1,4 +1,7 @@
+import functools
 from typing import Sequence, Tuple, TypeAlias, TypeVar, Union
+
+import equinox
 
 from haliax.jax_utils import is_jax_array_like
 
@@ -43,6 +46,34 @@ class StringHolderEnum(type):
 
 def is_jax_or_hax_array_like(x):
     return is_jax_array_like(x) or is_named_array(x)
+
+
+def safe_wraps(fn):
+    """
+    Equinox has a special [equinox.module_update_wrapper][] that works with [equinox.Module][]s, but
+    doesn't work with regular functions. Likewise, functools.update_wrapper doesn't work with [equinox.Module][]s.
+
+    This function is a wrapper around both of them that works with both [equinox.Module][]s and regular functions.
+
+    Use this if you get this exception: `dataclasses.FrozenInstanceError: cannot assign to field '__module__'`
+    """
+    return functools.partial(safe_update_wrapper, wrapped=fn)
+
+
+def safe_update_wrapper(wrapper, wrapped):
+    """
+    As [safe_wraps][] but not a decorator.
+    Args:
+        wrapper:
+        wrapped:
+
+    Returns:
+
+    """
+    if isinstance(wrapper, equinox.Module):
+        return equinox.module_update_wrapper(wrapper, wrapped)
+    else:
+        return functools.update_wrapper(wrapper, wrapped)
 
 
 __all__ = [
