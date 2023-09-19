@@ -353,8 +353,8 @@ def named_jit(
 
     Args:
         fn (Callable, optional): The function to be jit'd.
-        axis_resources (ResourceMapping, optional): A mapping from logical axis names to physical axis names use for th
-                e context-specific resource mapping.
+        axis_resources (ResourceMapping, optional): A mapping from logical axis names to physical axis names use for
+                the context-specific resource mapping.
         in_axis_resources (ResourceMapping, optional): A mapping from logical axis names to physical axis names for
                 arguments. If not passed, it uses the argument's own shardings.
         out_axis_resources (ResourceMapping, optional): A mapping from logical axis names to physical axis names for the
