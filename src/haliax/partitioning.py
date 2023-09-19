@@ -3,10 +3,11 @@ import functools
 import threading
 import typing
 from math import prod
-from typing import Callable, Mapping, Optional, Sequence, TypeVar, Union
+from typing import Callable, Mapping, Optional, ParamSpec, Sequence, TypeVar, Union
 
 import equinox as eqx
 import jax
+from equinox import Module, module_update_wrapper
 
 # TODO: avoid depending on private Equinox internals.
 from equinox._compile_utils import compile_cache
@@ -29,6 +30,8 @@ ResourceMapping = Mapping[(str), PhysicalAxisSpec]
 """Mapping from logical axis names to physical axis names"""
 
 F = typing.TypeVar("F", bound=typing.Callable)
+Args = ParamSpec("Args")
+R = typing.TypeVar("R", covariant=True)
 
 
 class ResourceAxis(StringHolderEnum):
@@ -205,8 +208,121 @@ def infer_resource_partitions(
     return jax.tree_util.tree_map(partition_spec, tree, is_leaf=is_named_array)
 
 
+class WrappedCallable(typing.Protocol[Args, R]):
+    """
+    A wrapper for a callable that preserves the original function's name and qualname.
+    """
+
+    def __call__(self, *args: Args.args, **kwargs: Args.kwargs) -> R:
+        raise NotImplementedError
+
+    def lower(self, *args: Args.args, **kwargs: Args.kwargs) -> jax.stages.Lowered:
+        raise NotImplementedError
+
+
+class _NamedJitWrapper(Module):
+    # _fn: Callable[Args, R]
+    dynamic_fun: PyTree
+    static_fun: typing.Any
+    axis_resources: Optional[ResourceMapping]
+    in_axis_resources: Optional[ResourceMapping]
+    out_axis_resources: Optional[ResourceMapping]
+    donate_args: Optional[PyTree]
+    donate_kwargs: Optional[PyTree]
+    pjit_args: Mapping[str, typing.Any]
+
+    @property
+    def __wrapped__(self):
+        return self._fn
+
+    def __call__(self, *args, **kwargs):
+        return self._call(False, *args, **kwargs)
+
+    def lower(self, *args, **kwargs) -> jax.stages.Lowered:
+        return self._call(True, *args, **kwargs)
+
+    def _call(self, is_lower, *args, **kwargs):
+        axis_resources = self.axis_resources
+        if axis_resources is None:
+            axis_resources = current_thread_local_mapping()
+
+        in_axis_resources = self.in_axis_resources
+        out_axis_resources = self.out_axis_resources
+
+        if out_axis_resources is None:
+            out_axis_resources = axis_resources
+
+        dynamic_argspec, static_argspec = hashable_partition((args, kwargs), is_jax_array_like)
+        dynamic = (self.dynamic_fun, dynamic_argspec)
+
+        donate_args = self.donate_args
+        donate_kwargs = self.donate_kwargs
+
+        if donate_args is not None or donate_kwargs is not None:
+            if donate_args is None:
+                dargs = (False,) * len(args)
+            elif isinstance(donate_args, bool):
+                dargs = (donate_args,) * len(args)
+            elif not isinstance(donate_args, tuple):
+                dargs = tuple(donate_args)
+            else:
+                dargs = donate_args
+
+            if len(dargs) < len(args):
+                dargs = dargs + (False,) * (len(args) - len(dargs))
+
+            if len(dargs) != len(args):
+                raise ValueError(f"Expected {len(args)} donate_args, got {len(dargs)}")
+
+            dkwargs = donate_kwargs or {k: False for k in kwargs}
+            dkwargs = {k: dkwargs.get(k, False) for k in kwargs}
+            dynamic_donated, dynamic_reserved = eqx.partition(dynamic, (False, (dargs, dkwargs)))
+        else:
+            dynamic_donated = jax.tree_util.tree_map(lambda _: None, dynamic)
+            dynamic_reserved = dynamic
+
+        static = (self.static_fun, static_argspec)
+
+        if axis_resources is not None:
+            cmanager = axis_mapping(axis_resources)
+        else:
+            cmanager = contextlib.nullcontext()
+
+        with cmanager:
+            output_shape = _cached_filter_eval_shape(self._fn, *args, **kwargs)
+            # TODO: with new jax.Array I shouldn't have to specify shardings, but I do for now
+            #  https://github.com/google/jax/issues/15600
+            # we don't really need in_shardings though
+
+            my_pjit_args = dict(**self.pjit_args)
+
+            if in_axis_resources is not None or axis_resources is not None:
+                if in_axis_resources is None:
+                    in_axis_resources = axis_resources
+                in_resources = infer_resource_partitions(
+                    (dynamic_donated, dynamic_reserved),
+                    in_axis_resources,
+                    preserve_existing_shardings=in_axis_resources is None,
+                )
+                my_pjit_args["in_shardings"] = in_resources
+
+            if out_axis_resources is not None:
+                # TODO: when AUTO is fixed (or eval_shape can give shardings), use it here
+                out_resources = infer_resource_partitions(output_shape, out_axis_resources, use_auto_sharding=False)
+                my_pjit_args["out_shardings"] = out_resources
+
+            cached_pjitted_fun = _named_pjit_cache(self._fn, **my_pjit_args)
+            if is_lower:
+                return cached_pjitted_fun.lower(dynamic_donated, dynamic_reserved, static)
+            else:
+                out, out_static = cached_pjitted_fun(dynamic_donated, dynamic_reserved, static)
+                out = hashable_combine(out, out_static.value)
+
+                return out
+
+
 def named_jit(
-    fn: Callable = None,
+    fn: Optional[Callable[Args, R]] = None,
     axis_resources: Optional[ResourceMapping] = None,
     *,
     in_axis_resources: Optional[ResourceMapping] = None,
@@ -214,7 +330,7 @@ def named_jit(
     donate_args: Optional[PyTree] = None,
     donate_kwargs: Optional[PyTree] = None,
     **pjit_args,
-):
+) -> WrappedCallable[Args, R]:
     """
     A version of pjit that uses NamedArrays and the provided resource mapping to infer resource partitions for
     sharded computation for.
@@ -253,7 +369,7 @@ def named_jit(
     """
 
     if fn is None:
-        return functools.partial(
+        return functools.partial(  # type: ignore
             named_jit,
             axis_resources=axis_resources,
             in_axis_resources=in_axis_resources,
@@ -263,79 +379,21 @@ def named_jit(
             **pjit_args,
         )
 
-    @functools.wraps(fn)
-    def f(*args, **kwargs):
-        nonlocal axis_resources, in_axis_resources, out_axis_resources, donate_args, donate_kwargs
+    dynamic_fun, static_fun = hashable_partition(fn, is_jax_array_like)
 
-        if axis_resources is None:
-            axis_resources = current_thread_local_mapping()
+    wrapper = _NamedJitWrapper(
+        fn,
+        dynamic_fun,
+        static_fun,
+        axis_resources,
+        in_axis_resources,
+        out_axis_resources,
+        donate_args,
+        donate_kwargs,
+        pjit_args,
+    )
 
-        if out_axis_resources is None:
-            out_axis_resources = axis_resources
-
-        dynamic_fun, static_fun = hashable_partition(fn, is_jax_array_like)
-        dynamic_argspec, static_argspec = hashable_partition((args, kwargs), is_jax_array_like)
-        dynamic = (dynamic_fun, dynamic_argspec)
-
-        if donate_args is not None or donate_kwargs is not None:
-            if donate_args is None:
-                dargs = (False,) * len(args)
-            elif isinstance(donate_args, bool):
-                dargs = (donate_args,) * len(args)
-            elif not isinstance(donate_args, tuple):
-                dargs = tuple(donate_args)
-            else:
-                dargs = donate_args
-
-            if len(dargs) < len(args):
-                dargs = dargs + (False,) * (len(args) - len(dargs))
-
-            if len(dargs) != len(args):
-                raise ValueError(f"Expected {len(args)} donate_args, got {len(dargs)}")
-
-            dkwargs = donate_kwargs or {k: False for k in kwargs}
-            dkwargs = {k: dkwargs.get(k, False) for k in kwargs}
-            dynamic_donated, dynamic_reserved = eqx.partition(dynamic, (False, (dargs, dkwargs)))
-        else:
-            dynamic_donated = jax.tree_util.tree_map(lambda _: None, dynamic)
-            dynamic_reserved = dynamic
-
-        static = (static_fun, static_argspec)
-
-        if axis_resources is not None:
-            cmanager = axis_mapping(axis_resources)
-        else:
-            cmanager = contextlib.nullcontext()
-
-        with cmanager:
-            output_shape = _cached_filter_eval_shape(fn, *args, **kwargs)
-            # TODO: with new jax.Array I shouldn't have to specify shardings, but I do for now
-            #  https://github.com/google/jax/issues/15600
-            # we don't really need in_shardings though
-            my_pjit_args = dict(**pjit_args)
-
-            if in_axis_resources is not None or axis_resources is not None:
-                if in_axis_resources is None:
-                    in_axis_resources = axis_resources
-                in_resources = infer_resource_partitions(
-                    (dynamic_donated, dynamic_reserved),
-                    in_axis_resources,
-                    preserve_existing_shardings=in_axis_resources is None,
-                )
-                my_pjit_args["in_shardings"] = in_resources
-
-            if out_axis_resources is not None:
-                # TODO: when AUTO is fixed (or eval_shape can give shardings), use it here
-                out_resources = infer_resource_partitions(output_shape, out_axis_resources, use_auto_sharding=False)
-                my_pjit_args["out_shardings"] = out_resources
-
-            cached_pjitted_fun = _named_pjit_cache(fn, **my_pjit_args)
-            out, out_static = cached_pjitted_fun(dynamic_donated, dynamic_reserved, static)
-            out = hashable_combine(out, out_static.value)
-
-            return out
-
-    return f
+    return module_update_wrapper(wrapper, fn)  # type: ignore
 
 
 @typing.overload
@@ -390,7 +448,7 @@ def _fsdp_impl(fn: F, parameter_mapping, compute_mapping):
 # returns. This is useful for conserving memory, but we also have to splice them back in.
 # Also recall that a "pytree" can split into leaves and a "treedef", which can then be reconstructed.
 @compile_cache
-def _named_pjit_cache(fun_names, **jitkwargs):
+def _named_pjit_cache(fun_names, **jitkwargs) -> WrappedCallable:
     def fun_wrapped(dynamic_donated, dynamic_reserved, static):
         dynamic = eqx.combine(dynamic_donated, dynamic_reserved)
         dynamic_fun, dynamic_spec = dynamic

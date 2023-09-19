@@ -38,4 +38,4 @@ class Embedding(eqx.Module):
 
     def resize_embeddings(self, new_size: int, key: Optional[PRNGKeyArray] = None):
         new_weights = resize_axis(self.weight, self.Vocab, new_size, key=key)
-        return dataclasses.replace(self, Vocab=self.Vocab.resize(new_size), weight=new_weights)
+        return dataclasses.replace(self, Vocab=self.Vocab.resize(new_size), weight=new_weights)  # type: ignore

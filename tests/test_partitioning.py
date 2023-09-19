@@ -257,3 +257,26 @@ def test_named_jit_with_donation_nested_pytrees():
         with Mesh(np.array(devices).reshape(-1, 1), (ResourceAxis.DATA, ResourceAxis.MODEL)):
             mod = named_jit(init, donate_args=(True, False))(jnp.zeros((8, 8)), jnp.zeros((8, 16)))
             assert mod.mod.array.sharding.is_fully_replicated
+
+
+def test_jit_lower_doesnt_blow_up():
+    with ((axis_mapping(resource_map))):
+
+        class MyModule(eqx.Module):
+            array: jnp.ndarray
+            array2: jnp.ndarray
+
+        class MyModule2(eqx.Module):
+            mod: MyModule
+            mod2: MyModule
+
+        def init(a1, a2):
+            return MyModule2(MyModule(a1, a2), MyModule(a1, a2))
+
+        devices = jax.devices()
+        with Mesh(np.array(devices).reshape(-1, 1), (ResourceAxis.DATA, ResourceAxis.MODEL)):
+            jit_init = named_jit(init, donate_args=(True, False))
+            lowered = jit_init.lower(jnp.zeros((8, 8)), jnp.zeros((8, 16)))
+            assert lowered
+            lowered.cost_analysis()
+            lowered.as_text()

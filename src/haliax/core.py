@@ -399,7 +399,7 @@ class NamedArray:
             where=where,
         )
 
-    def ptp(self, axis: AxisSelection = None) -> "NamedArray":
+    def ptp(self, axis: Optional[AxisSelection] = None) -> "NamedArray":
         return haliax.ptp(self, axis=axis)
 
     # TODO: implement ravel. Can only do if we either ask for an axis or add ProductAxis or something
