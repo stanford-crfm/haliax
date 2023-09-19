@@ -7,7 +7,7 @@ from typing import Callable, Mapping, Optional, ParamSpec, Sequence, TypeVar, Un
 
 import equinox as eqx
 import jax
-from equinox import Module, module_update_wrapper
+from equinox import module_update_wrapper
 
 # TODO: avoid depending on private Equinox internals.
 from equinox._compile_utils import compile_cache
@@ -220,7 +220,7 @@ class WrappedCallable(typing.Protocol[Args, R]):
         raise NotImplementedError
 
 
-class _NamedJitWrapper(Module):
+class _NamedJitWrapper(eqx.Module):
     _fn: Callable  # [Args, R]
     _dynamic_fun: PyTree
     _static_fun: typing.Any
