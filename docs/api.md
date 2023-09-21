@@ -240,6 +240,7 @@ These are all more or less directly from JAX's NumPy API.
 
 ::: haliax.clip
 ::: haliax.isclose
+::: haliax.top_k
 ::: haliax.trace
 ::: haliax.tril
 ::: haliax.triu

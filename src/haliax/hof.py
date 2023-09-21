@@ -109,11 +109,11 @@ def fold(
     then the initial carry and then any arguments to scan over as a separate curried function call.
 
     Args:
-        :param fn: function to reduce over
-        :param axis: axis to reduce over
-        :param reverse: if True, reduce in reverse
-        :param unroll: unroll the loop by this amount
-        :param is_scanned: a function that takes a leaf of the tree and returns True if it should be scanned over,
+        fn: function to reduce over
+        axis: axis to reduce over
+        reverse: if True, reduce in reverse
+        unroll: unroll the loop by this amount
+        is_scanned: a function that takes a leaf of the tree and returns True if it should be scanned over,
                     False otherwise. Behaves similarly to the `default` argument in filter_jit
 
     Returns:
@@ -189,14 +189,12 @@ def vmap(
     useful for initializing modules that will be scanned over. See [haliax.nn.Stacked][] for an example.
 
     Args:
-        fn: function to vmap over
-        axis: axis to vmap over
+        fn (Callable): function to vmap over
+        axis (Axis): axis to vmap over
         default: how to handle (unnamed) arrays by default. Should be either an integer or None, or a callable that takes a PyTree leaf
             and returns an integer or None, or a PyTree prefix of the same. If an integer, the array will be mapped over that axis. If None, the array will not be mapped over.
         args: optional per-argument overrides for how to handle arrays. Should be a PyTree prefix of the same type as default.
         kwargs: optional per-keyword-argument overrides for how to handle arrays. Should be a PyTree prefix of the same type as default.
-        out: optional override for how to handle the output. Should be a PyTree prefix of the same type as default. Defaults
-            to 0 if the output is an unnamed array, and the Axis otherwise.
     """
 
     if kwargs is None:

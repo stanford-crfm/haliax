@@ -1,6 +1,7 @@
 from typing import Optional
 
 import equinox as eqx
+from jaxtyping import PRNGKeyArray
 
 import haliax as hax
 
@@ -36,7 +37,7 @@ class Linear(eqx.Module):
         return Linear(weight, bias, In, Out)
 
     @named_call
-    def __call__(self, inputs, *, key=None):
+    def __call__(self, inputs, *, key: Optional[PRNGKeyArray] = None):
         """
         Args:
             inputs (NamedArray): Input array
