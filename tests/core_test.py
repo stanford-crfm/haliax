@@ -265,18 +265,18 @@ def test_take_overlapping_2():
 
     loss = cross_entropy(logits, labels)
     assert loss.axes == (Batch, Block)
-    assert jnp.alltrue(loss.array == jnp.take_along_axis(logits.array, labels.array[..., None], axis=-1)[..., 0])
+    assert jnp.all(loss.array == jnp.take_along_axis(logits.array, labels.array[..., None], axis=-1)[..., 0])
 
     logits = hax.random.uniform(PRNGKey(0), (Batch, Embed, Block))
 
     loss = cross_entropy(logits, labels)
     assert loss.axes == (Batch, Block)
-    assert jnp.alltrue(loss.array == jnp.take_along_axis(logits.array, labels.array[..., None, :], axis=-2)[..., 0, :])
+    assert jnp.all(loss.array == jnp.take_along_axis(logits.array, labels.array[..., None, :], axis=-2)[..., 0, :])
 
     index = hax.random.randint(PRNGKey(0), (Block, Batch), 0, Embed.size)
     loss = cross_entropy(logits, index)
     assert loss.axes == (Batch, Block)
-    assert jnp.alltrue(
+    assert jnp.all(
         loss.array == jnp.take_along_axis(logits.array, index.array.transpose()[..., None, :], axis=-2)[..., 0, :]
     )
 
@@ -662,17 +662,17 @@ def test_slice_old_style():
 
     named1 = hax.random.randint(PRNGKey(0), (H, W, D), minval=0, maxval=10)
 
-    assert jnp.alltrue(named1.slice("H", start=4, length=2).array == named1.array[4:6, :, :])
-    assert jnp.alltrue(named1.slice("W", start=4, length=2).array == named1.array[:, 4:6, :])
-    assert jnp.alltrue(named1.slice("D", start=4, length=2).array == named1.array[:, :, 4:6])
+    assert jnp.all(named1.slice("H", start=4, length=2).array == named1.array[4:6, :, :])
+    assert jnp.all(named1.slice("W", start=4, length=2).array == named1.array[:, 4:6, :])
+    assert jnp.all(named1.slice("D", start=4, length=2).array == named1.array[:, :, 4:6])
 
     H2 = Axis("H2", 5)
     W2 = Axis("W2", 10)
     D2 = Axis("D2", 15)
 
-    assert jnp.alltrue(named1.slice("H", H2, start=4).array == named1.array[4 : 4 + H2.size, :, :])
-    assert jnp.alltrue(named1.slice("W", W2, start=4).array == named1.array[:, 4 : 4 + W2.size, :])
-    assert jnp.alltrue(named1.slice("D", D2, start=4).array == named1.array[:, :, 4 : 4 + D2.size])
+    assert jnp.all(named1.slice("H", H2, start=4).array == named1.array[4 : 4 + H2.size, :, :])
+    assert jnp.all(named1.slice("W", W2, start=4).array == named1.array[:, 4 : 4 + W2.size, :])
+    assert jnp.all(named1.slice("D", D2, start=4).array == named1.array[:, :, 4 : 4 + D2.size])
 
 
 def test_slice_new_style():
@@ -683,7 +683,7 @@ def test_slice_new_style():
     named1 = hax.random.randint(PRNGKey(0), (H, W, D), minval=0, maxval=10)
 
     x1 = named1.slice({"H": 4, "W": 5, "D": 7}, length={"H": 2, "W": 3, "D": 4})
-    assert jnp.alltrue(x1.array == named1.array[4:6, 5:8, 7:11])
+    assert jnp.all(x1.array == named1.array[4:6, 5:8, 7:11])
 
     with pytest.raises(TypeError):
         named1.slice({"H": 4, "W": 5, "D": 7}, length={"H": 2, "W": 3, "D": 4}, start={"H": 1, "W": 2, "D": 3})
@@ -696,7 +696,7 @@ def test_slice_new_style():
     D2 = Axis("D2", 15)
 
     x2 = named1.slice({"H": 4, "W": 5, "D": 7}, length={"H": H2, "W": W2, "D": D2})
-    assert jnp.alltrue(x2.array == named1.array[4 : 4 + H2.size, 5 : 5 + W2.size, 7 : 7 + D2.size])
+    assert jnp.all(x2.array == named1.array[4 : 4 + H2.size, 5 : 5 + W2.size, 7 : 7 + D2.size])
 
 
 def test_updated_slice():
@@ -714,16 +714,16 @@ def test_updated_slice():
     named1_updated = named1.updated_slice({"H": 0, "W": 0, "D": 0}, named2)
 
     assert named1_updated.axes == named1.axes
-    assert jnp.alltrue(named1_updated["H", 0 : H2.size, "W", 0 : W2.size, "D", 0 : D2.size].array == named2.array)
+    assert jnp.all(named1_updated["H", 0 : H2.size, "W", 0 : W2.size, "D", 0 : D2.size].array == named2.array)
 
     # test broadcasting
     for pair in [(H2, D2), (H2, W2), (W2, D2), (D2, H2), (D2, W2), (W2, H2)]:
         n3 = hax.random.randint(PRNGKey(0), pair, minval=10, maxval=30)
         named1_updated = named1.updated_slice({ax.name: 0 for ax in pair}, n3)
         assert named1_updated.axes == named1.axes
-        assert jnp.alltrue((named1_updated[{ax.name: slice(0, ax.size) for ax in pair}] == n3).array)
+        assert jnp.all((named1_updated[{ax.name: slice(0, ax.size) for ax in pair}] == n3).array)
         # check that the array outside the slice is unchanged
-        assert jnp.alltrue(
+        assert jnp.all(
             (
                 named1_updated[{ax.name: slice(ax.size, None) for ax in pair}]
                 == named1[{ax.name: slice(ax.size, None) for ax in pair}]
