@@ -5,7 +5,6 @@ import warnings
 from typing import Optional
 
 import jax
-import jax.numpy as jnp
 import jax.random as jrandom
 
 import haliax
@@ -19,7 +18,7 @@ from .partitioning import auto_sharded, physical_axis_name, physical_axis_size, 
 
 @named_call
 def uniform(
-    key, shape: AxisSpec, dtype=jnp.float_, minval: NamedOrNumeric = 0.0, maxval: NamedOrNumeric = 1.0
+    key, shape: AxisSpec, dtype=float, minval: NamedOrNumeric = 0.0, maxval: NamedOrNumeric = 1.0
 ) -> NamedArray:
     shape = ensure_tuple(shape)
     minval = broadcast_to(minval, shape).array
@@ -30,7 +29,7 @@ def uniform(
 
 
 @named_call
-def normal(key, shape: AxisSpec, dtype=jnp.float_):
+def normal(key, shape: AxisSpec, dtype=float):
     shape = ensure_tuple(shape)
     jax_shape = _to_jax_shape(shape)
     jax_array = jrandom.normal(key=key, shape=jax_shape, dtype=dtype)
@@ -47,7 +46,7 @@ def bernoulli(key, shape: AxisSpec, p: NamedOrNumeric):
 
 
 @named_call
-def randint(key, shape: AxisSpec, minval: NamedOrNumeric, maxval: NamedOrNumeric, dtype=jnp.int_):
+def randint(key, shape: AxisSpec, minval: NamedOrNumeric, maxval: NamedOrNumeric, dtype=int):
     shape = ensure_tuple(shape)
     minval = broadcast_to(minval, shape).array
     maxval = broadcast_to(maxval, shape).array
@@ -57,7 +56,7 @@ def randint(key, shape: AxisSpec, minval: NamedOrNumeric, maxval: NamedOrNumeric
 
 
 @named_call
-def poisson(key, shape: AxisSpec, lam: NamedOrNumeric, dtype=jnp.int_):
+def poisson(key, shape: AxisSpec, lam: NamedOrNumeric, dtype=int):
     shape = ensure_tuple(shape)
     lam = broadcast_to(lam, shape).array
     jax_shape = _to_jax_shape(shape)
@@ -66,7 +65,7 @@ def poisson(key, shape: AxisSpec, lam: NamedOrNumeric, dtype=jnp.int_):
 
 
 @named_call
-def exponential(key, shape: AxisSpec, dtype=jnp.float_):
+def exponential(key, shape: AxisSpec, dtype=float):
     shape = ensure_tuple(shape)
     jax_shape = _to_jax_shape(shape)
     jax_array = jrandom.exponential(key=key, shape=jax_shape, dtype=dtype)
@@ -74,7 +73,7 @@ def exponential(key, shape: AxisSpec, dtype=jnp.float_):
 
 
 @named_call
-def gamma(key, shape: AxisSpec, a: NamedOrNumeric, dtype=jnp.float_):
+def gamma(key, shape: AxisSpec, a: NamedOrNumeric, dtype=float):
     shape = ensure_tuple(shape)
     a = broadcast_to(a, shape).array
     jax_shape = _to_jax_shape(shape)
@@ -83,7 +82,7 @@ def gamma(key, shape: AxisSpec, a: NamedOrNumeric, dtype=jnp.float_):
 
 
 @named_call
-def beta(key, shape: AxisSpec, a: NamedOrNumeric, b: NamedOrNumeric, dtype=jnp.float_):
+def beta(key, shape: AxisSpec, a: NamedOrNumeric, b: NamedOrNumeric, dtype=float):
     shape = ensure_tuple(shape)
     a = broadcast_to(a, shape).array
     b = broadcast_to(b, shape).array
@@ -93,7 +92,7 @@ def beta(key, shape: AxisSpec, a: NamedOrNumeric, b: NamedOrNumeric, dtype=jnp.f
 
 
 @named_call
-def laplace(key, shape: AxisSpec, dtype=jnp.float_):
+def laplace(key, shape: AxisSpec, dtype=float):
     shape = ensure_tuple(shape)
     jax_shape = _to_jax_shape(shape)
     jax_array = jrandom.laplace(key=key, shape=jax_shape, dtype=dtype)
@@ -101,7 +100,7 @@ def laplace(key, shape: AxisSpec, dtype=jnp.float_):
 
 
 @named_call
-def cauchy(key, shape: AxisSpec, dtype=jnp.float_):
+def cauchy(key, shape: AxisSpec, dtype=float):
     shape = ensure_tuple(shape)
     jax_shape = _to_jax_shape(shape)
     jax_array = jrandom.cauchy(key=key, shape=jax_shape, dtype=dtype)
@@ -109,7 +108,7 @@ def cauchy(key, shape: AxisSpec, dtype=jnp.float_):
 
 
 @named_call
-def logistic(key, shape: AxisSpec, dtype=jnp.float_):
+def logistic(key, shape: AxisSpec, dtype=float):
     shape = ensure_tuple(shape)
     jax_shape = _to_jax_shape(shape)
     jax_array = jrandom.logistic(key=key, shape=jax_shape, dtype=dtype)
@@ -117,7 +116,7 @@ def logistic(key, shape: AxisSpec, dtype=jnp.float_):
 
 
 @named_call
-def truncated_normal(key, shape: AxisSpec, lower: NamedOrNumeric, upper: NamedOrNumeric, dtype=jnp.float_):
+def truncated_normal(key, shape: AxisSpec, lower: NamedOrNumeric, upper: NamedOrNumeric, dtype=float):
     shape = ensure_tuple(shape)
     lower = broadcast_to(lower, shape).array
     upper = broadcast_to(upper, shape).array
@@ -200,7 +199,7 @@ def generate_sharded(fn, axis: Optional[AxisSelector] = None):
 
 
 @named_call
-def ball(key, shape: AxisSpec, D: Axis, p: float = 2.0, dtype=jnp.float_):
+def ball(key, shape: AxisSpec, D: Axis, p: float = 2.0, dtype=float):
     shape = ensure_tuple(shape)
     jax_shape = _to_jax_shape(shape)
     jax_array = jrandom.ball(key=key, shape=jax_shape, d=D.size, p=p, dtype=dtype)
@@ -272,7 +271,7 @@ def categorical(key, logits: NamedArray, axis: AxisSelector, shape: Optional[Axi
 
 
 @named_call
-def gumbel(key, shape: AxisSpec, dtype=jnp.float_):
+def gumbel(key, shape: AxisSpec, dtype=float):
     shape = ensure_tuple(shape)
     jax_shape = _to_jax_shape(shape)
     jax_array = jrandom.gumbel(key, jax_shape, dtype=dtype)
@@ -287,7 +286,7 @@ def permutation(key, x: NamedArray, axis: AxisSelector, independent: bool = Fals
 
 
 @named_call
-def rademacher(key, shape: AxisSpec, dtype=jnp.float_):
+def rademacher(key, shape: AxisSpec, dtype=float):
     shape = ensure_tuple(shape)
     jax_shape = _to_jax_shape(shape)
     jax_array = jrandom.rademacher(key, jax_shape, dtype=dtype)
@@ -295,7 +294,7 @@ def rademacher(key, shape: AxisSpec, dtype=jnp.float_):
 
 
 @named_call
-def t(key, shape: AxisSpec, df: NamedOrNumeric, dtype=jnp.float_):
+def t(key, shape: AxisSpec, df: NamedOrNumeric, dtype=float):
     shape = ensure_tuple(shape)
     df = broadcast_to(df, shape)
     jax_shape = _to_jax_shape(shape)
@@ -304,7 +303,7 @@ def t(key, shape: AxisSpec, df: NamedOrNumeric, dtype=jnp.float_):
 
 
 @named_call
-def weibull_min(key, shape: AxisSpec, scale: NamedOrNumeric, concentration: NamedOrNumeric, dtype=jnp.float_):
+def weibull_min(key, shape: AxisSpec, scale: NamedOrNumeric, concentration: NamedOrNumeric, dtype=float):
     shape = ensure_tuple(shape)
     scale = broadcast_to(scale, shape)
     concentration = broadcast_to(concentration, shape)
@@ -314,7 +313,7 @@ def weibull_min(key, shape: AxisSpec, scale: NamedOrNumeric, concentration: Name
 
 
 @named_call
-def pareto(key, shape: AxisSpec, b: NamedOrNumeric, dtype=jnp.float_):
+def pareto(key, shape: AxisSpec, b: NamedOrNumeric, dtype=float):
     shape = ensure_tuple(shape)
     b = broadcast_to(b, shape)
     jax_shape = _to_jax_shape(shape)
@@ -323,7 +322,7 @@ def pareto(key, shape: AxisSpec, b: NamedOrNumeric, dtype=jnp.float_):
 
 
 @named_call
-def loggamma(key, shape: AxisSpec, a: NamedOrNumeric, dtype=jnp.float_):
+def loggamma(key, shape: AxisSpec, a: NamedOrNumeric, dtype=float):
     shape = ensure_tuple(shape)
     a = broadcast_to(a, shape)
     jax_shape = _to_jax_shape(shape)
