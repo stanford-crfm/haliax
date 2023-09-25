@@ -1,6 +1,17 @@
 <!--haliax-intro-start-->
 # Haliax
 
+<a href="https://github.com/stanford-crfm/haliax/actions?query=branch%3Amain++">
+    <img alt="Build Status" src="https://img.shields.io/github/actions/workflow/status/stanford-crfm/haliax/run_tests.yaml?branch=main">
+</a>
+<a href="https://haliax.readthedocs.io/en/latest/?badge=latest">
+    <img alt="Documentation Status" src="https://readthedocs.org/projects/haliax/badge/?version=latest">
+</a>
+<img alt="License" src="https://img.shields.io/github/license/stanford-crfm/haliax?color=blue" />
+<a href="https://https://pypi.org/project/haliax/">
+    <img alt="PyPI" src="https://img.shields.io/pypi/v/haliax?color=blue" />
+</a>
+
 > *Though you don’t seem to be much for listening, it’s best to be careful. If you managed to catch hold of even just a piece of my name, you’d have all manner of power over me.*<br/>
 > — Patrick Rothfuss, *The Name of the Wind*
 
@@ -87,6 +98,10 @@ You can find us in the #levanter channel on the unofficial [Jax LLM Discord](htt
 <!--haliax-intro-end-->
 
 ## Documentation
+
+Haliax's API documentation is available at [haliax.readthedocs.io](https://haliax.readthedocs.io/en/latest/).
+
+### Tutorials
 
 Currently, we have four tutorials for Haliax :
 
