@@ -175,8 +175,13 @@ def infer_resource_partitions(
 
     def partition_spec(node: typing.Any):
         if isinstance(node, NamedArray):
+            # If our NamedArray doesn't have an array (or a shapedtypestruct), we can't shard it
+            # so better to not try
+            if not is_jax_array_like(node.array):
+                return None
+
             if preserve_existing_shardings:
-                current_sharding = getattr(node, "sharding", None)
+                current_sharding = getattr(node.array, "sharding", None)
             else:
                 current_sharding = None
 
@@ -308,7 +313,9 @@ class _NamedJitWrapper(eqx.Module):
 
             if out_axis_resources is not None:
                 # TODO: when AUTO is fixed (or eval_shape can give shardings), use it here
-                out_resources = infer_resource_partitions(output_shape, out_axis_resources, use_auto_sharding=False)
+                out_resources = infer_resource_partitions(
+                    output_shape, out_axis_resources, preserve_existing_shardings=False, use_auto_sharding=False
+                )
                 my_pjit_args["out_shardings"] = out_resources
 
             cached_pjitted_fun = _named_pjit_cache(self._fn, **my_pjit_args)

@@ -32,7 +32,7 @@ def test_infer_named_axes():
     with axis_mapping(resource_map), mesh:
         mod = MyModule(named=hax.ones((Dim1, Dim2, Dim3)), unnamed1=jnp.ones(Dim2.size), static_field=1)
 
-        axes: MyModule = infer_resource_partitions(mod)
+        axes: MyModule = infer_resource_partitions(mod, preserve_existing_shardings=False)
 
         spec = PartitionSpec(None, ResourceAxis.DATA, ResourceAxis.MODEL)
 
