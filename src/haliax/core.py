@@ -1212,7 +1212,7 @@ def ravel(array: NamedArray, new_axis_name: AxisSelector) -> NamedArray:
 
 def flatten(array: NamedArray, new_axis_name: AxisSelector) -> NamedArray:
     """
-    Returns a flattened view of the array, with all axes merged into one. Aliax for [ravel][]
+    Returns a flattened view of the array, with all axes merged into one. Aliax for [haliax.ravel][]
     """
     return ravel(array, new_axis_name)
 

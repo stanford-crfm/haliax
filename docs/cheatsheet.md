@@ -61,13 +61,13 @@ ind = hax.arange(Axis("Index", 8), dtype=jnp.int32)
 
 ## Array Manipulation
 
-| JAX                                                | Haliax                                                                  |
-|----------------------------------------------------|-------------------------------------------------------------------------|
-| [`jnp.ravel(x)`][jax.numpy.ravel]                  | [`hax.ravel(x, "Embed")`][haliax.flatten]                               |
-| [`jnp.ravel(x)`][jax.numpy.flatten]                | [`hax.flatten(x, "Embed")`][haliax.flatten]                             |
+| JAX                                              | Haliax                                                                  |
+|--------------------------------------------------|-------------------------------------------------------------------------|
+| [`jnp.ravel(x)`][jax.numpy.ravel]                | [`hax.ravel(x, "Embed")`][haliax.flatten]                               |
+| [`jnp.ravel(x)`][jax.numpy.ravel]                | [`hax.flatten(x, "Embed")`][haliax.flatten]                             |
 | [`jnp.reshape(x, (2, 16, 64))`][jax.numpy.reshape] | [`hax.unflatten_axis(x, "batch", (Step, Mini)`][haliax.unflatten_axis]  |
-| [`jnp.reshape(x, (-1,))`][jax.numpy.reshape]       | [`hax.flatten_axes(x, ("batch", "embed"), "foo")`][haliax.flatten_axes] |
-| [`jnp.transpose(x, (1, 0))`][jax.numpy.transpose]  | [`hax.rearrange(x, ("embed", "batch"))`][haliax.rearrange]              |
+| [`jnp.reshape(x, (-1,))`][jax.numpy.reshape]     | [`hax.flatten_axes(x, ("batch", "embed"), "foo")`][haliax.flatten_axes] |
+| [`jnp.transpose(x, (1, 0))`][jax.numpy.transpose] | [`hax.rearrange(x, ("embed", "batch"))`][haliax.rearrange]              |
 
 
 ### Broadcasting
