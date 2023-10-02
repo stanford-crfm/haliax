@@ -85,3 +85,4 @@ nav:
   - Partitioning: 'partitioning.md'
   - Higher Order Functions: 'hof.md'
   - API Reference: 'api.md'
+  - FAQ: 'faq.md'
