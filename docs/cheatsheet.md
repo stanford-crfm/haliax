@@ -17,6 +17,9 @@ import haliax as hax
 Batch = hax.Axis("batch", 32)
 Embed = hax.Axis("embed", 64)
 
+Step = hax.axis("step", 2)
+Mini = hax.axis("mini", 16)
+
 # for jax
 x = jnp.zeros((32, 64))
 y = jnp.zeros((32, 64))
@@ -44,6 +47,8 @@ ind = hax.arange(Axis("Index", 8), dtype=jnp.int32)
 | [`jnp.eye(32)`][jax.numpy.eye]                 | ❌                                              |
 | [`jnp.arange(32)`][jax.numpy.arange]           | [`hax.arange(Batch)`][haliax.arange]           |
 | [`jnp.linspace(0, 1, 32)`][jax.numpy.linspace] | [`hax.linspace(Batch, 0, 1)`][haliax.linspace] |
+| [`jnp.logspace(0, 1, 32)`][jax.numpy.logspace] | [`hax.logspace(Batch, 0, 1)`][haliax.logspace] |
+| [`jnp.geomspace(0, 1, 32)`][jax.numpy.geomspace] | [`hax.geomspace(Batch, 0, 1)`][haliax.geomspace] |
 
 ### Combining Arrays
 
@@ -55,6 +60,15 @@ ind = hax.arange(Axis("Index", 8), dtype=jnp.int32)
 | [`jnp.vstack([x, y])`][jax.numpy.vstack]           | [`hax.concatenate("batch", [x, y])`][haliax.concatenate] |
 
 ## Array Manipulation
+
+| JAX                                                | Haliax                                                                  |
+|----------------------------------------------------|-------------------------------------------------------------------------|
+| [`jnp.flatten(x)`][jax.numpy.flatten]              | [`hax.flatten(x, "Embed")`][haliax.flatten]                             |
+| [`jnp.ravel(x)`][jax.numpy.ravel]                  | [`hax.ravel(x, "Embed")`][haliax.flatten]                               |
+| [`jnp.reshape(x, (2, 16, 64))`][jax.numpy.reshape] | [`hax.unflatten_axis(x, "batch", (Step, Mini)`][haliax.unflatten_axis]  |
+| [`jnp.reshape(x, (-1,))`][jax.numpy.reshape]       | [`hax.flatten_axes(x, ("batch", "embed"), "foo")`][haliax.flatten_axes] |
+| [`jnp.transpose(x, (1, 0))`][jax.numpy.transpose]  | [`hax.rearrange(x, ("embed", "batch"))`][haliax.rearrange]              |
+
 
 ### Broadcasting
 
