@@ -20,6 +20,7 @@ from .core import (
     broadcast_to,
     dot,
     enable_shape_checks,
+    flatten,
     flatten_axes,
     index,
     named,
@@ -980,4 +981,6 @@ __all__ = [
     "concat_axes",
     "concat_axis_specs",
     "top_k",
+    "ravel",
+    "flatten",
 ]

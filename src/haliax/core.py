@@ -233,6 +233,9 @@ class NamedArray:
     def ravel(self, new_axis_name: AxisSelector) -> "NamedArray":
         return haliax.ravel(self, new_axis_name=new_axis_name)
 
+    def flatten(self, new_axis_name: AxisSelector) -> "NamedArray":
+        return haliax.flatten(self, new_axis_name=new_axis_name)
+
     def unbind(self, axis: AxisSelector) -> Sequence["NamedArray"]:
         return haliax.unbind(self, axis=axis)
 
@@ -401,10 +404,6 @@ class NamedArray:
 
     def ptp(self, axis: Optional[AxisSelection] = None) -> "NamedArray":
         return haliax.ptp(self, axis=axis)
-
-    # TODO: implement ravel. Can only do if we either ask for an axis or add ProductAxis or something
-    # def ravel(self, order='C') -> Any:
-    #     ...
 
     @property
     def real(self) -> "NamedArray":
@@ -1211,6 +1210,13 @@ def ravel(array: NamedArray, new_axis_name: AxisSelector) -> NamedArray:
     return flattened
 
 
+def flatten(array: NamedArray, new_axis_name: AxisSelector) -> NamedArray:
+    """
+    Returns a flattened view of the array, with all axes merged into one. Aliax for [ravel][]
+    """
+    return ravel(array, new_axis_name)
+
+
 def named(a: jnp.ndarray, axis: AxisSelection) -> NamedArray:
     """Creates a NamedArray from a numpy array and a list of axes."""
     axes = check_shape(a.shape, axis)
@@ -1484,6 +1490,7 @@ __all__ = [
     "flatten_axes",
     "unflatten_axis",
     "ravel",
+    "flatten",
     "unbind",
     "roll",
     "_broadcast_order",

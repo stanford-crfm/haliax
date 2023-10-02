@@ -77,11 +77,13 @@ See also the section on [Indexing and Slicing](indexing.md).
 
 ### Shape Manipulation
 
+::: haliax.flatten
 ::: haliax.flatten_axes
 ::: haliax.rearrange
 ::: haliax.unbind
 ::: haliax.unflatten_axis
 ::: haliax.split
+::: haliax.ravel
 
 
 ## Operations
