@@ -7,6 +7,8 @@ import jax
 import numpy as np
 from jaxtyping import PRNGKeyArray
 
+import haliax.partitioning
+
 from ..axis import Axis, AxisSelection, axis_name, replace_axis, selects_axis
 from ..core import NamedArray, named
 from ..jax_utils import named_call
@@ -122,28 +124,51 @@ class Conv(eqx.Module):
         # and has the right set of dimensions
 
         # Constraints:
-        # * at most 1 batch dimension (we'll reshape as necessary)
+        # * at most 1 batch dimension (we'll vmap as necessary)
         # * at most 1 channel dimension (which we enforce for this module)
-        initial_axes = inputs.axes
 
-        # first, identify batch dims
+        # Spatial dimensions are reduced via the usual convolution formula, so we have to drop to names
+        output_axes = [ax.name for ax in replace_axis(inputs.axes, self.In, self.Out)]
+
+        # identify batch dims, which get special treatment
+        # jax's conv_general_dilated only supports exactly one batch dimension (not 0), so we vmap over any others.
+        # We could choose instead to flatten them, but then we'd definitely lose sharding.
         batch_dims = [ax for ax in inputs.axes if ax.name not in self.Spatial and ax.name != self.In.name]
-        if len(batch_dims) > 1:
-            # TODO: I suspect it's a better idea to vmap over the extra batch dims so we don't lose sharding
-            inputs = inputs.flatten_axes(batch_dims, "__batch__")
-            batch_index = _index_of_name(inputs.axes, "__batch__")
-        elif len(batch_dims) == 1:
+        output_axes_without_vmapped_dims = output_axes.copy()
+
+        op = self._do_conv
+
+        # We want to prioritize vmapping over *sharded* batch dimensions (TODO: make sure this is correct)
+        # TODO: I think we may need to do shard_map or something to make sure we don't lose sharding
+        sharded_batch_dims = [ax for ax in batch_dims if haliax.partitioning.physical_axis_name(ax) is not None]
+        while len(sharded_batch_dims) > 1:
+            dim = sharded_batch_dims.pop()
+            batch_dims.remove(dim)
+            output_axes_without_vmapped_dims.remove(dim.name)
+            op = haliax.vmap(op, axis=dim.name)
+
+        while len(batch_dims) > 1:
+            dim = batch_dims.pop()
+            output_axes_without_vmapped_dims.remove(dim.name)
+            op = haliax.vmap(op, axis=dim.name)
+
+        x = op(inputs, output_axes_without_vmapped_dims)
+        return x.rearrange(output_axes)
+
+    def _do_conv(self, inputs, output_axes):
+        batch_dims = [ax for ax in inputs.axes if ax.name not in self.Spatial and ax.name != self.In.name]
+
+        if len(batch_dims) == 1:
             batch_index = inputs.axes.index(batch_dims[0])
         else:
+            assert len(batch_dims) == 0
             # there must be a batch dimension, even if it's size 1
             inputs = inputs.broadcast_axis(Axis("__batch__", 1))
             batch_index = 0
-        # the dim spec are single letters, for things like NCHW
-        lhs_dim_spec = self._lhs_dim_spec(batch_index, inputs)
 
+        lhs_dim_spec = self._lhs_dim_spec(batch_index, inputs)
         rhs_dim_spec = "OI" + self._spatial_dim_short_names
         output_dim_spec = lhs_dim_spec
-
         x = jax.lax.conv_general_dilated(
             lhs=inputs.array,
             rhs=self.weight.array,
@@ -154,19 +179,17 @@ class Conv(eqx.Module):
             dimension_numbers=(lhs_dim_spec, rhs_dim_spec, output_dim_spec),
         )
 
-        # Spatial dimensions are reduced via the usual convolution formula, so we have to drop to names
-        x = named(x, [ax.name for ax in replace_axis(inputs.axes, self.In, self.Out)])
+        if len(batch_dims) == 0:
+            x = x.squeeze(0)
 
-        if len(batch_dims) != 1:
-            x = x.unflatten_axis("__batch__", batch_dims)
-            x = x.rearrange(replace_axis(initial_axes, self.In, self.Out))
-
+        x = named(x, output_axes)
         if self.bias is not None:
             x = x + self.bias
 
         return x
 
     def _lhs_dim_spec(self, batch_index, inputs):
+        # the dim spec are single letters, for things like NCHW
         lhs_dim_spec = ""
         for i, ax in enumerate(inputs.axes):
             if i == batch_index:
