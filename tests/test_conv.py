@@ -40,3 +40,14 @@ def test_conv_basic_equiv_to_eqx():
 
     assert hax_output.array.shape == eqx_output.shape
     assert jnp.allclose(hax_output.array, eqx_output)
+
+    # test multibatch
+    input = hax.random.normal(
+        jax.random.PRNGKey(1),
+        (hax.Axis("Batch", 2), hax.Axis("Batch2", 3), In, hax.Axis("Height", 5), hax.Axis("Width", 6)),
+    )
+    hax_output = hax_conv(input)
+    eqx_output = eqx.filter_vmap(eqx.filter_vmap(eqx_conv))(input.array)
+
+    assert hax_output.array.shape == eqx_output.shape
+    assert jnp.allclose(hax_output.array, eqx_output)
