@@ -1,0 +1,238 @@
+import string
+from functools import cached_property
+from typing import Optional, Sequence, TypeVar
+
+import equinox as eqx
+import jax
+import numpy as np
+from jaxtyping import PRNGKeyArray
+
+from ..axis import Axis, AxisSelection, axis_name, replace_axis
+from ..core import NamedArray, named
+from ..jax_utils import named_call
+from ..random import uniform
+from ..util import ensure_tuple
+
+
+T = TypeVar("T")
+
+
+# Based on Equinox's Conv class
+class Conv(eqx.Module):
+    """General N-dimensional convolution."""
+
+    Spatial: tuple[str | Axis, ...] = eqx.field(static=True)
+    In: Axis = eqx.field(static=True)
+    Out: Axis = eqx.field(static=True)
+    weight: NamedArray
+    bias: Optional[NamedArray]
+    kernel_size: tuple[int, ...] = eqx.field(static=True)
+    stride: tuple[int, ...] = eqx.field(static=True)
+    padding: tuple[tuple[int, int], ...] = eqx.field(static=True)
+    dilation: tuple[int, ...] = eqx.field(static=True)
+    groups: int = eqx.field(static=True)
+
+    @staticmethod
+    def init(
+        Spatial: AxisSelection,
+        In: Axis,
+        Out: Axis,
+        kernel_size: int | Sequence[int],
+        stride: int | Sequence[int] = 1,
+        padding: int | Sequence[int] | Sequence[tuple[int, int]] = 0,
+        dilation: int | Sequence[int] = 1,
+        groups: int = 1,
+        use_bias: bool = True,
+        *,
+        key: PRNGKeyArray,
+    ):
+        """
+        Args:
+            Spatial: names of spatial dimensions
+            In: Axis of input channels
+            Out: Axis of output channels
+            kernel_size: The size of the convolutional kernel.
+            stride: The stride of the convolution.
+            padding: The amount of padding to apply before and after each spatial
+              dimension.
+            dilation: The dilation of the convolution.
+            groups: The number of input channel groups. At groups=1,
+              all input channels contribute to all output channels. Values
+              higher than 1 are equivalent to running groups independent
+              Conv operations side-by-side, each having access only to
+              in_channels // groups input channels, and
+              concatenating the results along the output channel dimension.
+              in_channels must be divisible by groups.
+            use_bias: Whether to add on a bias after the convolution.
+        """
+        Spatial = ensure_tuple(Spatial)
+        if len(Spatial) == 0:
+            raise ValueError("Spatial must have at least one element")
+
+        kernel_size = _expand_and_check_shape(len(Spatial), kernel_size, "kernel_size")
+        stride = _expand_and_check_shape(len(Spatial), stride, "stride")
+        dilation = _expand_and_check_shape(len(Spatial), dilation, "dilation")
+        padding = _convert_padding_spec(Spatial, padding)
+
+        kernel_spec = tuple(Axis(axis_name(n), s) for n, s in zip(Spatial, kernel_size))
+        in_spec = In.resize(In.size // groups)
+
+        weight_key, bias_key = jax.random.split(key, 2)
+
+        limit = 1 / np.sqrt(np.prod(kernel_size) * in_spec.size)
+
+        weight = uniform(weight_key, (Out, in_spec, *kernel_spec), minval=-limit, maxval=limit)
+        if use_bias:
+            bias = uniform(bias_key, (Out,), minval=-limit, maxval=limit)
+        else:
+            bias = None
+
+        return Conv(
+            Spatial,
+            In,
+            Out,
+            weight,
+            bias,
+            kernel_size,
+            stride,
+            padding,
+            dilation,
+            groups,
+        )
+
+    @named_call
+    def __call__(self, inputs, *, key: Optional[PRNGKeyArray] = None):
+        """
+        Args:
+            inputs (NamedArray): Input array
+            key (PRNGKeyArray: Not used, compat with other modules
+
+        Returns:
+            NamedArray: Output array, with shape similar to inputs except:
+                - `Spatial` dimensions are reduced via the usual convolution formula
+                - `In` is replaced with `Out`
+
+        Notes:
+            That formula is:
+                `out_size = (in_size + 2 * padding - dilation * (kernel_size - 1) - 1) // stride + 1`
+        """
+        del key
+
+        # this is a bit subtle, but we need to make sure that the input is in the right order
+        # and has the right set of dimensions
+
+        # Constraints:
+        # * at most 1 batch dimension (we'll reshape as necessary)
+        # * at most 1 channel dimension (which we enforce for this module)
+        initial_axes = inputs.axes
+
+        # first, identify batch dims
+        batch_dims = [ax for ax in inputs.axes if ax.name not in self.Spatial and ax.name != self.In.name]
+        if len(batch_dims) > 1:
+            inputs = inputs.flatten_axes(batch_dims, "__batch__")
+            batch_index = inputs.axes.index("__batch__")
+        elif len(batch_dims) == 1:
+            batch_index = inputs.axes.index(batch_dims[0])
+        else:
+            # there must be a batch dimension, even if it's size 1
+            inputs = inputs.broadcast_axis(Axis("__batch__", 1))
+            batch_index = 0
+
+        # the dim spec are single letters, for things like NCHW
+        lhs_dim_spec = ""
+        for i, ax in enumerate(inputs.axes):
+            if i == batch_index:
+                lhs_dim_spec += "N"
+            elif ax.name == self.In.name:
+                lhs_dim_spec += "C"
+            else:
+                index_in_spatial = _index_of_name(self.Spatial, ax.name)
+                if index_in_spatial >= 0:
+                    lhs_dim_spec += self._spatial_dim_short_names[index_in_spatial]
+                else:
+                    # shouldn't happen
+                    raise ValueError(f"Unexpected axis {ax.name}")
+
+        rhs_dim_spec = "OI" + self._spatial_dim_short_names
+        output_dim_spec = lhs_dim_spec
+
+        x = jax.lax.conv_general_dilated(
+            lhs=inputs.array,
+            rhs=self.weight.array,
+            window_strides=self.stride,
+            padding=self.padding,
+            rhs_dilation=self.dilation,
+            feature_group_count=self.groups,
+            dimension_numbers=(lhs_dim_spec, rhs_dim_spec, output_dim_spec),
+        )
+
+        # Spatial dimensions are reduced via the usual convolution formula, so we have to drop to names
+        x = named(x, [ax.name for ax in replace_axis(inputs.axes, self.In, self.Out)])
+
+        if len(batch_dims) != 1:
+            x = x.unflatten_axis("__batch__", batch_dims)
+            x = x.rearrange(replace_axis(initial_axes, self.In, self.Out))
+
+        if self.bias is not None:
+            x = x + self.bias
+
+        return x
+
+    @cached_property
+    def _spatial_dim_short_names(self) -> str:
+        banned_letters = "NCIO"
+        spec = ""
+        for x in self.Spatial:
+            name = axis_name(x)
+            assert len(name) > 0
+            if name[0] not in banned_letters and name[0] not in spec:
+                spec += name[0]
+            else:
+                for x in string.ascii_uppercase:
+                    if x not in spec and x not in banned_letters:
+                        spec += x
+                        break
+                else:
+                    raise RuntimeError("Too many spatial dimensions")
+
+        return spec
+
+
+def _expand_and_check_shape(expected_len: int, spec: T | Sequence[T], name: str) -> tuple[T, ...]:
+    spec = ensure_tuple(spec)
+    if len(spec) == 1:
+        spec = spec * expected_len
+    if len(spec) != expected_len:
+        raise ValueError(f"Expected {expected_len} elements for {name}, got {len(spec)}")
+
+    return spec
+
+
+def _convert_padding_spec(Spatial, padding):
+    if isinstance(padding, int):
+        padding = ((padding, padding),) * len(Spatial)
+    elif isinstance(padding, tuple):
+        padding = _expand_and_check_shape(len(Spatial), padding, "padding")
+        padding_spec = []
+        for p in padding:
+            if isinstance(p, int):
+                padding_spec.append((p, p))
+            elif isinstance(p, tuple):
+                padding_spec.append(p)
+            else:
+                raise ValueError(f"Invalid padding spec: {padding}")
+
+        padding = tuple(padding_spec)
+    else:
+        raise ValueError(f"Invalid padding spec: {padding}")
+
+    return padding
+
+
+def _index_of_name(names: Sequence[str | Axis], name) -> int:
+    for i, x in enumerate(names):
+        if isinstance(x, Axis):
+            x = axis_name(x)
+        if x == name:
+            return i
+    return -1
