@@ -7,7 +7,7 @@ import jax
 import numpy as np
 from jaxtyping import PRNGKeyArray
 
-from ..axis import Axis, AxisSelection, axis_name, replace_axis
+from ..axis import Axis, AxisSelection, axis_name, replace_axis, selects_axis
 from ..core import NamedArray, named
 from ..jax_utils import named_call
 from ..random import uniform
@@ -87,18 +87,7 @@ class Conv(eqx.Module):
         else:
             bias = None
 
-        return Conv(
-            Spatial,
-            In,
-            Out,
-            weight,
-            bias,
-            kernel_size,
-            stride,
-            padding,
-            dilation,
-            groups,
-        )
+        return Conv(Spatial, In, Out, weight, bias, kernel_size, stride, padding, dilation, groups)
 
     @named_call
     def __call__(self, inputs, *, key: Optional[PRNGKeyArray] = None):
@@ -118,6 +107,17 @@ class Conv(eqx.Module):
         """
         del key
 
+        # check input
+        for ax in self.Spatial:
+            if not selects_axis(inputs.axes, ax):
+                raise ValueError(f"Missing spatial axis {ax} in inputs: {inputs.axes}")
+
+        if not selects_axis(inputs.axes, self.In):
+            raise ValueError(f"Missing input axis {self.In} in inputs: {inputs.axes}")
+
+        if selects_axis(inputs.axes, self.Out):
+            raise ValueError(f"Output axis {self.Out} already in inputs: {inputs.axes}")
+
         # this is a bit subtle, but we need to make sure that the input is in the right order
         # and has the right set of dimensions
 
@@ -129,29 +129,17 @@ class Conv(eqx.Module):
         # first, identify batch dims
         batch_dims = [ax for ax in inputs.axes if ax.name not in self.Spatial and ax.name != self.In.name]
         if len(batch_dims) > 1:
+            # TODO: I suspect it's a better idea to vmap over the extra batch dims so we don't lose sharding
             inputs = inputs.flatten_axes(batch_dims, "__batch__")
-            batch_index = inputs.axes.index("__batch__")
+            batch_index = _index_of_name(inputs.axes, "__batch__")
         elif len(batch_dims) == 1:
             batch_index = inputs.axes.index(batch_dims[0])
         else:
             # there must be a batch dimension, even if it's size 1
             inputs = inputs.broadcast_axis(Axis("__batch__", 1))
             batch_index = 0
-
         # the dim spec are single letters, for things like NCHW
-        lhs_dim_spec = ""
-        for i, ax in enumerate(inputs.axes):
-            if i == batch_index:
-                lhs_dim_spec += "N"
-            elif ax.name == self.In.name:
-                lhs_dim_spec += "C"
-            else:
-                index_in_spatial = _index_of_name(self.Spatial, ax.name)
-                if index_in_spatial >= 0:
-                    lhs_dim_spec += self._spatial_dim_short_names[index_in_spatial]
-                else:
-                    # shouldn't happen
-                    raise ValueError(f"Unexpected axis {ax.name}")
+        lhs_dim_spec = self._lhs_dim_spec(batch_index, inputs)
 
         rhs_dim_spec = "OI" + self._spatial_dim_short_names
         output_dim_spec = lhs_dim_spec
@@ -177,6 +165,22 @@ class Conv(eqx.Module):
             x = x + self.bias
 
         return x
+
+    def _lhs_dim_spec(self, batch_index, inputs):
+        lhs_dim_spec = ""
+        for i, ax in enumerate(inputs.axes):
+            if i == batch_index:
+                lhs_dim_spec += "N"
+            elif ax.name == self.In.name:
+                lhs_dim_spec += "C"
+            else:
+                index_in_spatial = _index_of_name(self.Spatial, ax.name)
+                if index_in_spatial >= 0:
+                    lhs_dim_spec += self._spatial_dim_short_names[index_in_spatial]
+                else:
+                    # shouldn't happen
+                    raise ValueError(f"Unexpected axis {ax.name}")
+        return lhs_dim_spec
 
     @cached_property
     def _spatial_dim_short_names(self) -> str:
