@@ -190,6 +190,29 @@ def eliminate_axes(axis_spec: AxisSelection, to_remove: AxisSelection) -> AxisSe
     return _dict_to_spec(axis_spec_dict)
 
 
+@typing.overload
+def without_axes(axis_spec: AxisSpec, to_remove: AxisSelection) -> AxisSpec:  # type: ignore
+    ...
+
+
+@typing.overload
+def without_axes(axis_spec: AxisSelection, to_remove: AxisSelection) -> AxisSelection:  # type: ignore
+    """As eliminate_axes, but does not raise if any axis in to_remove is not present in axis_spec"""
+
+
+def without_axes(axis_spec: AxisSelection, to_remove: AxisSelection) -> AxisSelection:  # type: ignore
+    """As eliminate_axes, but does not raise if any axis in to_remove is not present in axis_spec"""
+
+    to_remove = ensure_tuple(to_remove)
+    axis_spec_dict = _spec_to_dict(axis_spec)
+    for ax in to_remove:
+        name = axis_name(ax)
+        if name in axis_spec_dict:
+            del axis_spec_dict[name]
+
+    return _dict_to_spec(axis_spec_dict)
+
+
 @overload
 def replace_axis(axis_spec: AxisSpec, old: AxisSelector, new: AxisSpec) -> AxisSpec:
     ...
