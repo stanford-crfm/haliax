@@ -48,6 +48,15 @@ of the same module (e.g. transformer blocks), which is a common pattern in deep 
 ::: haliax.nn.LayerNorm
 ::: haliax.nn.Stacked
 
+### Convolutional Layers
+
+Unlike other frameworks, Haliax doesn't distinguish between 1D, 2D, and 3D, and general convolutions. Instead, we have
+a single [haliax.nn.Conv][] module that can be used for all of these, depending on the number of axes
+provided. Similarly, for transposed convolutions, we have [haliax.nn.ConvTranspose][].
+
+::: haliax.nn.Conv
+::: haliax.nn.ConvTranspose
+
 ## Attention
 
 We don't provide an explicit attention module, but we do provide an attention function and several related functions:
