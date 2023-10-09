@@ -1005,7 +1005,7 @@ def split(a: NamedArray, axis: AxisSelector, new_axes: Sequence[Axis]) -> Sequen
 # e.g. we'd like something like rearrange(array, (..., new_axis), merge_axes={new_axis: (old_axis1, old_axis2)})
 # or rearrange(array, (new_axis1, ..., new_axis2), split_axes={old_axis: (new_axis1, new_axis2)})
 # or even rearrange(array, (x, ..., b, a), map_axes={old_axis: (a, b), x: (old1, old2)})
-def rearrange(array: NamedArray, axes: Sequence[Union[AxisSelector, EllipsisType]]) -> NamedArray:
+def rearrange(array: NamedArray, axes: Sequence[AxisSelector|EllipsisType]) -> NamedArray:
     """
     Rearrange an array so that its underlying storage conforms to axes.
     axes may include up to 1 ellipsis, indicating that the remaining axes should be
