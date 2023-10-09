@@ -27,9 +27,11 @@ Occasionally, an axis size can be inferred in some circumstances but not others.
 
 ### Axis Manipulation
 
+::: haliax.axis.axis_name
 ::: haliax.axis.concat_axes
 ::: haliax.axis.union_axes
 ::: haliax.axis.eliminate_axes
+::: haliax.axis.without_axes
 ::: haliax.axis.overlapping_axes
 ::: haliax.axis.selects_axis
 ::: haliax.axis.is_axis_compatible

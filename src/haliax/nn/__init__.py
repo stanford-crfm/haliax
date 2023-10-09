@@ -15,6 +15,7 @@ from ..core import NamedArray
 from ..types import Scalar
 from ..util import UNSPECIFIED, Unspecified
 from ..wrap import ReductionFunction, unwrap_namedarrays, wrap_axiswise_call, wrap_elemwise_unary, wrap_reduction_call
+from .conv import Conv, ConvTranspose
 from .dropout import Dropout, dropout
 from .embedding import Embedding
 from .linear import Linear
@@ -220,6 +221,8 @@ __all__ = [
     "cross_entropy_loss",
     "cross_entropy_loss_and_log_normalizers",
     "quick_gelu",
+    "Conv",
+    "ConvTranspose",
     "Dropout",
     "dropout",
     "LayerNorm",

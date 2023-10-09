@@ -117,15 +117,15 @@ def concat_axes(a1: AxisSelection, a2: AxisSelection) -> AxisSelection:
     """Concatenates two AxisSpec. Raises ValueError if any axis is present in both specs"""
 
     if isinstance(a1, Axis) and isinstance(a2, Axis):
-        if _ax_name(a1) == _ax_name(a2):
+        if axis_name(a1) == axis_name(a2):
             raise ValueError(f"Axis {a1} specified twice")
         return (a1, a2)
     else:
         a1 = ensure_tuple(a1)
         a2 = ensure_tuple(a2)
 
-        a1_names = [_ax_name(ax) for ax in a1]
-        a2_names = [_ax_name(ax) for ax in a2]
+        a1_names = [axis_name(ax) for ax in a1]
+        a2_names = [axis_name(ax) for ax in a2]
 
         if len(set(a1_names) & set(a2_names)) > 0:
             overlap = [ax for ax in a1_names if ax in a2_names]
@@ -182,12 +182,57 @@ def eliminate_axes(axis_spec: AxisSelection, to_remove: AxisSelection) -> AxisSe
     to_remove = ensure_tuple(to_remove)
     axis_spec_dict = _spec_to_dict(axis_spec)
     for ax in to_remove:
-        name = _ax_name(ax)
+        name = axis_name(ax)
         if name not in axis_spec_dict:
             raise ValueError(f"Axis {name} not present in axis spec {axis_spec}")
         del axis_spec_dict[name]
 
     return _dict_to_spec(axis_spec_dict)
+
+
+@typing.overload
+def without_axes(axis_spec: AxisSpec, to_remove: AxisSelection) -> AxisSpec:  # type: ignore
+    ...
+
+
+@typing.overload
+def without_axes(axis_spec: AxisSelection, to_remove: AxisSelection) -> AxisSelection:  # type: ignore
+    """As eliminate_axes, but does not raise if any axis in to_remove is not present in axis_spec"""
+
+
+def without_axes(axis_spec: AxisSelection, to_remove: AxisSelection) -> AxisSelection:  # type: ignore
+    """As eliminate_axes, but does not raise if any axis in to_remove is not present in axis_spec"""
+
+    to_remove = ensure_tuple(to_remove)
+    axis_spec_dict = _spec_to_dict(axis_spec)
+    for ax in to_remove:
+        name = axis_name(ax)
+        if name in axis_spec_dict:
+            del axis_spec_dict[name]
+
+    return _dict_to_spec(axis_spec_dict)
+
+
+@overload
+def replace_axis(axis_spec: AxisSpec, old: AxisSelector, new: AxisSpec) -> AxisSpec:
+    ...
+
+
+@overload
+def replace_axis(axis_spec: AxisSelection, old: AxisSelector, new: AxisSelection) -> AxisSelection:
+    ...
+
+
+def replace_axis(axis_spec: AxisSelection, old: AxisSelector, new: AxisSelection) -> AxisSelection:
+    """Returns a new axis spec that is the same as the original, but with any axes in old replaced with new. Raises if old is
+    not present in axis_spec"""
+    axis_spec = ensure_tuple(axis_spec)
+    index_of_old = index_where(lambda ax: is_axis_compatible(ax, old), axis_spec)
+
+    if index_of_old < 0:
+        raise ValueError(f"Axis {old} not present in axis spec {axis_spec}")
+
+    return axis_spec[:index_of_old] + ensure_tuple(new) + axis_spec[index_of_old + 1 :]  # type: ignore
 
 
 @overload
@@ -231,7 +276,10 @@ def overlapping_axes(ax1: AxisSelection, ax2: AxisSelection) -> Tuple[AxisSelect
     return tuple(out)
 
 
-def _ax_name(ax: AxisSelector) -> str:
+def axis_name(ax: AxisSelector) -> str:
+    """
+    Returns the name of the axis. If ax is a string, returns ax. If ax is an Axis, returns ax.name
+    """
     if isinstance(ax, Axis):
         return ax.name
     else:
