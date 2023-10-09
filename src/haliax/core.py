@@ -17,7 +17,7 @@ from haliax.jax_utils import is_jax_array_like
 from haliax.util import ensure_tuple
 
 from ._src.util import index_where, py_slice, slice_t
-from .axis import Axis, AxisSelection, AxisSelector, AxisSpec, eliminate_axes, selects_axis, union_axes
+from .axis import Axis, AxisSelection, AxisSelector, AxisSpec, axis_name, eliminate_axes, selects_axis, union_axes
 from .types import IntScalar, PrecisionLike, Scalar
 
 
@@ -755,7 +755,7 @@ def _slice_new(
     new_lengths = [axis.size for axis in array.axes]
 
     for axis, s in start.items():
-        axis_index = array._lookup_indices(axis.name if isinstance(axis, Axis) else axis)
+        axis_index = array._lookup_indices(axis_name(axis))
         if axis_index is None:
             raise ValueError(f"axis {axis} not found in {array}")
 
@@ -802,12 +802,12 @@ def updated_slice(
 
     array_slice_indices = [0] * len(array.axes)
     for axis, s in start.items():
-        axis_index = array._lookup_indices(axis.name if isinstance(axis, Axis) else axis)
+        axis_index = array._lookup_indices(axis_name(axis))
         if axis_index is None:
             raise ValueError(f"axis {axis} not found in {array}")
         array_slice_indices[axis_index] = s
         total_length = array.axes[axis_index].size
-        update_axis = update._lookup_indices(axis.name if isinstance(axis, Axis) else axis)
+        update_axis = update._lookup_indices(axis_name(axis))
 
         if update_axis is None:
             raise ValueError(f"axis {axis} not found in {update}")

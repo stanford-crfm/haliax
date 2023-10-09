@@ -277,6 +277,9 @@ def overlapping_axes(ax1: AxisSelection, ax2: AxisSelection) -> Tuple[AxisSelect
 
 
 def axis_name(ax: AxisSelector) -> str:
+    """
+    Returns the name of the axis. If ax is a string, returns ax. If ax is an Axis, returns ax.name
+    """
     if isinstance(ax, Axis):
         return ax.name
     else:
