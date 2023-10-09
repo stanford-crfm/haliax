@@ -20,9 +20,15 @@ T = TypeVar("T")
 
 
 class _ConvBase(eqx.Module):
+    """
+    Base class for Conv and ConvTranspose. Mostly just contains shared code.
+    """
+
     Spatial: tuple[str | Axis, ...] = eqx.field(static=True)
     In: Axis = eqx.field(static=True)
     Out: Axis = eqx.field(static=True)
+    weight: NamedArray = eqx.field(static=True)
+    bias: Optional[NamedArray] = eqx.field(static=True)
 
     def _lhs_dim_spec(self, batch_index, inputs):
         # the dim spec are single letters, for things like NCHW
@@ -60,15 +66,32 @@ class _ConvBase(eqx.Module):
 
         return spec
 
+    @cached_property
+    def _weight_dim_spec(self) -> str:
+        # dim spec in format jax.lax.conv_general_dilated expects
+        # it's typically OIWH or similar but in case anyone does something funny with the weight array:
+        # "OI" + self._spatial_dim_short_names
+        spec = ""
+        for ax in self.weight.axes:
+            # check name for grouped convolutions
+            if ax.name == self.In.name:
+                spec += "I"
+            elif ax == self.Out:
+                spec += "O"
+            else:
+                index_in_spatial = _index_of_name(self.Spatial, ax.name)
+                if index_in_spatial >= 0:
+                    spec += self._spatial_dim_short_names[index_in_spatial]
+                else:
+                    # shouldn't happen
+                    raise ValueError(f"Unexpected axis {ax.name}")
+        return spec
+
 
 # Based on Equinox's Conv class
-
-
 class Conv(_ConvBase):
     """General N-dimensional convolution."""
 
-    weight: NamedArray
-    bias: Optional[NamedArray]
     kernel_size: tuple[int, ...] = eqx.field(static=True)
     stride: tuple[int, ...] = eqx.field(static=True)
     padding: tuple[tuple[int, int], ...] = eqx.field(static=True)
@@ -81,12 +104,12 @@ class Conv(_ConvBase):
         In: Axis,
         Out: Axis,
         kernel_size: int | Sequence[int],
+        *,
         stride: int | Sequence[int] = 1,
         padding: int | Sequence[int] | Sequence[tuple[int, int]] = 0,
         dilation: int | Sequence[int] = 1,
         groups: int = 1,
         use_bias: bool = True,
-        *,
         key: PRNGKeyArray,
     ):
         """
@@ -95,18 +118,14 @@ class Conv(_ConvBase):
             In: Axis of input channels
             Out: Axis of output channels
             kernel_size: The size of the convolutional kernel.
-            stride: The stride of the convolution.
+            stride: The stride of the convolution. Can be a single number or a tuple
             padding: The amount of padding to apply before and after each spatial
-              dimension.
+                     dimension.
             dilation: The dilation of the convolution.
-            groups: The number of input channel groups. At groups=1,
-              all input channels contribute to all output channels. Values
-              higher than 1 are equivalent to running groups independent
-              Conv operations side-by-side, each having access only to
-              in_channels // groups input channels, and
-              concatenating the results along the output channel dimension.
-              in_channels must be divisible by groups.
-            use_bias: Whether to add on a bias after the convolution.
+            groups: The number of groups to split the input channels into. Each
+                    group is convolved separately with its own kernel.
+            use_bias: Whether to add a bias after the convolution.
+            key: Random key
         """
         Spatial = ensure_tuple(Spatial)
         if len(Spatial) == 0:
@@ -140,7 +159,7 @@ class Conv(_ConvBase):
             key (PRNGKeyArray: Not used, compat with other modules
 
         Returns:
-            NamedArray: Output array, with shape similar to inputs except:
+            (NamedArray): Output array, with shape similar to inputs except:
                 - `Spatial` dimensions are reduced via the usual convolution formula
                 - `In` is replaced with `Out`
 
@@ -196,7 +215,7 @@ class Conv(_ConvBase):
             batch_index = 0
 
         lhs_dim_spec = self._lhs_dim_spec(batch_index, inputs)
-        rhs_dim_spec = "OI" + self._spatial_dim_short_names
+        rhs_dim_spec = self._weight_dim_spec
         output_dim_spec = lhs_dim_spec
         x = jax.lax.conv_general_dilated(
             lhs=inputs.array,
@@ -221,8 +240,6 @@ class ConvTranspose(_ConvBase):
     Based on Equinox's ConvTranspose class
     """
 
-    weight: NamedArray
-    bias: Optional[NamedArray]
     kernel_size: tuple[int, ...] = eqx.field(static=True)
     stride: tuple[int, ...] = eqx.field(static=True)
     padding: tuple[tuple[int, int], ...] = eqx.field(static=True)
@@ -236,15 +253,34 @@ class ConvTranspose(_ConvBase):
         In: Axis,
         Out: Axis,
         kernel_size: int | Sequence[int],
+        *,
         stride: int | Sequence[int] = 1,
         padding: int | Sequence[int] | Sequence[tuple[int, int]] = 0,
         output_padding: int | Sequence[int] = 0,
         dilation: int | Sequence[int] = 1,
         groups: int = 1,
         use_bias: bool = True,
-        *,
         key: PRNGKeyArray,
     ):
+        """
+
+        Args:
+            Spatial: Spatial dimensions
+            In:  Input channels
+            Out:  Output channels
+            kernel_size: Kernel size, can be a single number or a tuple
+            stride: Stride, can be a single number or a tuple
+            padding: Padding, can be a single number or a tuple
+            output_padding: Output padding, can be a single number or a tuple
+            dilation: Dilation, can be a single number or a tuple
+            groups: Number of groups to split the input channels into
+            use_bias:  Whether to add on a bias after the convolution
+            key:  Random key
+
+        Notes:
+            Output padding is the amount of extra padding to add to the output.
+            Because the output size is not uniquely determined by the input size for transposed convolutions.
+        """
         k_w, k_b = jax.random.split(key, 2)
 
         Spatial = ensure_tuple(Spatial)
@@ -287,7 +323,7 @@ class ConvTranspose(_ConvBase):
             key (PRNGKeyArray: Not used, compat with other modules
 
         Returns:
-            NamedArray: Output array, with shape similar to inputs except:
+            (NamedArray): Output array, with shape similar to inputs except:
                 - `Spatial` dimensions are increased via the usual (de)convolution formula
                 - `In` is replaced with `Out`
 
@@ -326,8 +362,9 @@ class ConvTranspose(_ConvBase):
         )
 
         lhs_dim_spec = self._lhs_dim_spec(batch_index, inputs)
-        rhs_dim_spec = "OI" + self._spatial_dim_short_names
+        rhs_dim_spec = self._weight_dim_spec
         output_dim_spec = lhs_dim_spec
+
         x = jax.lax.conv_general_dilated(
             lhs=inputs.array,
             rhs=self.weight.array,
