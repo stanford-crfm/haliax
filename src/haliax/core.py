@@ -1477,6 +1477,7 @@ def _ensure_no_mismatched_axes(*arrays: NamedArray):
                 known_sizes[ax.name] = ax.size
 
 
+
 __all__ = [
     "NamedArray",
     "dot",

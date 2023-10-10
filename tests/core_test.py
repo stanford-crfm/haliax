@@ -1,3 +1,4 @@
+import einops
 import jax
 import jax.numpy as jnp
 import pytest
@@ -748,67 +749,5 @@ def test_updated_slice_extra_update_axis_errors():
 
 
 
-def test_einops_style_multitransforms():
-    # named equivalent of einops-y rearrange
-    B = Axis("B", 32)
-    H = Axis("H", 30)
-    W = Axis("W", 40)
-    C = Axis("C", 3)
-    images = hax.random.uniform(PRNGKey(0), (B, H, W, C))
 
-    # # concatenate images along height (vertical axis), 960 = 32 * 30
-    # >>> rearrange(images, 'b h w c -> (b h) w c').shape
-    # (960, 40, 3)
 
-    assert images.flatten_axes((B, H), "B").axes == (Axis("B", 960), W, C)
-    #
-    # # concatenated images along horizontal axis, 1280 = 32 * 40
-    # >>> rearrange(images, 'b h w c -> h (b w) c').shape
-    # (30, 1280, 3)
-
-    # So, unfortunately this is the wrong axis order, but it's as close as we get with this api.
-    # assert images.flatten_axes((B, W), "B").axes == (H, Axis("B", 1280), C)
-    # instead we could use:
-    assert images.rearrange((H, B, W, C)).flatten_axes((B, W), "B").axes == (H, Axis("B", 1280), C)
-
-    # which is ok, but not quite as nice. Let's use the map-merging syntax:
-    assert images.rearrange((H, {"B": (B, W)}, C)).axes == (H, Axis("B", 1280), C)
-    # alternatively, we might prefer this syntax:
-    assert images.rearrange((H, "B", C), B=(B, W)).axes == (H, Axis("B", 1280), C)
-
-    #
-    # # reordered axes to "b c h w" format for deep learning
-    # >>> rearrange(images, 'b h w c -> b c h w').shape
-    # (32, 3, 30, 40)
-
-    assert images.rearrange((B, C, H, W)).axes == (B, C, H, W)
-
-    #
-    # # flattened each image into a vector, 3600 = 30 * 40 * 3
-    # >>> rearrange(images, 'b h w c -> b (c h w)').shape
-    # (32, 3600)
-
-    assert images.flatten_axes((C, H, W), "C").axes == (B, Axis("C", 3600))
-
-    # or rearrange with map-merging syntax
-    assert images.rearrange((B, {"embed": (C, H, W)})).axes == (B, Axis("embed", 3600))
-
-    # or the other syntax
-    assert images.rearrange((B, "embed"), embed=(C, H, W)).axes == (B, Axis("embed", 3600))
-
-    #
-    # # split each image into 4 smaller (top-left, top-right, bottom-left, bottom-right), 128 = 32 * 2 * 2
-    # >>> rearrange(images, 'b (h1 h) (w1 w) c -> (b h1 w1) h w c', h1=2, w1=2).shape
-    # (128, 15, 20, 3)
-
-    # via unflatten. this is gross
-    # assert images.unflatten_axis("H", (Axis("H1", 2), "H2")).unflatten_axis("W", (Axis("W1", 2), "W2")).axes == (
-    # via patchify
-    # assert images.patchify("H", patches=Axis("H1", 2)).patchify("W", patches=Axis("W1", 2)).flatten_axes(("B", "H1", "W1"), "B").axes == (
-    # via rearrange
-    assert images.rearrange((B, {"H1": (H, 2), "W1": (W, 2)}, C)).flatten_axes(("B", "H1", "W1"), "B").axes == (
-    # or other syntax with keyword args
-
-    #
-    # # space-to-depth operation
-    # >>> rearrange(images, 'b (h h1) (w w1) c -> b h w (c h1 w1)', h1=2, w1=2).shape
