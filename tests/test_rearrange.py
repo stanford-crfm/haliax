@@ -99,6 +99,15 @@ def test_basic_rearrange():
     assert (rearrange(z, "b d h w c -> b h w d c").array == z_t).all()
 
 
+def test_basic_rearrange_unordered():
+    assert rearrange(z, "{B D H W C} -> B H W D C").axes == (B, H, W, D, C)
+    z_t = z.array.transpose((0, 2, 3, 1, 4))
+    assert (rearrange(z, "{B D H W C} -> B H W D C").array == z_t).all()
+
+    assert rearrange(z, "{C W H D B} -> B H W D C").axes == (B, H, W, D, C)
+    assert (rearrange(z, "{C W H D B} -> B H W D C").array == z_t).all()
+
+
 def test_rearrange_with_ellipsis():
     assert rearrange(z, "... w c -> ... c w").axes == (B, D, H, C, W)
     assert rearrange(z, "b d ... -> d ... b").axes == (D, H, W, C, B)
@@ -107,6 +116,16 @@ def test_rearrange_with_ellipsis():
     # make sure the values are right too
     z_t = z.array.transpose((0, 4, 1, 2, 3))
     assert (rearrange(z, "b ... c -> b c ...").array == z_t).all()
+
+
+def test_rearrange_with_ellipsis_unordered():
+    assert rearrange(z, "{W C} -> ... C W").axes == (B, D, H, C, W)
+    assert rearrange(z, "{B D} -> D ... B").axes == (D, H, W, C, B)
+
+    assert rearrange(z, "{B C} -> B C ...").axes == (B, C, D, H, W)
+    # make sure the values are right too
+    z_t = z.array.transpose((0, 4, 1, 2, 3))
+    assert (rearrange(z, "{B C} -> B C ...").array == z_t).all()
 
 
 def test_rearrange_with_flattening():
@@ -122,6 +141,19 @@ def test_rearrange_with_flattening():
     assert (rearrange(z, "b d h ... c -> d (Q: b h) ... c").array == z_t).all()
 
 
+def test_rearrange_with_flattening_unordered():
+    assert rearrange(z, "{B D H} -> D (Q: B H) ...").axes == (D, Q, W, C)
+    # make sure the values are right too
+    z_t = z.array.transpose((1, 0, 2, 3, 4)).reshape((D.size, Q.size, W.size, C.size))
+    assert (rearrange(z, "{B D H} -> D (Q: B H) ...").array == z_t).all()
+
+    # test with ellipsis
+    assert rearrange(z, "{B D H ... C} -> D (Q: B H) ... C").axes == (D, Q, W, C)
+    # make sure the values are right too
+    z_t = z.array.transpose((1, 0, 2, 3, 4)).reshape((D.size, Q.size, W.size, C.size))
+    assert (rearrange(z, "{B D H ... C} -> D (Q: B H) ... C").array == z_t).all()
+
+
 def test_rearrange_with_unflatten():
     assert rearrange(zq, "(Q: B H) d, w c -> B d H w c", B=5).axes == (B, D, H, W, C)
     # make sure the values are right too
@@ -135,6 +167,19 @@ def test_rearrange_with_unflatten():
     assert (rearrange(zq, "(Q: b H) d, w c -> b d H w c", b=B).array == z_t).all()
 
 
+def test_rearrange_with_unflatten_unordered():
+    assert rearrange(zq, "{ (Q: B H) D } -> B D H ... ", B=5).axes == (B, D, H, W, C)
+    # make sure the values are right too
+    z_t = zq.array.reshape((B.size, H.size, D.size, W.size, C.size)).transpose((0, 2, 1, 3, 4))
+    assert (rearrange(zq, "{ (Q: B H) D } -> B D H ... ", B=5).array == z_t).all()
+
+    # test with explicit axis arg
+    assert rearrange(zq, "{ (Q: b H) D } -> b D H ... ", b=B).axes == (B, D, H, W, C)
+    # make sure the values are right too
+    z_t = zq.array.reshape((B.size, H.size, D.size, W.size, C.size)).transpose((0, 2, 1, 3, 4))
+    assert (rearrange(zq, "{ (Q: b H) D } -> b D H ... ", b=B).array == z_t).all()
+
+
 def test_with_unflatten_flatten():
     Z = Axis("Z", B.size * C.size)
     assert rearrange(zq, "(Q: B H) d w c -> d (Z: B c) w H", H=H).axes == (D, Z, W, H)
@@ -145,3 +190,15 @@ def test_with_unflatten_flatten():
         .reshape((D.size, Z.size, W.size, H.size))
     )
     assert (rearrange(zq, "(Q: B H) d w c -> d (Z: B c) w H", H=H).array == z_t).all()
+
+
+def test_with_unflatten_flatten_unordered():
+    Z = Axis("Z", B.size * C.size)
+    assert rearrange(zq, "{ W D C (Q: B H)} -> D (Z: B C) W H", H=H).axes == (D, Z, W, H)
+    # make sure the values are right too
+    z_t = (
+        zq.array.reshape((B.size, H.size, D.size, W.size, C.size))
+        .transpose((2, 0, 4, 3, 1))
+        .reshape((D.size, Z.size, W.size, H.size))
+    )
+    assert (rearrange(zq, "{ W D C (Q: B H)} -> D (Z: B C) W H", H=H).array == z_t).all()
