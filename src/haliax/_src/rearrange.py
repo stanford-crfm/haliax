@@ -1,11 +1,12 @@
 # Support for einops-style rearrangement strings, but supporting named axes and unordered matching
 import dataclasses
-import re
-from typing import Optional, Sequence
+from types import EllipsisType
+from typing import Mapping, NoReturn, Optional, Sequence
 
-from haliax import AxisSelection, AxisSelector, AxisSpec
+import jax.lax
 
-EllipseType = type(Ellipsis)
+from ..axis import Axis, AxisSelector, axis_name
+from ..core import NamedArray
 
 
 # Cases to support:
@@ -13,16 +14,22 @@ EllipseType = type(Ellipsis)
 # * 'a b c d -> a b c d' or 'a, b, c, d -> a, b, c, d'
 # merge a and b into m
 # * 'a b c d -> (m: a b) c d'
+#  > without rearrange or names: x.reshape((a * b, c, d))
 # split a into b and c
 # * '(a: b c) d -> b c d'
+#  > without rearrange or names: x.reshape((b, c, d))
 # reorder a and b
 # * 'a b ... -> b a ...'
+#  > without rearrange or names: x.transpose((1, 0, ...))
 # split into 2 groups, rename to x and y
 # * 'a b c d -> (x: a b) (y: c d)'  # split into two groups, rename to x and y
+#  > without rearrange or names: x.reshape((a * b, c * d))
 # unordered match of a, b, c by name, move to end
 # * `{c b a} -> ... a b c`
+#   > without rearrange or names: x.transpose((2, 1, 0, ...))
 # unordered match of a and d by name, split a into b and c, reorder
 # * `{(a: b c) d} -> ... b d c`
+#   > without rearrange or names: x.reshape(..., b, c, d).transpose((..., -3, -1, -2))
 # unordered match of a and d by name, split a into b and c, d into e and f, reorder
 # * `{(a: b c) (d: e f)} -> ... b e c f`
 # flatten each image into a vector
@@ -36,25 +43,30 @@ EllipseType = type(Ellipsis)
 # space to depth
 # * {b (h: h1 h) (w: w1 w) c} -> ... b h w (c: c h1 w1)
 
+
 @dataclasses.dataclass
 class _AxisCapture:
-    binding: Optional[AxisSelector] = None
-    axes: AxisSelection = ()
+    binding: Optional[str] = None
+    axes: tuple[str, ...] = ()
     char_range: Optional[tuple[int, int]] = None
+
 
 @dataclasses.dataclass
 class Expression:
-    captures: Sequence[_AxisCapture | EllipseType]
+    captures: Sequence[_AxisCapture | EllipsisType]
     is_ordered: bool
 
-def _raise_error(message: str, expression: str, pos: Optional[int]) -> None:
-    """Raise a ValueError with a message and the position in the expression."""
-    fmt = (f'Error while parsing:'
-           f'\n    {expression}')
-    if pos is not None:
-        fmt += f'\n    {" " * pos}^'
 
-    fmt += f'\n{message}'
+def _raise_error(message: str, expression: str, pos: Optional[int | tuple[int, int]]) -> NoReturn:
+    """Raise a ValueError with a message and the position in the expression."""
+    fmt = f"Error while parsing:\n    {expression}"
+    if pos is not None:
+        if isinstance(pos, int):
+            fmt += f'\n    {" " * pos}^'
+        else:
+            fmt += f"\n    {' ' * pos[0]}{'^' * max(1, pos[1] - pos[0])}"
+
+    fmt += f"\n{message}"
 
     raise ValueError(fmt)
 
@@ -62,19 +74,19 @@ def _raise_error(message: str, expression: str, pos: Optional[int]) -> None:
 def _parse_quoted_string(expression: str, pos: int) -> tuple[str, int]:
     """Parse a quoted string from an einops-style haliax rearrangement string."""
 
-    if expression[pos] not in '\'"':
-        _raise_error(f'Expected " or \' at position {pos}', expression, pos)
+    if expression[pos] not in "'\"":
+        _raise_error(f"Expected \" or ' at position {pos}", expression, pos)
     quote = expression[pos]
     pos += 1
-    ident = ''
+    ident = ""
     while pos < len(expression):
         if expression[pos] == quote:
             pos += 1
             break
-        elif expression[pos] == '\\':
+        elif expression[pos] == "\\":
             pos += 1
             if pos >= len(expression):
-                _raise_error(f'Unexpected end of string at position {pos}', expression, pos)
+                _raise_error(f"Unexpected end of string at position {pos}", expression, pos)
             ident += expression[pos]
             pos += 1
             continue
@@ -83,72 +95,74 @@ def _parse_quoted_string(expression: str, pos: int) -> tuple[str, int]:
             pos += 1
             continue
     if len(ident) == 0:
-        _raise_error(f'Empty strings are not valid identifiers', expression, pos)
+        _raise_error("Empty strings are not valid identifiers", expression, pos)
 
     return ident, pos
 
+
 def _parse_ident(expression: str, pos: int) -> tuple[str, int]:
     """parses an identifier or string literal from an einops-style haliax rearrangement string."""
-    if expression[pos] in '\'"':
+    if expression[pos] in "'\"":
         return _parse_quoted_string(expression, pos)
     else:
-        ident = ''
+        ident = ""
         while pos < len(expression):
-            if str.isalnum(expression[pos]) or expression[pos] == '_':
+            if str.isalnum(expression[pos]) or expression[pos] == "_":
                 if len(ident) == 0 and str.isdigit(expression[pos]):
-                    _raise_error(f'Identifiers cannot start with a number', expression, pos)
+                    _raise_error("Identifiers cannot start with a number", expression, pos)
                 ident += expression[pos]
                 pos += 1
                 continue
             else:
                 break
         if len(ident) == 0:
-            _raise_error(f'Identifier expected', expression, pos)
+            _raise_error("Identifier expected", expression, pos)
 
         return ident, pos
+
 
 def _parse_group(expression, pos):
     # parses a group of axes like (a b c) or (a: b c)
     pos_in = pos
-    if expression[pos] != '(':
-        raise ValueError('Expected (')
+    if expression[pos] != "(":
+        raise ValueError("Expected (")
     pos += 1
     binding = None
     axes = []
-    current_ident = ''
+    current_ident = ""
     while pos < len(expression):
-        if expression[pos] == ')':
+        if expression[pos] == ")":
             pos += 1
             break
-        elif expression[pos] == ':':
+        elif expression[pos] == ":":
             if binding is not None:
-                _raise_error('Only one binding allowed per group', expression, pos)
+                _raise_error("Only one binding allowed per group", expression, pos)
             if not current_ident:
-                _raise_error('Binding cannot be empty', expression, pos)
+                _raise_error("Binding cannot be empty", expression, pos)
             if len(axes) > 0:
-                _raise_error('Binding must come before axes', expression, pos)
+                _raise_error("Binding must come before axes", expression, pos)
             binding = current_ident
-            current_ident = ''
+            current_ident = ""
             pos += 1
             continue
-        elif str.isspace(expression[pos]) or expression[pos] == ',':
+        elif str.isspace(expression[pos]) or expression[pos] == ",":
             if current_ident:
                 axes.append(current_ident)
-                current_ident = ''
+                current_ident = ""
             pos += 1
             continue
-        elif expression[pos] == '(':
-            _raise_error('Only one level of nesting is allowed', expression, pos)
-        elif expression[pos] == '}':
-            raise ValueError(f'Unexpected }} at {pos}')
-        elif str.isalnum(expression[pos]) or expression[pos] == '_':
+        elif expression[pos] == "(":
+            _raise_error("Only one level of nesting is allowed", expression, pos)
+        elif expression[pos] == "}":
+            raise ValueError(f"Unexpected }} at {pos}")
+        elif str.isalnum(expression[pos]) or expression[pos] == "_":
             # don't allow numbers at the start of an identifier
             if len(current_ident) == 0 and str.isdigit(expression[pos]):
-                _raise_error('Identifiers cannot start with a number', expression, pos)
+                _raise_error("Identifiers cannot start with a number", expression, pos)
             current_ident += expression[pos]
             pos += 1
             continue
-        elif expression[pos] in '\'"':
+        elif expression[pos] in "'\"":
             # parse quoted string as identifier
             if current_ident:
                 axes.append(current_ident)
@@ -157,17 +171,18 @@ def _parse_group(expression, pos):
             current_ident = ident
             continue
         else:
-            _raise_error(f'Unexpected character {expression[pos]}', expression, pos)
+            _raise_error(f"Unexpected character {expression[pos]}", expression, pos)
 
     if current_ident:
         axes.append(current_ident)
 
     if len(axes) == 0:
-        _raise_error('No axes found', expression, pos_in)
+        _raise_error("No axes found", expression, pos_in)
 
     # todo: should we allow anonymous/literal
     char_range = (pos_in, pos)
     return _AxisCapture(binding, tuple(axes), char_range), pos
+
 
 def _parse_expression(expression: str, pos) -> tuple[Expression, int]:
     """Parse one side of an einops-style haliax rearrangement string."""
@@ -177,47 +192,47 @@ def _parse_expression(expression: str, pos) -> tuple[Expression, int]:
     finished = False
 
     while pos < len(expression):
-        if expression[pos] == '{':
+        if expression[pos] == "{":
             if seen_char:
-                _raise_error('Unexpected {', expression, pos)
+                _raise_error("Unexpected {", expression, pos)
             seen_char = True
             is_ordered = False
             pos += 1
             continue
-        elif expression[pos] == '}':
+        elif expression[pos] == "}":
             if is_ordered:
-                _raise_error('Unexpected }', expression, pos)
+                _raise_error("Unexpected }", expression, pos)
             pos += 1
             finished = True
             continue
-        elif expression[pos] == '(':
+        elif expression[pos] == "(":
             if finished:
-                _raise_error('Unexpected ( after }', expression, pos)
+                _raise_error("Unexpected ( after }", expression, pos)
             seen_char = True
             capture, pos = _parse_group(expression, pos)
             captures.append(capture)
             continue
-        elif str.isspace(expression[pos]) or expression[pos] == ',':
+        elif str.isspace(expression[pos]) or expression[pos] == ",":
             pos += 1
             continue
-        elif expression[pos:pos+3] == '...':
+        elif expression[pos : pos + 3] == "...":
             seen_char = True
             if finished:
-                _raise_error('Unexpected ... after }', expression, pos)
+                _raise_error("Unexpected ... after }", expression, pos)
             captures.append(Ellipsis)
             pos += 3
             continue
-        elif expression[pos] == '-':
+        elif expression[pos] == "-":
             if not seen_char:
-                _raise_error('Unexpected -', expression, pos)
+                _raise_error("Unexpected -", expression, pos)
             if pos + 1 >= len(expression):
-                _raise_error('Unexpected end of string', expression, pos)
-            if expression[pos + 1] != '>':
-                _raise_error('Expected >', expression, pos)
+                _raise_error("Unexpected end of string", expression, pos)
+            if expression[pos + 1] != ">":
+                _raise_error("Expected >", expression, pos)
             break
         else:
             if finished:
-                _raise_error('Unexpected character after }', expression, pos)
+                _raise_error("Unexpected character after }", expression, pos)
             ident, new_pos = _parse_ident(expression, pos)
             captures.append(_AxisCapture(binding=ident, axes=(ident,), char_range=(pos, new_pos)))
             seen_char = True
@@ -225,7 +240,7 @@ def _parse_expression(expression: str, pos) -> tuple[Expression, int]:
             continue
 
     if not finished and not is_ordered:
-        _raise_error('Expected }', expression, pos)
+        _raise_error("Expected }", expression, pos)
 
     return Expression(captures, is_ordered), pos
 
@@ -237,15 +252,355 @@ def parse_rearrangement(expression: str) -> tuple[Expression, Expression]:
 
     # consume the ->
     if pos + 2 >= len(expression):
-        _raise_error('Unexpected end of string', expression, pos)
-    if expression[pos:pos+2] != '->':
-        _raise_error('Expected ->', expression, pos)
+        _raise_error("Unexpected end of string", expression, pos)
+    if expression[pos : pos + 2] != "->":
+        _raise_error("Expected ->", expression, pos)
 
     pos += 2
     rhs, pos = _parse_expression(expression, pos)
 
     # make sure we consumed the whole string
     if pos != len(expression):
-        _raise_error('Unexpected character', expression, pos)
+        _raise_error("Unexpected character", expression, pos)
 
     return lhs, rhs
+
+
+@dataclasses.dataclass
+class _Plan:
+    intermediate_axes: tuple[Axis, ...]
+    transpose: Optional[tuple[int, ...]]
+    needs_final_reshape: bool
+
+    final_axes: tuple[Axis, ...]
+
+
+def rearrange(array: NamedArray, expression: str, **bindings: AxisSelector | int) -> NamedArray:
+    """Rearrange a tensor according to an einops-style haliax rearrangement string."""
+    lhs, rhs = parse_rearrangement(expression)
+
+    # the fundamental xla op for rearranging is reshape, which combines both transpose and reshape
+    # all rearranges are fundamentally a reshape, followed by a transpose, followed by a reshape
+    # as an example of an op that needs both, consider:
+    #  '(a b) c d -> (c a) (b d)'
+    # where a = 2, b = 3, c = 4, d = 5
+    # which is equivalent to:
+    # x.reshape((2, 3, 4, 5)).transpose((2, 0, 1, 3)).reshape((4 * 2, 3 * 5))
+    plan = _plan_rearrange(expression, lhs, rhs, array, bindings)
+
+    raw_array = array.array
+
+    if plan.intermediate_axes != array.axes:
+        raw_array = raw_array.reshape([ax.size for ax in plan.intermediate_axes])
+
+    final_shape = tuple(ax.size for ax in plan.final_axes)
+
+    if plan.needs_final_reshape:
+        finished_array = jax.lax.reshape(raw_array, new_sizes=final_shape, dimensions=plan.transpose)
+    elif plan.transpose is not None:
+        finished_array = jax.lax.transpose(raw_array, permutation=plan.transpose)
+    else:
+        finished_array = raw_array
+
+    return NamedArray(finished_array, plan.final_axes)
+
+
+def _plan_rearrange(
+    original_str, lhs: Expression, rhs: Expression, array: NamedArray, bindings: Mapping[str, AxisSelector | int]
+) -> _Plan:
+    bindings, grouped_new_shapes = _determine_initial_reshape(original_str, lhs, array, bindings)
+    intermediate_axes = tuple(ax for split_axes in grouped_new_shapes for ax in split_axes)
+
+    # Now figure out the transpose and final reshape
+    transpose: Optional[tuple[int, ...]]
+    transpose, final_axes = _determine_final_transpose_and_reshape(original_str, rhs, bindings, intermediate_axes)
+
+    transposed_intermediate_axes = [intermediate_axes[i] for i in transpose]
+    if transposed_intermediate_axes == final_axes:
+        needs_final_reshape = False
+    else:
+        needs_final_reshape = True
+
+    if transpose == tuple(range(len(transpose))):
+        transpose = None
+
+    return _Plan(intermediate_axes, transpose, needs_final_reshape, final_axes)
+
+
+def _determine_final_transpose_and_reshape(
+    expression, rhs: Expression, bindings, intermediate_axes: tuple[Axis, ...]
+) -> tuple[tuple[int, ...], tuple[Axis, ...]]:
+    # The rhs tells us two things:
+    # 1. how to reorder the intermediate axes
+    # 2. how to merge the intermediate axes into the final axes
+
+    transposition_order: list[int | EllipsisType] = []
+
+    final_axes: list[Axis | EllipsisType] = []
+    used_axes = set()  # axes must be used exactly once
+
+    position_of_ellipsis = None  # If there's an ellipsis, we want to put any remaining axes there
+    position_of_ellipsis_in_transposition = None  # if there's an ellipsis, we want to put any remaining axes there
+
+    # each capture, except for ellipsis results in one final axis
+    for cpos, capture in enumerate(rhs.captures):
+        if capture == Ellipsis:
+            if position_of_ellipsis is not None:
+                _raise_error("Only one ellipsis allowed", expression, capture.char_range)
+            position_of_ellipsis = cpos
+            final_axes.append(Ellipsis)
+            transposition_order.append(Ellipsis)
+            position_of_ellipsis_in_transposition = len(transposition_order) - 1
+            continue
+
+        assert not isinstance(capture, EllipsisType)
+
+        binding = capture.binding
+        if binding is None:
+            _raise_error("All rhs axes must have a name", expression, capture.char_range)
+
+        # now look at the captured axes. these are the axes that we're going to merge into one final axis
+        # we're also going to move them around to match the order of the intermediate axes
+        sz = 1
+        for ax_name in capture.axes:
+            if ax_name not in bindings:
+                _raise_error(f"Axis {ax_name} is not bound on the lhs", expression, capture.char_range)
+
+            axis = bindings[ax_name]
+
+            if axis in used_axes:
+                _raise_error(f"Axis {axis} is used more than once", expression, capture.char_range)
+            used_axes.add(axis)
+
+            sz *= axis.size
+            # now find the position of this axis in the intermediate axes
+            try:
+                index_in_intermediate = intermediate_axes.index(axis)
+                transposition_order.append(index_in_intermediate)
+            except ValueError:
+                _raise_error(f"Axis {ax_name} is not in the lhs", expression, capture.char_range)
+
+        # figure out the name of the final axis
+        axis = bindings.get(binding)
+        assert binding is not None
+        if axis is None:
+            new_axis = Axis(binding, sz)
+        else:
+            new_axis = Axis(axis_name(axis), sz)
+
+        final_axes.append(new_axis)
+
+    if position_of_ellipsis is not None:
+        unused_intermediate_axes = [ax for ax in intermediate_axes if ax not in used_axes]
+        if len(unused_intermediate_axes) > 0:
+            # we need to put the unused axes in the ellipsis
+            final_axes = (
+                final_axes[:position_of_ellipsis] + unused_intermediate_axes + final_axes[position_of_ellipsis + 1 :]
+            )
+
+            unused_indices = [i for i in range(len(intermediate_axes)) if intermediate_axes[i] not in used_axes]
+
+            assert position_of_ellipsis_in_transposition is not None
+
+            transposition_order = (
+                transposition_order[:position_of_ellipsis_in_transposition]
+                + unused_indices
+                + transposition_order[position_of_ellipsis_in_transposition + 1 :]
+            )
+
+    else:
+        # make sure we used all the axes
+        if len(used_axes) < len(intermediate_axes):
+            unused_intermediate_axis_names = [ax.name for ax in intermediate_axes if ax not in used_axes]
+            _raise_error(
+                f"Not all axes are used: {','.join(unused_intermediate_axis_names) }", expression, len(expression) - 1
+            )
+
+    return tuple(transposition_order), tuple(final_axes)  # type: ignore
+
+
+def _determine_initial_reshape(
+    expression, lhs: Expression, array: NamedArray, input_bindings: Mapping[str, AxisSelector | int]
+) -> tuple[Mapping[str, Axis], list[list[Axis]]]:
+    # the lhs all need to be bound to axes in the array, or synthesized as parts of axes.
+    # In the lhs, bindings look like either a name, or a name and a list of (new) axes.
+    # bindings can either be done by name, or by position, depending on if lhs.is_ordered
+    new_shapes: list[Optional[list[Axis]]] = [None] * len(array.axes)
+
+    used_new_names: set[str] = set()  # names can only be used once on a side
+    bindings: dict[str, Axis] = _resolve_binding_sizes(array, input_bindings)
+
+    if lhs.is_ordered:
+        # this is the easy case, bind axes in order of appearance in the lhs
+        # We do have to be careful about ellipses
+        # if we start with an ellipsis, we bind from the right
+        # if we end with an ellipsis, we bind from the left
+        ellipsis_pos = None
+        axis_index_for_capture: list[Optional[int]] = [None] * len(lhs.captures)
+        covered_axes = set()
+        # bind from the left
+        axis_pos = 0
+        for cpos, capture in enumerate(lhs.captures):
+            if capture == Ellipsis:
+                if ellipsis_pos is not None:
+                    assert False, "should be here"
+                ellipsis_pos = cpos
+                break
+
+            assert not isinstance(capture, EllipsisType)
+
+            if axis_pos >= len(array.axes):
+                _raise_error("Too many axes in lhs", expression, capture.char_range)
+
+            if capture.binding is not None:
+                _bind_capture_to_positional_axis(capture, array.axes[axis_pos], bindings, expression)
+
+            axis_index_for_capture[cpos] = axis_pos
+            covered_axes.add(axis_pos)
+            axis_pos += 1
+
+        # bind from the right, take care to check second ellipsis
+        if ellipsis_pos is not None:
+            axis_pos = len(array.axes) - 1
+            for cpos in range(len(lhs.captures) - 1, ellipsis_pos, -1):
+                capture = lhs.captures[cpos]
+                capture = capture
+                if capture == Ellipsis:
+                    _raise_error("Only one ellipsis allowed", expression, None)
+
+                assert not isinstance(capture, EllipsisType)
+
+                if capture.binding is not None:
+                    _bind_capture_to_positional_axis(capture, array.axes[axis_pos], bindings, expression)
+
+                axis_index_for_capture[cpos] = axis_pos
+                if axis_pos in covered_axes:
+                    _raise_error(
+                        f"Axis {array.axes[axis_pos]} is bound more than once",
+                        expression,
+                        capture.char_range,
+                    )
+                covered_axes.add(axis_pos)
+                axis_pos -= 1
+        else:
+            # no ellipsis, so we need to check that we covered all axes
+            if len(covered_axes) < len(array.axes):
+                _raise_error(
+                    "Not all axes are bound, use ... to skip missing axes", expression, len(expression) - 1
+                )  # type: ignore
+            elif len(covered_axes) > len(array.axes):
+                _raise_error("Too many axes are bound", expression, lhs.captures[-1].char_range)  # type: ignore
+
+        # now that we have the bindings, we can figure out the new shapes
+        for cpos, capture in enumerate(lhs.captures):
+            if capture == Ellipsis:
+                continue
+            assert not isinstance(capture, EllipsisType)
+
+            axis_index = axis_index_for_capture[cpos]
+            if axis_index is None:
+                _raise_error("Internal error", expression, capture.char_range)
+
+            axis = array.axes[axis_index]
+            if new_shapes[axis_index] is not None:
+                _raise_error(f"Axis {axis} is bound more than once", expression, capture.char_range)
+
+            new_axes = _solve_split_axes(axis, capture, bindings, used_new_names, expression)
+            new_shapes[axis_index] = new_axes  # type: ignore
+
+    else:
+        # this is actually an even easier case
+        # we just need to bind the axes in the lhs to the axes in the array
+        for capture in lhs.captures:
+            # ellipses are ignored in unordered rearrangements
+            if capture == Ellipsis:
+                continue
+
+            assert not isinstance(capture, EllipsisType)
+
+            if capture.binding is None:
+                _raise_error(
+                    "Unordered axes must be bound by name, e.g. (a: b) or just a", expression, capture.char_range
+                )
+
+            # let's see if we're aliasing it in the bindings
+            if capture.binding in bindings:
+                axis = bindings[capture.binding]
+            else:
+                axis = array.resolve_axis(capture.binding)
+
+            if axis is None:
+                _raise_error(f"Could not resolve axis {capture.binding}", expression, capture.char_range)
+
+            index_of_binding = array.axes.index(axis)
+            if new_shapes[index_of_binding] is not None:
+                _raise_error(f"Axis {axis} is bound more than once", expression, capture.char_range)
+
+            new_axes = _solve_split_axes(axis, capture, bindings, used_new_names, expression)
+            new_shapes[index_of_binding] = new_axes  # type: ignore
+
+    for i in range(len(array.axes)):
+        if new_shapes[i] is None:
+            new_shapes[i] = [array.axes[i]]
+
+    return bindings, new_shapes  # type: ignore
+
+
+def _solve_split_axes(axis, capture, bindings, used_new_names, expression):
+    new_axes: list[Optional[Axis]] = []
+    unsolved_axis_index: Optional[int] = None
+    for new_axis in capture.axes:
+        if new_axis in used_new_names:
+            _raise_error(f"New axis {axis} is assigned more than once in lhs", expression, capture.char_range)
+
+        if new_axis in bindings:
+            new_axes.append(bindings[new_axis])
+        else:
+            if unsolved_axis_index is not None:
+                _raise_error(
+                    "Sizes for this split axis are ambiguous. You must provide a size as a kwarg.",
+                    expression,
+                    capture.char_range,
+                )
+            unsolved_axis_index = len(new_axes)
+            new_axes.append(None)
+
+    if unsolved_axis_index is not None:
+        # we need to solve for this axis
+        size = axis.size
+        for ax in new_axes:
+            if ax is not None:
+                if size % ax.size != 0:
+                    _raise_error(
+                        f"Axes {capture.axes} do not divide evenly into axis {axis}", expression, capture.char_range
+                    )
+                size //= ax.size
+
+        new_axes[unsolved_axis_index] = Axis(capture.axes[unsolved_axis_index], size)
+        bindings[capture.axes[unsolved_axis_index]] = new_axes[unsolved_axis_index]
+    return new_axes
+
+
+def _bind_capture_to_positional_axis(capture, new_axis, bindings, expression):
+    already_bound_axis = bindings.get(capture.binding)
+
+    if already_bound_axis is not None:
+        if already_bound_axis != new_axis:
+            _raise_error(
+                f"Pattern {capture.binding} is bound to {already_bound_axis} and {new_axis}",
+                expression,
+                capture.char_range,
+            )
+    else:
+        bindings[capture.binding] = new_axis
+
+
+def _resolve_binding_sizes(array, bindings) -> dict[str, Axis]:
+    b: dict[str, Axis] = {}
+    for name, selector in bindings.items():
+        if isinstance(selector, str):
+            selector = array.resolve_axis(selector)
+        elif isinstance(selector, int):
+            selector = Axis(name, selector)
+        b[name] = selector
+    return b
