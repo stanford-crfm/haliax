@@ -1,3 +1,4 @@
+import pytest
 from jax.random import PRNGKey
 
 import haliax as hax
@@ -80,6 +81,26 @@ def test_parse_quoted_identifiers():
     assert _simplify_captures(rhs) == ["b", "c", "a", "d"]
 
 
+def test_parse_errors():
+    with pytest.raises(ValueError, match="Unexpected end of string"):
+        parse_rearrangement("a b")
+
+    with pytest.raises(ValueError, match="Expected }"):
+        parse_rearrangement("{ a -> c")
+
+    with pytest.raises(ValueError, match="Unexpected }"):
+        parse_rearrangement("a } -> c")
+
+    with pytest.raises(ValueError, match="Unexpected }"):
+        parse_rearrangement("(a: b } -> c")
+
+    with pytest.raises(ValueError, match="Unexpected character"):
+        parse_rearrangement("(a b ! -> c d e")
+
+    with pytest.raises(ValueError, match="Identifier expected"):
+        parse_rearrangement("a b ! -> c d e")
+
+
 # some axes
 W = Axis("W", 4)
 H = Axis("H", 6)
@@ -92,7 +113,12 @@ z = hax.random.randint(PRNGKey(0), (B, D, H, W, C), 0, 255)
 zq = hax.random.randint(PRNGKey(0), (Q, D, W, C), 0, 255)
 
 
-def test_basic_rearrange():
+def test_basic_identity():
+    assert rearrange(z, "b d h w c -> b d h w c").axes == (B, D, H, W, C)
+    assert (rearrange(z, "b d h w c -> b d h w c").array == z.array).all()
+
+
+def test_basic_rearrange_transpose():
     assert rearrange(z, "b d h w c -> b h w d c").axes == (B, H, W, D, C)
     # make sure the values are right too
     z_t = z.array.transpose((0, 2, 3, 1, 4))
@@ -126,6 +152,7 @@ def test_rearrange_with_ellipsis_unordered():
     # make sure the values are right too
     z_t = z.array.transpose((0, 4, 1, 2, 3))
     assert (rearrange(z, "{B C} -> B C ...").array == z_t).all()
+    assert (rearrange(z, "{qqq C} -> qqq C ...", qqq=B).array == z_t).all()
 
 
 def test_rearrange_with_flattening():
@@ -202,3 +229,89 @@ def test_with_unflatten_flatten_unordered():
         .reshape((D.size, Z.size, W.size, H.size))
     )
     assert (rearrange(zq, "{ W D C (Q: B H)} -> D (Z: B C) W H", H=H).array == z_t).all()
+
+
+def test_semantic_errors():
+    with pytest.raises(ValueError, match="Too many axes in lhs"):
+        rearrange(z, "b d h w c q -> b d h w c q")
+
+    with pytest.raises(ValueError, match="Not all axes are bound"):
+        rearrange(z, "b d h w -> b d h w c q")
+
+    with pytest.raises(ValueError, match="Too many axes in lhs"):
+        rearrange(z, "b d h w x y z -> b d h w c q")
+
+    with pytest.raises(ValueError, match="Axis q is not bound on the lhs"):
+        rearrange(z, "b d h w c -> b d h w c q")
+
+    with pytest.raises(ValueError, match="Only one ellipsis allowed"):
+        rearrange(z, "b d ... h w c ... -> b d h w c ...")
+
+    with pytest.raises(ValueError, match="Pattern q is bound to"):
+        rearrange(z, "b d c q q -> b d h w c q")
+
+    with pytest.raises(ValueError, match="Capture q is assigned more than once"):
+        rearrange(z, "b d c (q q) z -> b d h w c q", q=4)
+
+    with pytest.raises(ValueError, match="Not all intermediate axes are used"):
+        rearrange(z, "b d c q z -> b d c z")
+
+    with pytest.raises(ValueError, match="is bound more than once"):
+        rearrange(z, "b d c q z ... d e f -> b d c q d e f")
+
+    with pytest.raises(ValueError, match="Axis q is not bound on the lhs"):
+        rearrange(z, "b d h w c -> b d h w c q")
+
+    with pytest.raises(ValueError, match="Only one ellipsis allowed"):
+        rearrange(z, "b d ... h w c ... -> b d h w c ...")
+
+    with pytest.raises(ValueError, match="Pattern q is bound to"):
+        rearrange(z, "b d c q q -> b d h w c q")
+
+    with pytest.raises(ValueError, match="Capture q is assigned more than once"):
+        rearrange(z, "b d c (q q) z -> b d h w c q", q=4)
+
+    with pytest.raises(ValueError, match="Not all intermediate axes are used"):
+        rearrange(z, "b d c q z -> b d c z")
+
+    with pytest.raises(ValueError, match="is bound more than once"):
+        rearrange(z, "b d c q z ... d e f -> b d c q d e f")
+
+
+def test_examples():
+    # Cases to support:
+    # identity
+    # * 'a b c d -> a b c d' or 'a, b, c, d -> a, b, c, d'
+    assert rearrange(z, "a b c d e -> a b c d e").axes == (B, D, H, W, C)
+    # merge a and b into m
+    # * 'a b c d -> (m: a b) c d'
+    assert rearrange(z, "a b c d e -> (M: a b) c d e").axes == (Axis("M", B.size * D.size), H, W, C)
+    #  > without rearrange or names: x.reshape((a * b, c, d))
+    # split a into b and c
+    # * '(a: b c) d -> b c d'
+    assert rearrange(zq, "(q: b h) d, w, c -> b h d w c", b=B, h="H").axes == (B, H, D, W, C)
+    #  > without rearrange or names: x.reshape((b, c, d))
+    # reorder a and b
+    # * 'a b ... -> b a ...'
+    #  > without rearrange or names: x.transpose((1, 0, ...))
+    # split into 2 groups, rename to x and y
+    # * 'a b c d -> (x: a b) (y: c d)'  # split into two groups, rename to x and y
+    #  > without rearrange or names: x.reshape((a * b, c * d))
+    # unordered match of a, b, c by name, move to end
+    # * `{c b a} -> ... a b c`
+    #   > without rearrange or names: x.transpose((2, 1, 0, ...))
+    # unordered match of a and d by name, split a into b and c, reorder
+    # * `{(a: b c) d} -> ... b d c`
+    #   > without rearrange or names: x.reshape(..., b, c, d).transpose((..., -3, -1, -2))
+    # unordered match of a and d by name, split a into b and c, d into e and f, reorder
+    # * `{(a: b c) (d: e f)} -> ... b e c f`
+    # flatten each image into a vector
+    # * `{h w c} -> (c: c h w)`
+    # split each image into 4 smaller (top-left, top-right, bottom-left, bottom-right), 128 = 32 * 2 * 2:
+    # * `{b (h: h1 h) (w: w1 w)} -> (b: b h1 w1) h w ...`
+    # sequence of flattened patches:
+    # * `{b (h: h1 h) (w: w1 w) c} -> (b: b h1 w1) (c: c h w) ...`
+    # unet attention reordering:
+    # * { (embed: qkv heads c) h w } -> qkv heads c (pos: h w)
+    # space to depth
+    # * {b (h: h1 h) (w: w1 w) c} -> ... b h w (c: c h1 w1)
