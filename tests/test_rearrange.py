@@ -277,6 +277,12 @@ def test_semantic_errors():
     with pytest.raises(ValueError, match="is bound more than once"):
         rearrange(z, "b d c q z ... d e f -> b d c q d e f")
 
+    with pytest.raises(ValueError, match="not divide"):
+        rearrange(z, "(x y) d c q z -> d c q x y z", x=13, y=17)
+
+    with pytest.raises(ValueError, match="not divide"):
+        rearrange(z, "(x y) d c q z -> d c q x y z", x=13)
+
 
 def test_examples():
     # Cases to support:

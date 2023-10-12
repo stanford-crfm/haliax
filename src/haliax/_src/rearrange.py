@@ -575,17 +575,17 @@ def _solve_split_axes(axis, capture, aliases, used_new_names, expression):
             _raise_error(f"Axis {new_axis_name} is bound more than once", expression, capture.char_range)
         used_new_names.add(new_axis_name)
 
-        alias = aliases.dealias_binding(new_axis_name)
-        if alias is None:
-            alias = new_axis_name
-        if isinstance(alias, Axis):
-            if alias.size != axis.size:
+        new_axis = aliases.dealias_binding(new_axis_name)
+        if new_axis is None:
+            new_axis = new_axis_name
+        if isinstance(new_axis, Axis):
+            if new_axis.size != axis.size:
                 _raise_error(
-                    f"{alias} is mapped to {new_axis_name} but has a different size than {axis}",
+                    f"{new_axis} is mapped to {new_axis_name} but has a different size than {axis}",
                     expression,
                     capture.char_range,
                 )
-            new_axes.append(alias)
+            new_axes.append(new_axis)
         else:
             new_axis_name = Axis(new_axis_name, axis.size)
             new_axes.append(new_axis_name)
@@ -593,18 +593,23 @@ def _solve_split_axes(axis, capture, aliases, used_new_names, expression):
 
         return new_axes
 
+    remaining_size = axis.size
+
     for new_axis_name in capture.axes:
         if new_axis_name in used_new_names:
             _raise_error(f"Capture {new_axis_name} is assigned more than once in lhs", expression, capture.char_range)
 
         used_new_names.add(new_axis_name)
 
-        alias = aliases.dealias_binding(new_axis_name)
-        if alias is None:
-            alias = new_axis_name
+        new_axis = aliases.dealias_binding(new_axis_name)
+        if new_axis is None:
+            new_axis = new_axis_name
 
-        if isinstance(alias, Axis):
-            new_axes.append(alias)
+        if isinstance(new_axis, Axis):
+            new_axes.append(new_axis)
+            if remaining_size % new_axis.size:
+                _raise_error(f"Axes do not divide evenly into axis {axis}", expression, capture.char_range)
+            remaining_size //= new_axis.size
         else:
             if unsolved_axis_index is not None:
                 _raise_error(
@@ -623,16 +628,7 @@ def _solve_split_axes(axis, capture, aliases, used_new_names, expression):
             unsolved_alias = capture.axes[unsolved_axis_index]
         assert isinstance(unsolved_alias, str)
 
-        size = axis.size
-        for ax in new_axes:
-            if ax is not None:
-                if size % ax.size != 0:
-                    _raise_error(
-                        f"Axes {capture.axes} do not divide evenly into axis {axis}", expression, capture.char_range
-                    )
-                size //= ax.size
-
-        new_axis = Axis(unsolved_alias, size)
+        new_axis = Axis(unsolved_alias, remaining_size)
         new_axes[unsolved_axis_index] = new_axis
         aliases.bind_alias(capture.axes[unsolved_axis_index], new_axis, expression, capture.char_range)
     return new_axes
