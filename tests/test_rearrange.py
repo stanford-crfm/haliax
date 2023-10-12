@@ -299,25 +299,65 @@ def test_examples():
     #  > without rearrange or names: x.reshape((b, c, d))
     # reorder a and b
     # * 'a b ... -> b a ...'
+    assert rearrange(z, "a b ... -> b a ...").axes == (D, B, H, W, C)
+    assert rearrange(z, "a b ... -> b ... a").axes == (D, H, W, C, B)
     #  > without rearrange or names: x.transpose((1, 0, ...))
     # split into 2 groups, rename to x and y
     # * 'a b c d -> (x: a b) (y: c d)'  # split into two groups, rename to x and y
+    assert rearrange(z, "a b c d ... -> (x: a b) (y: c d) ...").axes == (
+        Axis("x", B.size * D.size),
+        Axis("y", H.size * W.size),
+        C,
+    )
     #  > without rearrange or names: x.reshape((a * b, c * d))
     # unordered match of a, b, c by name, move to end
     # * `{c b a} -> ... a b c`
+    assert rearrange(z, "{B C W} -> ... B C W").axes == (D, H, B, C, W)
     #   > without rearrange or names: x.transpose((2, 1, 0, ...))
     # unordered match of a and d by name, split a into b and c, reorder
     # * `{(a: b c) d} -> ... b d c`
+    assert rearrange(zq, "{(Q: b h) C} -> ... b C h", b=B, h=H).axes == (D, W, B, C, H)
     #   > without rearrange or names: x.reshape(..., b, c, d).transpose((..., -3, -1, -2))
     # unordered match of a and d by name, split a into b and c, d into e and f, reorder
     # * `{(a: b c) (d: e f)} -> ... b e c f`
+    assert rearrange(zq, "{(Q: b h) (W: e f)} -> ... b e h f", b=B, h=H, e=2).axes == (
+        D,
+        C,
+        B,
+        Axis("e", 2),
+        H,
+        Axis("f", 2),
+    )
     # flatten each image into a vector
     # * `{h w c} -> (c: c h w)`
+    assert rearrange(z, "{H W C} -> ... (C: C H W)").axes == (B, D, Axis("C", C.size * H.size * W.size))
     # split each image into 4 smaller (top-left, top-right, bottom-left, bottom-right), 128 = 32 * 2 * 2:
     # * `{b (h: h1 h) (w: w1 w)} -> (b: b h1 w1) h w ...`
+    sH = Axis("H", H.size // 2)
+    sW = Axis("W", W.size // 2)
+    # this works right now, would be good to support the below
+    r = rearrange(z, "{B (H: h1 h) (W: w1 w)} -> (B: B h1 w1) (H: h) (W: w) ...", h1=2, w1=2)
+    assert r.axes == (Axis("B", B.size * 2 * 2), sH, sW, D, C)
+
+    # TODO: support this
+    # r = rearrange(z, "{B (H: h1 H) (W: w1 W)} -> (B: B h1 w1) H W ...", h1=2, w1=2)
+    # assert r.axes == (Axis("B", B.size * H.size * W.size), sH, sW, D, C)
     # sequence of flattened patches:
     # * `{b (h: h1 h) (w: w1 w) c} -> (b: b h1 w1) (c: c h w) ...`
+    r = rearrange(z, "{B (H: h1 h) (W: w1 w) C} -> (B: B h1 w1) ... (C: C h w) ", h1=2, w1=2)
+    assert r.axes == (Axis("B", B.size * 2 * 2), D, Axis("C", C.size * sH.size * sW.size))
     # unet attention reordering:
-    # * { (embed: qkv heads c) h w } -> qkv heads c (pos: h w)
+    # postional: (qkv heads c) h w -> qkv heads c (h w)
+    # named: { (embed: qkv heads c) h w } -> qkv heads c (pos: h w)
+    Embed = Axis("embed", 3 * 4 * C.size)
+    Pos = Axis("pos", H.size * W.size)
+    attn = hax.random.randint(PRNGKey(0), (Embed, H, W), 0, 255)
+    r = rearrange(attn, "{(embed: qkv heads C) H W} -> qkv heads C (pos: H W)", qkv=3, heads=4)
+    assert r.axes == (Axis("qkv", 3), Axis("heads", 4), C, Pos)
     # space to depth
     # * {b (h: h1 h) (w: w1 w) c} -> ... b h w (c: c h1 w1)
+    r = rearrange(z, "{B (H: h1 h) (W: w1 w) C} -> ... B (H: h) (W: w) (C: C h1 w1)", h1=2, w1=2)
+    assert r.axes == (D, B, sH, sW, Axis("C", C.size * 2 * 2))
+
+    # TODO: support the version below
+    # r = rearrange(z, "{B (H: h1 H) (W: w1 W) C} -> ... B H W (C: C h1 w1)", h1=2, w1=2)

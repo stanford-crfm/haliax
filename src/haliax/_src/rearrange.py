@@ -386,7 +386,7 @@ def _determine_final_transpose_and_reshape(
         else:
             new_axis = Axis(axis_name(axis), sz)
 
-        aliases.bind_alias(binding, new_axis, expression, capture.char_range)
+        # Do not bind here because axis names can be reused
 
         final_axes.append(new_axis)
 
