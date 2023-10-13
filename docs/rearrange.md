@@ -120,6 +120,12 @@ assert y.axes == y2.axes
 
 This example is a bit contrived, but it lets us use shorter or different names in the string which is occasionally useful.
 You can actually just use strings to specify aliases, which is sometimes useful as well.
+For instance, if we wanted "P" to actually be called "patch", but wanted to keep the short syntax, we could do:
+
+```python
+y3 = hax.rearrange(x, "N C (nh ph) (nw pw) -> N (P: nh nw) (C: C ph pw)", P="patch", pw=4, ph=4)
+```
+
 
 
 ### Differences from einops
