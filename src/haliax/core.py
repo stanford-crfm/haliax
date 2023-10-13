@@ -5,7 +5,7 @@ import warnings
 from dataclasses import dataclass
 from math import prod
 from types import EllipsisType
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union, cast, overload
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union, overload
 
 import jax
 import jax.numpy as jnp
@@ -212,7 +212,7 @@ class NamedArray:
 
     # Axis rearrangement
     def rearrange(self, axis: Sequence[Union[AxisSelector, EllipsisType]]) -> "NamedArray":
-        return rearrange(self, axis)
+        return haliax.rearrange(self, axis)
 
     def broadcast_to(self, axes: AxisSpec) -> "NamedArray":
         axes = ensure_tuple(axes)
@@ -1001,73 +1001,6 @@ def split(a: NamedArray, axis: AxisSelector, new_axes: Sequence[Axis]) -> Sequen
     return [NamedArray(x, ax) for x, ax in zip(new_arrays, ret_axes)]
 
 
-# TODO: can we add einops-style combined split/merge here?
-# e.g. we'd like something like rearrange(array, (..., new_axis), merge_axes={new_axis: (old_axis1, old_axis2)})
-# or rearrange(array, (new_axis1, ..., new_axis2), split_axes={old_axis: (new_axis1, new_axis2)})
-# or even rearrange(array, (x, ..., b, a), map_axes={old_axis: (a, b), x: (old1, old2)})
-def rearrange(array: NamedArray, axes: Sequence[AxisSelector|EllipsisType]) -> NamedArray:
-    """
-    Rearrange an array so that its underlying storage conforms to axes.
-    axes may include up to 1 ellipsis, indicating that the remaining axes should be
-    permuted in the same order as the array's axes.
-
-    For example, if array has axes (a, b, c, d, e, f) and axes is (e, f, a, ..., c),
-    then the output array will have axes (e, f, a, b, c, d).
-
-    Args:
-        array (NamedArray): The array to rearrange.
-        axes (Sequence[Union[AxisSelector, EllipsisType]]): The axes to rearrange to.
-    """
-    if len(axes) == 0 and len(array.axes) != 0:
-        raise ValueError("No axes specified")
-
-    # various fast paths
-    if len(axes) == 1 and axes[0] is Ellipsis:
-        return array
-
-    if axes == array.axes:
-        return array
-
-    if axes[-1] is Ellipsis and array.axes[0 : len(axes) - 1] == axes[0 : len(axes) - 1]:
-        return array
-
-    if axes[0] is Ellipsis and array.axes[len(axes) - 1 :] == axes[1:]:
-        return array
-
-    if axes.count(Ellipsis) > 1:
-        raise ValueError("Only one ellipsis allowed")
-
-    used_indices = [False] * len(array.axes)
-    permute_spec: List[Union[int, EllipsisType]] = []
-    ellipsis_pos = None
-    for ax in axes:
-        if ax is Ellipsis:
-            permute_spec.append(Ellipsis)  # will revisit
-            ellipsis_pos = len(permute_spec) - 1
-        else:
-            assert isinstance(ax, Axis) or isinstance(ax, str)  # please mypy
-            index = array._lookup_indices(ax)
-            if index is None:
-                raise ValueError(f"Axis {ax} not found in {array}")
-            if used_indices[index]:
-                raise ValueError(f"Axis {ax} specified more than once")
-            used_indices[index] = True
-            permute_spec.append(index)
-
-    if not all(used_indices):
-        # find the ellipsis position, replace it with all the unused indices
-        if ellipsis_pos is None:
-            missing_axes = [ax for i, ax in enumerate(array.axes) if not used_indices[i]]
-            raise ValueError(f"Axes {missing_axes} not found and no ... specified. Array axes: {array.axes}") from None
-
-        permute_spec[ellipsis_pos : ellipsis_pos + 1] = tuple(i for i in range(len(array.axes)) if not used_indices[i])
-    elif ellipsis_pos is not None:
-        permute_spec.remove(Ellipsis)
-
-    out_axes = tuple(array.axes[i] for i in cast(List[int], permute_spec))
-    return NamedArray(jnp.transpose(array.array, permute_spec), out_axes)
-
-
 def unbind(array: NamedArray, axis: AxisSelector) -> List[NamedArray]:
     """
     Unbind an array along an axis, returning a list of NamedArrays, one for each position on that axis.
@@ -1477,12 +1410,10 @@ def _ensure_no_mismatched_axes(*arrays: NamedArray):
                 known_sizes[ax.name] = ax.size
 
 
-
 __all__ = [
     "NamedArray",
     "dot",
     "named",
-    "rearrange",
     "slice",
     "updated_slice",
     "index",

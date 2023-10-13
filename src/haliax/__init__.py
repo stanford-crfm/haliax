@@ -10,6 +10,7 @@ import haliax.nn as nn
 import haliax.random as random
 import haliax.tree_util as tree_util
 
+from ._src.rearrange import rearrange
 from .axis import Axis, AxisSelection, AxisSelector, AxisSpec, axis_name, concat_axes, eliminate_axes, selects_axis
 from .core import (
     NamedArray,
@@ -25,7 +26,6 @@ from .core import (
     index,
     named,
     ravel,
-    rearrange,
     rename,
     roll,
     slice,
@@ -834,7 +834,7 @@ __all__ = [
     "take",
     "unbind",
     "rename",
-    "rearrange",
+    "einops_rearrange",
     "zeros",
     "ones",
     "full",

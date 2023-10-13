@@ -1,13 +1,15 @@
 # Support for einops-style rearrangement strings, but supporting named axes and unordered matching
 import dataclasses
+import typing
 from types import EllipsisType
 from typing import Mapping, NoReturn, Optional, Sequence
 
 import jax.lax
+import jax.numpy as jnp
 
-from .. import auto_sharded
 from ..axis import Axis, AxisSelector, axis_name
 from ..core import NamedArray
+from ..partitioning import auto_sharded
 
 
 @dataclasses.dataclass
@@ -245,8 +247,132 @@ class _Plan:
     final_axes: tuple[Axis, ...]
 
 
+@typing.overload
+def rearrange(array: NamedArray, axes: Sequence[AxisSelector | EllipsisType]) -> NamedArray:
+    pass
+
+
+@typing.overload
 def rearrange(array: NamedArray, expression: str, **bindings: AxisSelector | int) -> NamedArray:
-    """Rearrange a tensor according to an einops-style haliax rearrangement string."""
+    pass
+
+
+def rearrange(array: NamedArray, *args, **kwargs) -> NamedArray:
+    """
+    Rearrange a tensor according to an einops-style haliax rearrangement string or a sequence of axes.
+    See full documentation here: [Haliax Rearrange](https://haliax.readthedocs.io/en/latest/rearrange.html)
+
+    The sequence form of `rearrange` rearranges an array so that its underlying storage conforms to axes.
+    axes may include up to 1 ellipsis, indicating that the remaining axes should be
+    permuted in the same order as the array's axes.
+
+    For example, if array has axes (a, b, c, d, e, f) and axes is (e, f, a, ..., c),
+    then the output array will have axes (e, f, a, b, c, d).
+
+    The string form of `rearrange` works similarly to einops.rearrange, but also supports named axes and unordered matching.
+    The string form of `rearrange` comes in two forms:
+
+    * **Ordered strings** are like einops strings, with the only significant difference that flattened axes are named with
+    a colon, e.g. `B H W C -> B (E: H W C)`.
+    * **Unordered strings** match axes by name and are marked with the addition of curly braces,
+    e.g. `{H W C} -> ... C H W` or `{H W C} -> ... (E: H W C)`
+
+    As with einops, you can provide axis sizes to unflatten axes. For instance, to turn an image patches,
+    `hax.rearrange(x, '{ B (H: w1 H) (W: w1 W)} -> (B: B h1 w1) H W ...', H=32, W=32)
+    will turn a batch of images into a batch of image patches. Bindings can also be [haliax.Axis][] objects,
+    or strings that will be used as the actual name of the resulting axis.
+
+    Examples:
+        >>> import haliax as hax
+        >>> import jax.random as jrandom
+        >>> B, H, W, C = hax.Axis("B", 8), hax.Axis("H", 32), hax.Axis("W", 32), hax.Axis("C", 3)
+        >>> x = hax.random.normal( (B, H, W, C))
+        >>> # Sequence-based rearrange
+        >>> hax.rearrange(x, (C, B, H, W))
+        >>> hax.rearrange(x, (C, ...)) # ellipsis means "keep the rest of the axes in the same order"
+        >>> # String-based rearrange
+        >>> # permute the axes
+        >>> hax.rearrange(x, "B H W C -> C B H W")
+        >>> # flatten the image (note the assignment of a new name to the flattened axis)
+        >>> hax.rearrange(x, "B H W C -> B (E: H W C)")
+        >>> # turn the image into patches
+        >>> hax.rearrange(x, "{ B (H: h1 H) (W: w1 W) C } -> (B: B h1 w1) (E: H W C) ...", H=2, W=2)
+        >>> # names can be longer than one character
+        >>> hax.rearrange(x, "{ B (H: h1 H) (W: w1 W) C } -> (B: B h1 w1) (embed: H W C) ...", H=2, W=2)
+    """
+
+    if len(args) == 1:
+        axes = args[0]
+        if isinstance(axes, str):
+            return einops_rearrange(array, axes, **kwargs)
+        else:
+            return axis_spec_rearrange(array, axes)
+    elif len(args) > 1:
+        raise TypeError("Only one positional argument allowed")
+
+    kwargs = dict(kwargs)
+    expression = kwargs.pop("expression", None)
+    if expression is not None:
+        return einops_rearrange(array, expression, **kwargs)
+    else:
+        axes = kwargs.pop("axes", None)
+        if axes is None:
+            raise TypeError("Must specify either axes or expression")
+        return axis_spec_rearrange(array, axes)
+
+
+def axis_spec_rearrange(array: NamedArray, axes: Sequence[AxisSelector | EllipsisType]) -> NamedArray:
+    if len(axes) == 0 and len(array.axes) != 0:
+        raise ValueError("No axes specified")
+
+    # various fast paths
+    if len(axes) == 1 and axes[0] is Ellipsis:
+        return array
+
+    if axes == array.axes:
+        return array
+
+    if axes[-1] is Ellipsis and array.axes[0 : len(axes) - 1] == axes[0 : len(axes) - 1]:
+        return array
+
+    if axes[0] is Ellipsis and array.axes[len(axes) - 1 :] == axes[1:]:
+        return array
+
+    if axes.count(Ellipsis) > 1:
+        raise ValueError("Only one ellipsis allowed")
+
+    used_indices = [False] * len(array.axes)
+    permute_spec: list[int | EllipsisType] = []
+    ellipsis_pos = None
+    for ax in axes:
+        if ax is Ellipsis:
+            permute_spec.append(Ellipsis)  # will revisit
+            ellipsis_pos = len(permute_spec) - 1
+        else:
+            assert isinstance(ax, Axis) or isinstance(ax, str)  # please mypy
+            index = array._lookup_indices(ax)
+            if index is None:
+                raise ValueError(f"Axis {ax} not found in {array}")
+            if used_indices[index]:
+                raise ValueError(f"Axis {ax} specified more than once")
+            used_indices[index] = True
+            permute_spec.append(index)
+
+    if not all(used_indices):
+        # find the ellipsis position, replace it with all the unused indices
+        if ellipsis_pos is None:
+            missing_axes = [ax for i, ax in enumerate(array.axes) if not used_indices[i]]
+            raise ValueError(f"Axes {missing_axes} not found and no ... specified. Array axes: {array.axes}") from None
+
+        permute_spec[ellipsis_pos : ellipsis_pos + 1] = tuple(i for i in range(len(array.axes)) if not used_indices[i])
+    elif ellipsis_pos is not None:
+        permute_spec.remove(Ellipsis)
+
+    out_axes = tuple(array.axes[i] for i in typing.cast(list[int], permute_spec))
+    return NamedArray(jnp.transpose(array.array, permute_spec), out_axes)
+
+
+def einops_rearrange(array: NamedArray, expression: str, **bindings: AxisSelector | int) -> NamedArray:
     lhs, rhs = parse_rearrangement(expression)
 
     # the fundamental xla op for rearranging is reshape, which combines both transpose and reshape
@@ -536,17 +662,19 @@ def _determine_initial_reshape(
             maybe_alias = aliases.dealias_binding(capture.binding)
             if maybe_alias is None:
                 maybe_alias = capture.binding
-
-            if not isinstance(maybe_alias, Axis):
-                try:
-                    axis = array.resolve_axis(maybe_alias)
-                    # aliases.bind_alias(capture.binding, axis, expression, capture.char_range)
-                except ValueError:
-                    _raise_error(f"Could not resolve axis {maybe_alias}", expression, capture.char_range)
             else:
-                axis = maybe_alias
+                maybe_alias = axis_name(maybe_alias)
 
-            axis_index = array.axes.index(axis)
+            try:
+                axis = array.resolve_axis(maybe_alias)
+                # aliases.bind_alias(capture.binding, axis, expression, capture.char_range)
+            except ValueError:
+                _raise_error(f"Could not resolve axis {maybe_alias}", expression, capture.char_range)
+
+            try:
+                axis_index = array.axes.index(axis)
+            except ValueError:
+                _raise_error(f"Axis {axis} is not in the array", expression, capture.char_range)
             if new_shapes[axis_index] is not None:
                 _raise_error(f"Axis {axis} is bound more than once", expression, capture.char_range)
 
