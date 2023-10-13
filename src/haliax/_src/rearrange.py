@@ -260,7 +260,7 @@ def rearrange(array: NamedArray, expression: str, **bindings: AxisSelector | int
 def rearrange(array: NamedArray, *args, **kwargs) -> NamedArray:
     """
     Rearrange a tensor according to an einops-style haliax rearrangement string or a sequence of axes.
-    See full documentation here: [Haliax Rearrange](https://haliax.readthedocs.io/en/latest/rearrange.html)
+    See full documentation here: [Rearrange](https://haliax.readthedocs.io/en/latest/rearrange/)
 
     The sequence form of `rearrange` rearranges an array so that its underlying storage conforms to axes.
     axes may include up to 1 ellipsis, indicating that the remaining axes should be
