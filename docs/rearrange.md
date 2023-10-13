@@ -46,8 +46,8 @@ for an unnamed tensor.
 
 ## Einops-style Syntax
 
-[einops](https://einops.rocks/) is a library for manipulating axes in a tensor. It is very powerful,
-combining splitting and merging axes with rearranging axes. Haliax provides a subset of its functionality
+[einops](https://einops.rocks/) is a powerful library for manipulating tensor shapes, generalizing
+`reshape`, `transpose`, and other shape-manipulation operations. Haliax provides a subset of its functionality
 (specifically `rearrange` and not `repeat` or `reduce`, which are less useful in named code). The syntax has been generalized to named
 tensors.
 
