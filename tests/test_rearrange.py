@@ -247,8 +247,14 @@ def test_semantic_errors():
     with pytest.raises(ValueError, match="Only one ellipsis allowed"):
         rearrange(z, "b d ... h w c ... -> b d h w c ...")
 
-    with pytest.raises(ValueError, match="Pattern q is bound to"):
+    with pytest.raises(ValueError, match="Only one ellipsis allowed"):
+        rearrange(z, "b d ... h w c  -> ... b d h w c ...")
+
+    with pytest.raises(ValueError, match="Capture q is assigned more than once"):
         rearrange(z, "b d c q q -> b d h w c q")
+
+    with pytest.raises(ValueError, match="is used more than once"):
+        rearrange(z, "b d c q t -> b d c t q q")
 
     with pytest.raises(ValueError, match="Capture q is assigned more than once"):
         rearrange(z, "b d c (q q) z -> b d h w c q", q=4)
@@ -265,11 +271,14 @@ def test_semantic_errors():
     with pytest.raises(ValueError, match="Only one ellipsis allowed"):
         rearrange(z, "b d ... h w c ... -> b d h w c ...")
 
-    with pytest.raises(ValueError, match="Pattern q is bound to"):
+    with pytest.raises(ValueError, match="Capture q is assigned more than once"):
         rearrange(z, "b d c q q -> b d h w c q")
 
     with pytest.raises(ValueError, match="Capture q is assigned more than once"):
         rearrange(z, "b d c (q q) z -> b d h w c q", q=4)
+
+    with pytest.raises(ValueError, match="Capture q is assigned more than once"):
+        rearrange(z, "b d c q q -> b d h w c q")
 
     with pytest.raises(ValueError, match="Not all intermediate axes are used"):
         rearrange(z, "b d c q z -> b d c z")
@@ -282,6 +291,24 @@ def test_semantic_errors():
 
     with pytest.raises(ValueError, match="not divide"):
         rearrange(z, "(x y) d c q z -> d c q x y z", x=13)
+
+    with pytest.raises(ValueError, match="must have a name"):
+        rearrange(z, "b d ... h w c  -> (b d h w c) ...")
+
+    with pytest.raises(ValueError, match="not bound on the lhs"):
+        rearrange(z, "b d ... h w c  -> (z: w r) ...")
+
+    with pytest.raises(ValueError, match="are ambiguous"):
+        rearrange(z, "(b q) d ... h w c  -> (z: w r) ...")
+
+    with pytest.raises(ValueError, match="more than once"):
+        rearrange(z, "{B B} -> Z Z")
+
+    with pytest.raises(ValueError, match="must be bound by name"):
+        rearrange(z, "{(q) } -> (Z: Z Z)")
+
+    with pytest.raises(ValueError, match="Could not resolve"):
+        rearrange(z, "{(Z: q) } -> (Z: Z Z)")
 
 
 def test_examples():
@@ -339,9 +366,8 @@ def test_examples():
     r = rearrange(z, "{B (H: h1 h) (W: w1 w)} -> (B: B h1 w1) (H: h) (W: w) ...", h1=2, w1=2)
     assert r.axes == (Axis("B", B.size * 2 * 2), sH, sW, D, C)
 
-    # TODO: support this
-    # r = rearrange(z, "{B (H: h1 H) (W: w1 W)} -> (B: B h1 w1) H W ...", h1=2, w1=2)
-    # assert r.axes == (Axis("B", B.size * H.size * W.size), sH, sW, D, C)
+    r = rearrange(z, "{B (H: h1 H) (W: w1 W)} -> (B: B h1 w1) H W ...", h1=2, w1=2)
+    assert r.axes == (Axis("B", B.size * 2 * 2), sH, sW, D, C)
     # sequence of flattened patches:
     # * `{b (h: h1 h) (w: w1 w) c} -> (b: b h1 w1) (c: c h w) ...`
     r = rearrange(z, "{B (H: h1 h) (W: w1 w) C} -> (B: B h1 w1) ... (C: C h w) ", h1=2, w1=2)
@@ -350,14 +376,13 @@ def test_examples():
     # postional: (qkv heads c) h w -> qkv heads c (h w)
     # named: { (embed: qkv heads c) h w } -> qkv heads c (pos: h w)
     Embed = Axis("embed", 3 * 4 * C.size)
-    Pos = Axis("pos", H.size * W.size)
     attn = hax.random.randint(PRNGKey(0), (Embed, H, W), 0, 255)
     r = rearrange(attn, "{(embed: qkv heads C) H W} -> qkv heads C (pos: H W)", qkv=3, heads=4)
-    assert r.axes == (Axis("qkv", 3), Axis("heads", 4), C, Pos)
+    assert r.axes == (Axis("qkv", 3), Axis("heads", 4), C, (Axis("pos", H.size * W.size)))
     # space to depth
     # * {b (h: h1 h) (w: w1 w) c} -> ... b h w (c: c h1 w1)
     r = rearrange(z, "{B (H: h1 h) (W: w1 w) C} -> ... B (H: h) (W: w) (C: C h1 w1)", h1=2, w1=2)
     assert r.axes == (D, B, sH, sW, Axis("C", C.size * 2 * 2))
 
-    # TODO: support the version below
-    # r = rearrange(z, "{B (H: h1 H) (W: w1 W) C} -> ... B H W (C: C h1 w1)", h1=2, w1=2)
+    r = rearrange(z, "{B (H: h1 H) (W: w1 W) C} -> B ... H W (C: C h1 w1)", h1=2, w1=2)
+    assert r.axes == (B, D, sH, sW, Axis("C", C.size * 2 * 2))
