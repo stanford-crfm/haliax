@@ -16,6 +16,10 @@ class _AxisCapture:
     axes: tuple[str, ...] = ()
     char_range: Optional[tuple[int, int]] = None
 
+    def __post_init__(self):
+        if len(self.axes) == 0:
+            raise ValueError("Empty axes not allowed")
+
 
 @dataclasses.dataclass
 class Expression:
@@ -274,44 +278,13 @@ def rearrange(array: NamedArray, expression: str, **bindings: AxisSelector | int
     return auto_sharded(NamedArray(finished_array, plan.final_axes))
 
 
-class AliasTable:
-    bindings: dict[str, Axis]
-    aliases: dict[str, str]
-
-    def __init__(self, bindings, aliases):
-        self.bindings = bindings
-        self.aliases = aliases
-
-    def dealias_binding(self, binding: str) -> Optional[AxisSelector]:
-        if binding in self.bindings:
-            return self.bindings[binding]
-        elif binding in self.aliases:
-            return self.aliases[binding]
-        else:
-            return None
-
-    def bind_alias(self, alias: str, axis: Axis, expr, char_range):
-        if alias in self.aliases:
-            if self.aliases[alias] != axis.name:
-                _raise_error(f"Alias {alias} is bound to more than one axis", expr, char_range)
-        else:
-            self.aliases[alias] = axis.name
-
-        if axis.name in self.bindings:
-            if self.bindings[alias] != axis:
-                _raise_error(f"Alias {alias} is bound to more than one axis", expr, char_range)
-        else:
-            self.bindings[alias] = axis
-
-
 def _plan_rearrange(
     original_str, lhs: Expression, rhs: Expression, array: NamedArray, input_bindings: Mapping[str, AxisSelector | int]
 ) -> _Plan:
-    aliases = _resolve_binding_sizes(array, input_bindings)
+    aliases = _resolve_bindings(array, input_bindings)
     grouped_new_shapes = _determine_initial_reshape(original_str, lhs, array, aliases)
     intermediate_axes = tuple(ax for split_axes in grouped_new_shapes for ax in split_axes)
 
-    # Now figure out the transpose and final reshape
     transpose: Optional[tuple[int, ...]]
     transpose, final_axes = _determine_final_transpose_and_reshape(original_str, rhs, aliases, intermediate_axes)
 
@@ -327,8 +300,40 @@ def _plan_rearrange(
     return _Plan(intermediate_axes, transpose, needs_final_reshape, final_axes)
 
 
+class AliasTable:
+    bindings: dict[str, AxisSelector]  # names in the string to either axes or
+
+    def __init__(self, bindings):
+        self.bindings = bindings
+
+    def dealias_binding(self, binding: str) -> Optional[AxisSelector]:
+        return self.bindings.get(binding, None)
+
+    def bind_alias(self, alias: str, axis: Axis, expr, char_range):
+        if axis.name in self.bindings:
+            if self.bindings[alias] != axis:
+                _raise_error(f"Alias {alias} is assigned to more than one axis", expr, char_range)
+        else:
+            self.bindings[alias] = axis
+
+
+def _resolve_bindings(array, bindings: Mapping[str, Axis | str | int]) -> AliasTable:
+    b: dict[str, AxisSelector] = {}
+    for name, selector in bindings.items():
+        if isinstance(selector, str):
+            try:
+                selector = array.resolve_axis(selector)
+            except ValueError:
+                pass
+        elif isinstance(selector, int):
+            selector = Axis(name, selector)
+        assert not isinstance(selector, int)
+        b[name] = selector
+    return AliasTable(b)
+
+
 def _determine_final_transpose_and_reshape(
-    expression, rhs: Expression, aliases: AliasTable, intermediate_axes: tuple[Axis, ...]
+    expression, rhs: Expression, aliases: "AliasTable", intermediate_axes: tuple[Axis, ...]
 ) -> tuple[tuple[int, ...], tuple[Axis, ...]]:
     # The rhs tells us two things:
     # 1. how to reorder the intermediate axes
@@ -346,7 +351,8 @@ def _determine_final_transpose_and_reshape(
     for cpos, capture in enumerate(rhs.captures):
         if capture == Ellipsis:
             if position_of_ellipsis is not None:
-                _raise_error("Only one ellipsis allowed", expression, capture.char_range)
+                previous_capture = rhs.captures[cpos - 1]
+                _raise_error("Only one ellipsis allowed", expression, previous_capture.char_range)
             position_of_ellipsis = cpos
             final_axes.append(Ellipsis)
             transposition_order.append(Ellipsis)
@@ -357,7 +363,7 @@ def _determine_final_transpose_and_reshape(
 
         binding = capture.binding
         if binding is None:
-            _raise_error("All rhs axes must have a name", expression, capture.char_range)
+            _raise_error("All rhs axes must have a name. Use (name: bindings)", expression, capture.char_range)
 
         # now look at the captured axes. these are the axes that we're going to merge into one final axis
         # we're also going to move them around to match the order of the intermediate axes
@@ -438,9 +444,12 @@ def _determine_initial_reshape(
     new_shapes: list[Optional[list[Axis]]] = [None] * len(array.axes)
     used_new_names: set[str] = set()  # names can only be used once on a side
 
+    # one subtle difference between the lhs and the rhs is the handling of binding in expressions like (a: b c)
+    # in the lhs, this means that a is bound to an axis, and b and c are split out from a
+    # in the rhs, this means that b and c must already be bound to axes, and a is a new axis name
+    # this makes sense in the same way that pattern matching works
+
     if lhs.is_ordered:
-        # this is the easy case, bind axes in order of appearance in the lhs
-        # We do have to be careful about ellipses
         # if we start with an ellipsis, we bind from the right
         # if we end with an ellipsis, we bind from the left
         ellipsis_pos = None
@@ -460,9 +469,6 @@ def _determine_initial_reshape(
             if axis_pos >= len(array.axes):
                 _raise_error("Too many axes in lhs", expression, capture.char_range)
 
-            if capture.binding is not None:
-                _bind_capture_to_positional_axis(capture, array.axes[axis_pos], aliases, expression)
-
             axis_index_for_capture[cpos] = axis_pos
             covered_axes.add(axis_pos)
             axis_pos += 1
@@ -472,14 +478,10 @@ def _determine_initial_reshape(
             axis_pos = len(array.axes) - 1
             for cpos in range(len(lhs.captures) - 1, ellipsis_pos, -1):
                 capture = lhs.captures[cpos]
-                capture = capture
                 if capture == Ellipsis:
                     _raise_error("Only one ellipsis allowed", expression, None)
 
                 assert not isinstance(capture, EllipsisType)
-
-                if capture.binding is not None:
-                    _bind_capture_to_positional_axis(capture, array.axes[axis_pos], aliases, expression)
 
                 axis_index_for_capture[cpos] = axis_pos
                 if axis_pos in covered_axes:
@@ -538,21 +540,18 @@ def _determine_initial_reshape(
             if not isinstance(maybe_alias, Axis):
                 try:
                     axis = array.resolve_axis(maybe_alias)
-                    aliases.bind_alias(capture.binding, axis, expression, capture.char_range)
+                    # aliases.bind_alias(capture.binding, axis, expression, capture.char_range)
                 except ValueError:
                     _raise_error(f"Could not resolve axis {maybe_alias}", expression, capture.char_range)
             else:
                 axis = maybe_alias
 
-            if axis is None:
-                _raise_error(f"Could not resolve axis {capture.binding}", expression, capture.char_range)
-
-            index_of_binding = array.axes.index(axis)
-            if new_shapes[index_of_binding] is not None:
+            axis_index = array.axes.index(axis)
+            if new_shapes[axis_index] is not None:
                 _raise_error(f"Axis {axis} is bound more than once", expression, capture.char_range)
 
             new_axes = _solve_split_axes(axis, capture, aliases, used_new_names, expression)
-            new_shapes[index_of_binding] = new_axes  # type: ignore
+            new_shapes[axis_index] = new_axes  # type: ignore
 
     for i in range(len(array.axes)):
         if new_shapes[i] is None:
@@ -563,7 +562,7 @@ def _determine_initial_reshape(
 
 def _solve_split_axes(axis, capture, aliases, used_new_names, expression):
     """
-    Given an axis and a capture of the form (a: b c) or (b c), solve for the new axes.
+    Given an axis and a capture of the form (a: b c) or (b c) on the lhs, solve for the new axes.
     """
     new_axes: list[Optional[Axis]] = []
     unsolved_axis_index: Optional[int] = None
@@ -572,24 +571,11 @@ def _solve_split_axes(axis, capture, aliases, used_new_names, expression):
     if len(capture.axes) == 1:
         new_axis_name = capture.axes[0]
         if new_axis_name in used_new_names:
-            _raise_error(f"Axis {new_axis_name} is bound more than once", expression, capture.char_range)
+            _raise_error(f"Capture {new_axis_name} is assigned more than once", expression, capture.char_range)
         used_new_names.add(new_axis_name)
 
-        new_axis = aliases.dealias_binding(new_axis_name)
-        if new_axis is None:
-            new_axis = new_axis_name
-        if isinstance(new_axis, Axis):
-            if new_axis.size != axis.size:
-                _raise_error(
-                    f"{new_axis} is mapped to {new_axis_name} but has a different size than {axis}",
-                    expression,
-                    capture.char_range,
-                )
-            new_axes.append(new_axis)
-        else:
-            new_axis_name = Axis(new_axis_name, axis.size)
-            new_axes.append(new_axis_name)
-            aliases.bind_alias(new_axis_name, new_axis_name, expression, capture.char_range)
+        new_axes.append(axis)
+        aliases.bind_alias(new_axis_name, axis, expression, capture.char_range)
 
         return new_axes
 
@@ -632,35 +618,3 @@ def _solve_split_axes(axis, capture, aliases, used_new_names, expression):
         new_axes[unsolved_axis_index] = new_axis
         aliases.bind_alias(capture.axes[unsolved_axis_index], new_axis, expression, capture.char_range)
     return new_axes
-
-
-def _bind_capture_to_positional_axis(capture, new_axis, bindings: AliasTable, expression):
-    already_bound_axis: Optional[AxisSelector] = bindings.dealias_binding(capture.binding)
-
-    if already_bound_axis is None:
-        bindings.bind_alias(capture.binding, new_axis, expression, capture.char_range)
-    elif isinstance(already_bound_axis, Axis):
-        if already_bound_axis != new_axis:
-            _raise_error(
-                f"Pattern {capture.binding} is bound to {already_bound_axis} and {new_axis}",
-                expression,
-                capture.char_range,
-            )
-    else:
-        bindings.bind_alias(capture.binding, new_axis, expression, capture.char_range)
-
-
-def _resolve_binding_sizes(array, bindings) -> AliasTable:
-    b: dict[str, Axis] = {}
-    aliases: dict[str, str] = {}
-    for name, selector in bindings.items():
-        if isinstance(selector, str):
-            try:
-                selector = array.resolve_axis(selector)
-            except ValueError:
-                pass
-        elif isinstance(selector, int):
-            selector = Axis(name, selector)
-        b[name] = selector
-        aliases[name] = axis_name(selector)
-    return AliasTable(b, aliases)
