@@ -160,6 +160,21 @@ As in einops: split and merged axes are processed in "C-order": the first dimens
 last dimension is the least significant.
 
 
+## Error Handling
+
+`rearrange` attempts to be as helpful as possible when it encounters errors. For example:
+
+```python
+y = hax.rearrange(x, "N C H W Z -> N H W C")
+# ValueError: Error while parsing:
+#    N C H W Z -> N H W C
+#            ^
+# Too many axes in lhs
+```
+
+In general, it will try to give you a helpful error message that points to the problem in the string.
+
+
 ## API Documentation
 
 See [haliax.rearrange][].
