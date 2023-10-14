@@ -27,8 +27,8 @@ class _ConvBase(eqx.Module):
     Spatial: tuple[str | Axis, ...] = eqx.field(static=True)
     In: Axis = eqx.field(static=True)
     Out: Axis = eqx.field(static=True)
-    weight: NamedArray = eqx.field(static=True)
-    bias: Optional[NamedArray] = eqx.field(static=True)
+    weight: NamedArray = eqx.field()
+    bias: Optional[NamedArray] = eqx.field()
 
     def _lhs_dim_spec(self, batch_index, inputs):
         # the dim spec are single letters, for things like NCHW
