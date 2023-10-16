@@ -1,4 +1,5 @@
 import functools as ft
+import typing
 from typing import Any, Callable, List, Optional, Sequence, Union
 
 import equinox as eqx
@@ -7,6 +8,9 @@ import numpy as np
 from jax import numpy as jnp
 from jax import random as jrandom
 from jaxtyping import PRNGKeyArray
+
+
+F = typing.TypeVar("F", bound=Callable[..., Any])
 
 
 class Static(eqx.Module):
@@ -95,6 +99,16 @@ def combine(*args, **kwargs):
 
 def _UNSPECIFIED():
     raise ValueError("unspecified")
+
+
+@typing.overload
+def named_call(f: F, name: Optional[str] = None) -> F:
+    ...
+
+
+@typing.overload
+def named_call(*, name: Optional[str] = None) -> Callable[[F], F]:
+    ...
 
 
 def named_call(f=_UNSPECIFIED, name: Optional[str] = None):
