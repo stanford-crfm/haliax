@@ -318,6 +318,13 @@ class dslice(eqx.Module):
         else:
             self.size = length
 
+    @staticmethod
+    def block(idx: int, size: int) -> "dslice":
+        """
+        Returns a dslice that selects a single block of size `size` starting at `idx`
+        """
+        return dslice(idx * size, size)
+
 
 ds: typing.TypeAlias = dslice
 
