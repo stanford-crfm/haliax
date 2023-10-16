@@ -88,12 +88,12 @@ See also the section on [Rearrange](rearrange.md).
 
 | JAX (with einops)                                                       | Haliax                                                                   |
 |-------------------------------------------------------------------------|--------------------------------------------------------------------------|
-| [`einops.rearrange(x, "batch embed -> embed batch")`][einops.rearrange] | [`hax.rearrange(x, ("embed", "batch"))`][haliax.rearrange]               |
-| [`einops.rearrange(x, "batch embed -> embed batch")`][einops.rearrange] | [`hax.rearrange(x, "b e -> e b")`][haliax.rearrange]                     |
-| [`einops.rearrange(im, "... h w -> ... (h w)")`][einops.rearrange]      | [`hax.flatten_axes(im, ("h", "w"), "hw")`][haliax.flatten_axes]          |
-| [`einops.rearrange(im, "... h w -> ... (h w)")`][einops.rearrange]      | [`hax.rearrange(im, "{h w} -> ... (embed: h w)")`][haliax.rearrange]     |
-| [`einops.rearrange(x, "b (h w) -> b h w", h=8)`][einops.rearrange]      | [`hax.rearrange(x, "b (h w) -> b h w", h=8)`][haliax.rearrange]          |
-| [`einops.rearrange(x, "b (h w) -> b h w", h=8)`][einops.rearrange]      | [`hax.rearrange(x, "{(embed: h w)} -> ... h w", h=8)`][haliax.rearrange] |
+| [`einops.rearrange(x, "batch embed -> embed batch")`](https://einops.rocks/api/rearrange/) | [`hax.rearrange(x, ("embed", "batch"))`][haliax.rearrange]               |
+| [`einops.rearrange(x, "batch embed -> embed batch")`](https://einops.rocks/api/rearrange/) | [`hax.rearrange(x, "b e -> e b")`][haliax.rearrange]                     |
+| [`einops.rearrange(im, "... h w -> ... (h w)")`](https://einops.rocks/api/rearrange/)      | [`hax.flatten_axes(im, ("h", "w"), "hw")`][haliax.flatten_axes]          |
+| [`einops.rearrange(im, "... h w -> ... (h w)")`](https://einops.rocks/api/rearrange/)      | [`hax.rearrange(im, "{h w} -> ... (embed: h w)")`][haliax.rearrange]     |
+| [`einops.rearrange(x, "b (h w) -> b h w", h=8)`](https://einops.rocks/api/rearrange/)      | [`hax.rearrange(x, "b (h w) -> b h w", h=8)`][haliax.rearrange]          |
+| [`einops.rearrange(x, "b (h w) -> b h w", h=8)`](https://einops.rocks/api/rearrange/)      | [`hax.rearrange(x, "{(embed: h w)} -> ... h w", h=8)`][haliax.rearrange] |
 
 ### Broadcasting
 
