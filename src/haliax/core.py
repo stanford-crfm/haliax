@@ -1217,10 +1217,10 @@ def _broadcast_axes(
 
     if require_subset:
         # check if one is a subset of the other
-        if set(a_axes).issubset(set(b_axes)):
-            return b_axes
-        elif set(b_axes).issubset(set(a_axes)):
+        if set(b_axes).issubset(set(a_axes)):
             return a_axes
+        elif set(a_axes).issubset(set(b_axes)):
+            return b_axes
         else:
             return None
 

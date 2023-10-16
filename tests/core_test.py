@@ -760,3 +760,14 @@ def test_updated_slice_extra_update_axis_errors():
     with pytest.raises(ValueError):
         named3 = hax.random.randint(PRNGKey(0), (H, W), minval=10, maxval=30)
         named3.updated_slice({"H": 0, "W": 0}, named2)
+
+
+def test_order_of_transpose_add():
+    H = Axis("H", 10)
+    W = Axis("W", 20)
+
+    named1 = hax.random.randint(PRNGKey(0), (H, W), minval=0, maxval=10)
+    named2 = hax.random.randint(PRNGKey(0), (W, H), minval=10, maxval=30)
+
+    assert (named1 + named2).axes == (H, W)
+    assert jnp.all((named1 + named2).array == named1.array + named2.array.T)
