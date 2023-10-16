@@ -1,5 +1,56 @@
 # Neural Networks
 
+
+## Modules
+
+Haliax provides a small number of neural network modules that are compatible with Equinox, though
+they naturally all use [haliax.NamedArray][]. (We welcome PRs for more modules! Nothing too exotic though.)
+The most interesting of these modules is [haliax.nn.Stacked][], which allows you to create homogenous "stacks"
+of the same module (e.g. transformer blocks), which is a common pattern in deep learning.
+
+### Linear
+
+::: haliax.nn.Embedding
+::: haliax.nn.Linear
+
+### Dropout
+::: haliax.nn.Dropout
+
+### Normalization
+::: haliax.nn.LayerNorm
+
+### Meta
+
+::: haliax.nn.Stacked
+
+### Convolution
+
+Unlike other frameworks, Haliax doesn't distinguish between 1D, 2D, and 3D, and general convolutions. Instead, we have
+a single [haliax.nn.Conv][] module that can be used for all of these, depending on the number of axes
+provided. Similarly, for transposed convolutions, we have [haliax.nn.ConvTranspose][].
+
+::: haliax.nn.Conv
+::: haliax.nn.ConvTranspose
+
+## Attention
+
+We don't provide an explicit attention module, but we do provide an attention function and several related functions:
+
+:::haliax.nn.attention.dot_product_attention
+:::haliax.nn.attention.dot_product_attention_weights
+
+### Masks
+::: haliax.nn.attention.causal_mask
+::: haliax.nn.attention.prefix_lm_mask
+::: haliax.nn.attention.combine_masks_and
+::: haliax.nn.attention.combine_masks_or
+::: haliax.nn.attention.forgetful_causal_mask
+
+### Biases
+
+::: haliax.nn.attention.mask_to_bias
+::: haliax.nn.attention.alibi_attention_bias
+
 ## Functions
 
 These functions wrap the equivalent in [jax.nn][]:
@@ -33,50 +84,3 @@ These functions wrap the equivalent in [jax.nn][]:
 
 ::: haliax.nn.cross_entropy_loss
 ::: haliax.nn.cross_entropy_loss_and_log_normalizers
-
-
-## Modules
-
-Haliax provides a small number of neural network modules that are compatible with Equinox, though
-they naturally all use [haliax.NamedArray][]. (We welcome PRs for more modules! Nothing too exotic though.)
-The most interesting of these modules is [haliax.nn.Stacked][], which allows you to create homogenous "stacks"
-of the same module (e.g. transformer blocks), which is a common pattern in deep learning.
-
-::: haliax.nn.Embedding
-::: haliax.nn.Linear
-::: haliax.nn.Dropout
-::: haliax.nn.LayerNorm
-::: haliax.nn.Stacked
-
-### Convolutional Layers
-
-Unlike other frameworks, Haliax doesn't distinguish between 1D, 2D, and 3D, and general convolutions. Instead, we have
-a single [haliax.nn.Conv][] module that can be used for all of these, depending on the number of axes
-provided. Similarly, for transposed convolutions, we have [haliax.nn.ConvTranspose][].
-
-::: haliax.nn.Conv
-::: haliax.nn.ConvTranspose
-
-## Attention
-
-We don't provide an explicit attention module, but we do provide an attention function and several related functions:
-
-:::haliax.nn.attention.dot_product_attention
-:::haliax.nn.attention.dot_product_attention_weights
-
-### Masks
-::: haliax.nn.attention.causal_mask
-::: haliax.nn.attention.prefix_lm_mask
-::: haliax.nn.attention.combine_masks_and
-::: haliax.nn.attention.combine_masks_or
-::: haliax.nn.attention.forgetful_causal_mask
-
-### Biases
-
-::: haliax.nn.attention.mask_to_bias
-::: haliax.nn.attention.alibi_attention_bias
-
-
-## API Reference
-
-::: haliax.nn

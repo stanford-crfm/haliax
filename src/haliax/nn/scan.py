@@ -39,6 +39,7 @@ class Stacked(eqx.Module, Generic[M]):
     Stacked also supports gradient checkpointing, which is useful for very large models that don't fit in memory.
 
     Example:
+        ```python
         >>> import equinox as eqx
         >>> import haliax as hax
         >>> import haliax.nn as hnn
@@ -54,6 +55,7 @@ class Stacked(eqx.Module, Generic[M]):
         >>> Hidden = hax.Axis("hidden", 10)
         >>> mod = MyModule(5, Hidden)
         >>> mod(hax.ones(Hidden))
+        ```
     """
 
     # TODO: we can probably make this module support pipeline parallelism, but that's a whole project in itself
