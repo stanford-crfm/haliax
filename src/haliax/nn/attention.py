@@ -8,7 +8,7 @@ from jaxtyping import PRNGKeyArray
 
 import haliax
 import haliax.random as hrandom
-from haliax.axis import Axis, AxisSelection, AxisSpec
+from haliax.axis import Axis, AxisSelection, AxisSelector, AxisSpec
 from haliax.core import NamedArray
 from haliax.types import PrecisionLike
 
@@ -24,7 +24,7 @@ from haliax.types import PrecisionLike
 
 
 def dot_product_attention_weights(
-    Head: Axis,
+    Head: AxisSelector,
     KPos: AxisSelection,
     query: NamedArray,
     key: NamedArray,
