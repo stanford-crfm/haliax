@@ -277,15 +277,17 @@ class NamedArray:
         return haliax.take(self, axis=axis, index=index)
 
     @overload
-    def __getitem__(self, item: Tuple[str, NamedIndex]) -> Union["NamedArray", Scalar]:
+    def __getitem__(self, item: Tuple[AxisSelector, NamedIndex]) -> Union["NamedArray", Scalar]:
         ...  # pragma: no cover
 
     @overload
-    def __getitem__(self, item: Tuple[str, NamedIndex, str, NamedIndex]) -> Union["NamedArray", jnp.ndarray]:
+    def __getitem__(
+        self, item: Tuple[AxisSelector, NamedIndex, AxisSelector, NamedIndex]
+    ) -> Union["NamedArray", jnp.ndarray]:
         ...
 
     @overload
-    def __getitem__(self, item: Mapping[str, NamedIndex]) -> Union["NamedArray", jnp.ndarray]:
+    def __getitem__(self, item: Mapping[AxisSelector, NamedIndex]) -> Union["NamedArray", jnp.ndarray]:
         ...
 
     def __getitem__(self, idx) -> Union["NamedArray", jnp.ndarray]:
