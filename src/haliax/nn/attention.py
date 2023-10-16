@@ -122,7 +122,7 @@ def combine_masks_and(mask1: Optional[NamedArray], mask2: Optional[NamedArray]) 
         return mask2
     if mask2 is None:
         return mask1
-    return mask1 & mask2
+    return mask1 & mask2.broadcast_axis(mask1.axes)
 
 
 def combine_masks_or(mask1: Optional[NamedArray], mask2: Optional[NamedArray]) -> Optional[NamedArray]:
@@ -130,7 +130,7 @@ def combine_masks_or(mask1: Optional[NamedArray], mask2: Optional[NamedArray]) -
         return mask2
     if mask2 is None:
         return mask1
-    return mask1 | mask2
+    return mask1 | mask2.broadcast_axis(mask1.axes)
 
 
 def causal_mask(QPos: Axis, KPos: Axis, q_start: int = 0, k_start: int = 0) -> NamedArray:
