@@ -7,7 +7,9 @@
 <a href="https://haliax.readthedocs.io/en/latest/?badge=latest">
     <img alt="Documentation Status" src="https://readthedocs.org/projects/haliax/badge/?version=latest">
 </a>
+<a href="">
 <img alt="License" src="https://img.shields.io/github/license/stanford-crfm/haliax?color=blue" />
+</a>
 <a href="https://https://pypi.org/project/haliax/">
     <img alt="PyPI" src="https://img.shields.io/pypi/v/haliax?color=blue" />
 </a>
