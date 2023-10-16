@@ -5,6 +5,9 @@ import jax
 import jax.numpy as jnp
 from jax._src.typing import DTypeLike
 
+# Note: we re-export these from jax.experimental.pallas
+from jax.experimental.pallas import ds, dslice
+
 import haliax.debug as debug
 import haliax.nn as nn
 import haliax.random as random
@@ -830,11 +833,13 @@ __all__ = [
     "flatten_axes",
     "slice",
     "updated_slice",
+    "ds",
+    "dslice",
     "index",
     "take",
     "unbind",
     "rename",
-    "einops_rearrange",
+    "rearrange",
     "zeros",
     "ones",
     "full",

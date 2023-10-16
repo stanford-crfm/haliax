@@ -579,6 +579,21 @@ def test_slice_nd_shorthand_syntax():
     assert jnp.all(jnp.equal(named1["H", 0:10, "D", 0:10].array, named1.array[0:10, :, 0:10]))
 
 
+def test_slice_nd_dslice():
+    H = Axis("H", 10)
+    W = Axis("W", 20)
+    D = Axis("D", 30)
+
+    named1 = hax.random.uniform(PRNGKey(0), (H, W, D))
+    from haliax import ds
+
+    assert jnp.all(jnp.equal(named1["H", ds(0, 5), "D", ds(3, 7)].array, named1.array[0:5, :, 3:10]))
+    # test mixed normal and dslice
+    assert jnp.all(jnp.equal(named1["H", ds(1, 5), "D", 3:7].array, named1.array[1:6, :, 3:7]))
+    assert jnp.all(jnp.equal(named1["H", ds(2, 5), "D", 3].array, named1.array[2:7, :, 3]))
+    assert jnp.all(jnp.equal(named1["H", ds(3, 5), "D", 3:10:2].array, named1.array[3:8, :, 3:10:2]))
+
+
 def test_slice_nd_array_present_dims():
     # tests slicing with arrays that are already present in the named array, which is sometimes ok
     H = Axis("H", 10)

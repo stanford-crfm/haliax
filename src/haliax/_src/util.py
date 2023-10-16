@@ -1,9 +1,9 @@
-from typing import Callable, MutableMapping, Sequence, Type, TypeVar
+from typing import Callable, MutableMapping, Sequence, TypeAlias, TypeVar
 
 
 T = TypeVar("T")
 py_slice = slice
-slice_t = Type[slice]
+slice_t: TypeAlias = slice
 
 
 def index_where(pred: Callable[[T], bool], xs: Sequence[T]) -> int:
