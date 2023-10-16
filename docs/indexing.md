@@ -37,7 +37,6 @@ Otherwise, the idea is pretty straightforward: any unspecified axes are treated 
 slices are kept in reduced dimensions, and integers eliminate dimensions. If all dimensions are eliminated, a scalar
 JAX ndarray is returned.
 
-## Dynamic Slices
 
 ### Shapes in JAX
 
@@ -54,7 +53,9 @@ import jax
 @jax.jit
 def f(x, slice_size: int):
     num_blocks = x.shape[0] // slice_size
-    jax.lax.fori_loop(0, num_blocks, lambda i, x: x[i * slice_size : (i + 1) * slice_size], x)
+    def body(i, m):
+        return i + jnp.mean(x[i * slice_size : (i + 1) * slice_size])
+    jax.lax.fori_loop(0, num_blocks, lambda i, m: m + body(i, m), 0.0)
 
 
 f(jnp.arange(10), 2)
@@ -66,16 +67,65 @@ f(jnp.arange(10), 2)
 ```
 
 This is a not-uncommon pattern in situations where you want to process a large array in chunks. In Haliax, we provide
-two solutions: [haliax.slice][]
+two solutions: [haliax.slice][] as well as dynamic slices ([haliax.dslice][] a.k.a. [haliax.ds][]).
 
+## Dynamic Slices
+
+In light of the requirement that all array sizes be known at compile time, Haliax provides both a simple [haliax.slice][]
+function, as well as [haliax.dynamic_slice][], which can be used with `[]`. The simple slice function is just a wrapper
+around [jax.lax.dynamic_slice][]] and not worth discussing here.
+
+`dslice` is a trick borrowed from the new experimental [jax.experimental.pallas][] module. It's essentially a slice,
+except that instead of a start and an end (and maybe a stride), it takes a start and a size. The size must be
+statically known, but the start can be dynamic. This allows us to write the above example as follows:
+
+```python
+import jax
+import haliax as hax
+
+N = hax.Axis("N", 10)
+q = hax.arange(N)
+
+@hax.named_jit
+def f(x, slice_size: int):
+    num_blocks = N.size // slice_size
+    def body(i, m):
+        return i + hax.mean(x["N", hax.dslice(i * slice_size, slice_size)]).scalar()
+    jax.lax.fori_loop(0, num_blocks, body, 0.0)
+
+f(q, 2)
+```
+
+For convenience/brevity, `dslice` is aliased as `ds`. In addition, we also expose `dblock`, which is a convenience
+function for computing the start and size of a slice given a block index and the size of the slice. Thus, the above
+example can be written as follows:
+
+```python
+import jax
+import haliax as hax
+
+N = hax.Axis("N", 10)
+q = hax.arange(N)
+
+@hax.named_jit
+def f(x, slice_size: int):
+    num_blocks = N.size // slice_size
+    def body(i, m):
+        return i + hax.mean(x["N", hax.ds.block(i, slice_size)]).scalar()
+    jax.lax.fori_loop(0, num_blocks, body, 0.0)
+
+f(q, 2)
+```
+
+It's not a huge improvement, but it's a bit more convenient.
 
 
 ## Advanced Indexing
 
-NumPy's [Advanced Indexing](https://numpy.org/doc/stable/user/basics.indexing.html#advanced-indexing) is supported,
-though we use named arrays for the indices instead of normal arrays. In NumPy, the indexed arrays much be
-broadcastable to the same shape. Advanced indexing in Haliax is similar, except that they follow Haliax's broadcasting rules,
-meaning that the axis names determine broadcasting. Axes with the same name must have the same size.
+NumPy's [Advanced Indexing](https://numpy.org/doc/stable/user/basics.indexing.html#advanced-indexing) is supported, though we use named arrays for the indices instead of normal arrays.
+In NumPy, the indexed arrays much be broadcastable to the same shape.Advanced indexing in Haliax is similar, except that
+they follow Haliax's broadcasting rules, meaning that the axis names determine broadcasting.Axes with the same name must
+have the same size.
 
 ```python
 import haliax as hax

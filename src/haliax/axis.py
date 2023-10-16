@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple, Union, overload
 
 import equinox as eqx
-from jax.experimental.pallas import dslice as pdslice
 
 from haliax.util import ensure_tuple
 
@@ -323,10 +322,20 @@ class dslice(eqx.Module):
 ds: typing.TypeAlias = dslice
 
 
-_PALLAS_DSLICE_TYPE = type(pdslice(0, 1))
+def dblock(idx: int, size: int) -> dslice:
+    """
+    Returns a dslice that selects a single block of size `size` starting at `idx`
+    """
+    return dslice(idx * size, size)
 
 
 def is_pallas_dslice(x: object) -> bool:
+    try:
+        from jax.experimental.pallas import dslice as pdslice
+    except ImportError:
+        return False
+
+    _PALLAS_DSLICE_TYPE = type(pdslice(0, 1))
     return isinstance(x, _PALLAS_DSLICE_TYPE)
 
 

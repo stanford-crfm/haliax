@@ -16,6 +16,9 @@ import haliax as hax
 
 Batch = hax.Axis("batch", 32)
 Embed = hax.Axis("embed", 64)
+H = hax.Axis("h", 16)
+W = hax.Axis("w", 16)
+
 
 Step = hax.axis("step", 2)
 Mini = hax.axis("mini", 16)
@@ -26,6 +29,7 @@ y = jnp.zeros((32, 64))
 z = jnp.zeros((32,))
 w = jnp.zeros((64,))
 ind = jnp.arange((8,), dtype=jnp.int32)
+im = jnp.zeros((32, 16, 16))
 
 # for haliax
 x = hax.zeros((Batch, Embed))
@@ -33,6 +37,7 @@ y = hax.zeros((Batch, Embed))
 z = hax.zeros((Batch,))
 w = hax.zeros((Embed,))
 ind = hax.arange(Axis("Index", 8), dtype=jnp.int32)
+im = hax.zeros((Batch, H, W))
 ```
 
 
@@ -63,39 +68,9 @@ ind = hax.arange(Axis("Index", 8), dtype=jnp.int32)
 
 | JAX                                              | Haliax                                                                  |
 |--------------------------------------------------|-------------------------------------------------------------------------|
-| [`jnp.ravel(x)`][jax.numpy.ravel]                | [`hax.ravel(x, "Embed")`][haliax.flatten]                               |
-| [`jnp.ravel(x)`][jax.numpy.ravel]                | [`hax.flatten(x, "Embed")`][haliax.flatten]                             |
 | [`jnp.reshape(x, (2, 16, 64))`][jax.numpy.reshape] | [`hax.unflatten_axis(x, "batch", (Step, Mini)`][haliax.unflatten_axis]  |
 | [`jnp.reshape(x, (-1,))`][jax.numpy.reshape]     | [`hax.flatten_axes(x, ("batch", "embed"), "foo")`][haliax.flatten_axes] |
 | [`jnp.transpose(x, (1, 0))`][jax.numpy.transpose] | [`hax.rearrange(x, ("embed", "batch"))`][haliax.rearrange]              |
-
-
-### Broadcasting
-
-See also the section on [Broadcasting](broadcasting.md).
-
-| JAX                                                                      | Haliax                                                |
-|--------------------------------------------------------------------------|-------------------------------------------------------|
-| [`jnp.broadcast_to(z.reshape(-1, 1), (32, 64))`][jax.numpy.broadcast_to] | [`hax.broadcast_axis(z, Embed)`][haliax.broadcast_axis] |
-| Outer product: `z.reshape(-1, 1) * w.reshape(1, -1)`                      | `z * w.broadcast_axis(Batch)`                         |
-
-
-### Indexing and Slicing
-
-See also the section on [Indexing and Slicing](indexing.md).
-
-| JAX                                                               | Haliax                                                      |
-|-------------------------------------------------------------------|-------------------------------------------------------------|
-| `x[0]`                                                            | [`x["batch", 0]`][haliax.index]                             |
-| `x[:, 0]`                                                         | [`x["embed", 0]`][haliax.index]                             |
-| `x[0, 1]`                                                         | [`x["batch", 0, "embed", 1]`][haliax.index]                 |
-| `x[0:10]`                                                         | [`x["batch", 0:10]`][haliax.index]                          |
-| `x[0:10:2]`                                                       | [`x["batch", 0:10:2]`][haliax.index]                        |
-| `x[0, 1:10:2]`                                                    | [`x["batch", 0, "embed", 1:10:2]`][haliax.index]            |
-| `x[0, [1, 2, 3]]`                                                 | [`x["batch", 0, "embed", [1, 2, 3]]`][haliax.index]         |
-| `x[0, ind]`                                                       | [`x["batch", 0, "embed", ind]`][haliax.index]               |
-| `jnp.take_along_axis(x, ind, axis=1)`][jax.numpy.take_along_axis] | [`hax.take(x, "embed", ind)`][haliax.take]                  |
-| `jax.lax.dynamic_slice(x, [4], [10])`][jax.lax.dynamic_slice]     | [`hax.slice(x, "batch", start=4, length=10)`][haliax.slice] |
 
 ### Shape Manipulation
 
@@ -104,6 +79,49 @@ See also the section on [Indexing and Slicing](indexing.md).
 | [`x.transpose((1, 0))`][jax.numpy.transpose]  | [`x.rearrange("embed", "batch")`][haliax.rearrange]                                 |
 | [`x.reshape((2, 16, 64))`][jax.numpy.reshape] | [`x.unflatten_axis("batch", (Axis("a", 2), Axis("b", 16)))`][haliax.unflatten_axis] |
 | [`x.reshape((-1,))`][jax.numpy.reshape]      | [`x.flatten_axes(("batch", "embed"), "foo")`][haliax.flatten_axes]                  |
+| [`jnp.ravel(x)`][jax.numpy.ravel]                | [`hax.ravel(x, "Embed")`][haliax.flatten]                               |
+| [`jnp.ravel(x)`][jax.numpy.ravel]                | [`hax.flatten(x, "Embed")`][haliax.flatten]                             |
+
+### Einops-style Rearrange
+
+See also the section on [Rearrange](rearrange.md).
+
+| JAX (with einops)                                                       | Haliax                                                                   |
+|-------------------------------------------------------------------------|--------------------------------------------------------------------------|
+| [`einops.rearrange(x, "batch embed -> embed batch")`][einops.rearrange] | [`hax.rearrange(x, ("embed", "batch"))`][haliax.rearrange]               |
+| [`einops.rearrange(x, "batch embed -> embed batch")`][einops.rearrange] | [`hax.rearrange(x, "b e -> e b")`][haliax.rearrange]                     |
+| [`einops.rearrange(im, "... h w -> ... (h w)")`][einops.rearrange]      | [`hax.flatten_axes(im, ("h", "w"), "hw")`][haliax.flatten_axes]          |
+| [`einops.rearrange(im, "... h w -> ... (h w)")`][einops.rearrange]      | [`hax.rearrange(im, "{h w} -> ... (embed: h w)")`][haliax.rearrange]     |
+| [`einops.rearrange(x, "b (h w) -> b h w", h=8)`][einops.rearrange]      | [`hax.rearrange(x, "b (h w) -> b h w", h=8)`][haliax.rearrange]          |
+| [`einops.rearrange(x, "b (h w) -> b h w", h=8)`][einops.rearrange]      | [`hax.rearrange(x, "{(embed: h w)} -> ... h w", h=8)`][haliax.rearrange] |
+
+### Broadcasting
+
+See also the section on [Broadcasting](broadcasting.md).
+
+| JAX                                                                      | Haliax                                                  |
+|--------------------------------------------------------------------------|---------------------------------------------------------|
+| [`jnp.broadcast_to(z.reshape(-1, 1), (32, 64))`][jax.numpy.broadcast_to] | [`hax.broadcast_axis(z, Embed)`][haliax.broadcast_axis] |
+| Outer product: `z.reshape(-1, 1) * w.reshape(1, -1)`                     | `z * w.broadcast_axis(Batch)`                           |
+
+
+### Indexing and Slicing
+
+See also the section on [Indexing and Slicing](indexing.md).
+
+| JAX                                                                      | Haliax                                                      |
+|--------------------------------------------------------------------------|-------------------------------------------------------------|
+| `x[0]`                                                                   | [`x["batch", 0]`][haliax.index]                             |
+| `x[:, 0]`                                                                | [`x["embed", 0]`][haliax.index]                             |
+| `x[0, 1]`                                                                | [`x["batch", 0, "embed", 1]`][haliax.index]                 |
+| `x[0:10]`                                                                | [`x["batch", 0:10]`][haliax.index]                          |
+| `x[0:10:2]`                                                              | [`x["batch", 0:10:2]`][haliax.index]                        |
+| `x[0, 1:10:2]`                                                           | [`x["batch", 0, "embed", 1:10:2]`][haliax.index]            |
+| `x[0, [1, 2, 3]]`                                                        | [`x["batch", 0, "embed", [1, 2, 3]]`][haliax.index]         |
+| `x[0, ind]`                                                              | [`x["batch", 0, "embed", ind]`][haliax.index]               |
+| `jnp.take_along_axis(x, ind, axis=1)`][jax.numpy.take_along_axis]        | [`hax.take(x, "embed", ind)`][haliax.take]                  |
+| [`jax.lax.dynamic_slice_in_dim(x, 4, 10)`][jax.lax.dynamic_slice_in_dim] | [`hax.slice(x, "batch", start=4, length=10)`][haliax.slice] |
+| [`jax.lax.dynamic_slice_in_dim(x, 4, 10)`][jax.lax.dynamic_slice_in_dim] | [`x["batch", hax.ds(4, 10)]`][haliax.dslice]                |
 
 
 ## Operations

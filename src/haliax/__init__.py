@@ -5,16 +5,25 @@ import jax
 import jax.numpy as jnp
 from jax._src.typing import DTypeLike
 
-# Note: we re-export these from jax.experimental.pallas
-from jax.experimental.pallas import ds, dslice
-
 import haliax.debug as debug
 import haliax.nn as nn
 import haliax.random as random
 import haliax.tree_util as tree_util
 
 from ._src.rearrange import rearrange
-from .axis import Axis, AxisSelection, AxisSelector, AxisSpec, axis_name, concat_axes, eliminate_axes, selects_axis
+from .axis import (
+    Axis,
+    AxisSelection,
+    AxisSelector,
+    AxisSpec,
+    axis_name,
+    concat_axes,
+    dblock,
+    ds,
+    dslice,
+    eliminate_axes,
+    selects_axis,
+)
 from .core import (
     NamedArray,
     NamedOrNumeric,
@@ -835,6 +844,7 @@ __all__ = [
     "updated_slice",
     "ds",
     "dslice",
+    "dblock",
     "index",
     "take",
     "unbind",
