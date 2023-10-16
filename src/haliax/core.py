@@ -17,11 +17,23 @@ from haliax.jax_utils import is_jax_array_like
 from haliax.util import ensure_tuple
 
 from ._src.util import index_where, py_slice, slice_t
-from .axis import Axis, AxisSelection, AxisSelector, AxisSpec, axis_name, eliminate_axes, selects_axis, union_axes
+from .axis import (
+    Axis,
+    AxisSelection,
+    AxisSelector,
+    AxisSpec,
+    axis_name,
+    dslice,
+    eliminate_axes,
+    is_pallas_dslice,
+    selects_axis,
+    union_axes,
+)
 from .types import IntScalar, PrecisionLike, Scalar
 
 
 NamedOrNumeric = Union[Scalar, "NamedArray"]
+NamedIndex = Union[int, slice_t, "NamedArray", dslice]
 
 _ENABLE_SHAPE_CHECKS = True
 
@@ -265,17 +277,15 @@ class NamedArray:
         return haliax.take(self, axis=axis, index=index)
 
     @overload
-    def __getitem__(self, item: Tuple[str, Union[int, slice_t, "NamedArray"]]) -> Union["NamedArray", Scalar]:
+    def __getitem__(self, item: Tuple[str, NamedIndex]) -> Union["NamedArray", Scalar]:
         ...  # pragma: no cover
 
     @overload
-    def __getitem__(
-        self, item: Tuple[str, Union[int, slice_t, "NamedArray"], str, Union[int, slice_t, "NamedArray"]]
-    ) -> Union["NamedArray", jnp.ndarray]:
+    def __getitem__(self, item: Tuple[str, NamedIndex, str, NamedIndex]) -> Union["NamedArray", jnp.ndarray]:
         ...
 
     @overload
-    def __getitem__(self, item: Mapping[str, Union[int, slice_t, "NamedArray"]]) -> Union["NamedArray", jnp.ndarray]:
+    def __getitem__(self, item: Mapping[str, NamedIndex]) -> Union["NamedArray", jnp.ndarray]:
         ...
 
     def __getitem__(self, idx) -> Union["NamedArray", jnp.ndarray]:
@@ -834,9 +844,7 @@ def updated_slice(
     return NamedArray(updated, array.axes)
 
 
-def index(
-    array: NamedArray, slices: Mapping[AxisSelector, Union[int, slice_t, NamedArray]]
-) -> Union[NamedArray, Scalar]:
+def index(array: NamedArray, slices: Mapping[AxisSelector, NamedIndex]) -> Union[NamedArray, Scalar]:
     """
     Selects elements from an array along an axis via index or another named array.
 
@@ -850,6 +858,7 @@ def index(
     """
     # indices where we have array args
     array_slice_indices = []
+    dslice_indices = []
     ordered_slices: list = [py_slice(None, None, None)] * len(array.axes)  # type: ignore
     kept_axes = [True] * len(array.axes)
     for axis, slice_ in slices.items():
@@ -857,9 +866,14 @@ def index(
         if axis_index is None:
             raise ValueError(f"axis {axis} not found in {array}")
         ordered_slices[axis_index] = slice_
-        kept_axes[axis_index] = isinstance(slice_, py_slice)
+
+        kept_axes[axis_index] = isinstance(slice_, py_slice) or isinstance(slice_, dslice) or is_pallas_dslice(slice_)
+
         if isinstance(slice_, NamedArray):
             array_slice_indices.append(axis_index)
+
+        if isinstance(slice_, dslice) or is_pallas_dslice(slice_):
+            dslice_indices.append(axis_index)
 
     # advanced indexing
     if len(array_slice_indices) > 0:
@@ -912,7 +926,20 @@ def index(
     else:
         new_axes = tuple(axis.name for axis, keep in zip(array.axes, kept_axes) if keep)
 
-    sliced = array.array[tuple(ordered_slices)]
+    sliced = array.array
+
+    if len(dslice_indices) > 0:
+        # dynamic slice out the dslices
+        indices = [0] * len(array.axes)
+        lengths = [ax.size for ax in array.axes]
+        for i in dslice_indices:
+            indices[i] = ordered_slices[i].start
+            lengths[i] = ordered_slices[i].size
+        sliced = jax.lax.dynamic_slice(sliced, indices, lengths)
+        for i in dslice_indices:
+            ordered_slices[i] = py_slice(None, None, None)
+
+    sliced = sliced[tuple(ordered_slices)]
 
     if len(new_axes) == 0:
         # this is a scalar

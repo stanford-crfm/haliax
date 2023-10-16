@@ -77,6 +77,12 @@ See also the section on [Indexing and Slicing](indexing.md).
 ::: haliax.take
 ::: haliax.updated_slice
 
+#### Dynamic Slicing
+
+::: haliax.dslice
+::: haliax.dblock
+::: haliax.ds
+
 ### Shape Manipulation
 
 ::: haliax.flatten

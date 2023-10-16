@@ -2,6 +2,8 @@ import typing
 from dataclasses import dataclass
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple, Union, overload
 
+import equinox as eqx
+
 from haliax.util import ensure_tuple
 
 from ._src.util import index_where
@@ -284,3 +286,75 @@ def axis_name(ax: AxisSelector) -> str:
         return ax.name
     else:
         return ax
+
+
+class dslice(eqx.Module):
+    """
+    Dynamic slice, comprising a (start, length) pair. Also aliased as ds.
+
+    Normal numpy-isms like a[i:i+16] don't work in Jax inside jit, because slice doesn't like tracers and JAX
+    can't see that the slice is constant. This is a workaround that lets you do a[dslice(i, 16)] or even a[ds(i, 16)]
+    instead.
+
+    This class's name is taken from [jax.experimental.pallas.dslice][].
+    """
+
+    start: int
+    size: int
+
+    def to_slice(self) -> slice:
+        return slice(self.start, self.start + self.size)
+
+    def __init__(self, start: int, length: Union[int, Axis]):
+        """
+        As a convenience, if length is an Axis, it will be converted to `length.size`
+        Args:
+            start:
+            length:
+        """
+        self.start = start
+        if isinstance(length, Axis):
+            self.size = length.size
+        else:
+            self.size = length
+
+
+ds: typing.TypeAlias = dslice
+
+
+def dblock(idx: int, size: int) -> dslice:
+    """
+    Returns a dslice that selects a single block of size `size` starting at `idx`
+    """
+    return dslice(idx * size, size)
+
+
+def is_pallas_dslice(x: object) -> bool:
+    try:
+        from jax.experimental.pallas import dslice as pdslice
+    except ImportError:
+        return False
+
+    _PALLAS_DSLICE_TYPE = type(pdslice(0, 1))
+    return isinstance(x, _PALLAS_DSLICE_TYPE)
+
+
+__all__ = [
+    "Axis",
+    "AxisSelector",
+    "AxisSelection",
+    "AxisSpec",
+    "axis_name",
+    "concat_axes",
+    "union_axes",
+    "ds",
+    "dslice",
+    "eliminate_axes",
+    "is_axis_compatible",
+    "overlapping_axes",
+    "replace_axis",
+    "selects_axis",
+    "union_axes",
+    "without_axes",
+    "is_pallas_dslice",
+]

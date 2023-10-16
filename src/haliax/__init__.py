@@ -11,7 +11,19 @@ import haliax.random as random
 import haliax.tree_util as tree_util
 
 from ._src.rearrange import rearrange
-from .axis import Axis, AxisSelection, AxisSelector, AxisSpec, axis_name, concat_axes, eliminate_axes, selects_axis
+from .axis import (
+    Axis,
+    AxisSelection,
+    AxisSelector,
+    AxisSpec,
+    axis_name,
+    concat_axes,
+    dblock,
+    ds,
+    dslice,
+    eliminate_axes,
+    selects_axis,
+)
 from .core import (
     NamedArray,
     NamedOrNumeric,
@@ -830,11 +842,14 @@ __all__ = [
     "flatten_axes",
     "slice",
     "updated_slice",
+    "ds",
+    "dslice",
+    "dblock",
     "index",
     "take",
     "unbind",
     "rename",
-    "einops_rearrange",
+    "rearrange",
     "zeros",
     "ones",
     "full",
