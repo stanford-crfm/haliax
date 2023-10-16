@@ -81,6 +81,7 @@ nav:
   - Named Arrays:
     - Broadcasting: 'broadcasting.md'
     - Indexing and Slicing: 'indexing.md'
+    - Rearrange: 'rearrange.md'
   - Neural Networks: 'nn.md'
   - Partitioning: 'partitioning.md'
   - Higher Order Functions: 'hof.md'
