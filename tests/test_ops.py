@@ -188,3 +188,21 @@ def test_tril_triu():
         named5 = hax_fn(named1, Height, Depth)
         expected5 = jnp_fn(named1.array.transpose([1, 0, 2]))
         assert jnp.all(jnp.isclose(named5.array, expected5))
+
+
+def test_mean_respects_where():
+    Height = Axis("Height", 10)
+    Width = Axis("Width", 3)
+
+    named1 = hax.random.uniform(PRNGKey(0), (Height, Width))
+    where = hax.random.uniform(PRNGKey(1), (Height, Width)) > 0.5
+
+    assert not jnp.all(jnp.isclose(hax.mean(named1).array, hax.mean(named1, where=where).array))
+    assert jnp.all(jnp.isclose(hax.mean(named1, where=where).array, jnp.mean(named1.array, where=where.array)))
+
+    # check broadcasting
+    where = hax.random.uniform(PRNGKey(2), (Height,)) > 0.5
+    assert not jnp.all(jnp.isclose(hax.mean(named1).array, hax.mean(named1, where=where).array))
+    assert jnp.all(
+        jnp.isclose(hax.mean(named1, where=where).array, jnp.mean(named1.array, where=where.array.reshape((-1, 1))))
+    )
