@@ -22,6 +22,9 @@ class Axis:
     def resize(self, size) -> "Axis":
         return Axis(self.name, size)
 
+    def __str__(self):
+        return f"{self.name}({self.size})"
+
 
 AxisSelector = Union[Axis, str]
 """AxisSelector is a type that can be used to select a single axis from an array. str or Axis"""

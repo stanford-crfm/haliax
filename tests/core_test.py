@@ -1,3 +1,4 @@
+import equinox as eqx
 import jax
 import jax.numpy as jnp
 import pytest
@@ -771,3 +772,26 @@ def test_order_of_transpose_add():
 
     assert (named1 + named2).axes == (H, W)
     assert jnp.all((named1 + named2).array == named1.array + named2.array.T)
+
+
+def test_nice_short_string_in_named_array():
+    H = Axis("H", 10)
+    W = Axis("W", 20)
+
+    named1 = hax.random.randint(PRNGKey(0), (H, W), minval=0, maxval=10)
+
+    assert str(named1).startswith("NamedArray(int32{'H': 10, 'W': 20}")
+
+
+def test_nice_short_string_in_named_array_in_eqx_module():
+    H = Axis("H", 10)
+    W = Axis("W", 20)
+
+    named1 = hax.random.randint(PRNGKey(0), (H, W), minval=0, maxval=10)
+
+    class TestModule(eqx.Module):
+        named1: NamedArray
+
+    mod = TestModule(named1)
+
+    assert str(mod).startswith("TestModule(named1=Named(int32{'H': 10, 'W': 20}))")

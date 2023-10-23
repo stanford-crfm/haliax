@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union, o
 
 import jax
 import jax.numpy as jnp
+import numpy
 import numpy as np
 
 import haliax
@@ -109,7 +110,10 @@ class NamedArray:
             raise ValueError(f"Expected scalar, got {self.array.ndim}-dimensional array")
         return self.array
 
-    # shape = property(lambda self: self.array.shape)
+    @ft.cached_property
+    def shape(self) -> Dict[str, int]:
+        return {axis.name: axis.size for axis in self.axes}
+
     dtype = property(lambda self: self.array.dtype)
     """The dtype of the underlying array"""
     ndim = property(lambda self: self.array.ndim)
@@ -181,6 +185,27 @@ class NamedArray:
                     raise ValueError(f"Axis {axes} not found")
                 result.append(self.axes[i])
             return tuple(result)
+
+    def __str__(self):
+        # we consider the following cases:
+        # * array is a tracer, in which case we want just the named shape (and an indication that it's a tracer)
+        # * array is a jnp.ndarray, in which case we want the named shape and the array
+
+        if isinstance(self.array, jax.core.Tracer):
+            return f"NamedArray(Tracer<{self.dtype}{self.shape}>)"
+        elif self.ndim <= 1:
+            return f"NamedArray({self.dtype}{self.shape}, {self.array})"
+        else:
+            return f"NamedArray({self.dtype}{self.shape},\n{self.array})"
+
+    def __tree_pp__(self, **kwargs):
+        # For Equinox's tree pretty printer
+        import jax._src.pretty_printer as pp
+
+        if kwargs.get("short_arrays", True):
+            return pp.text(f"Named({self.dtype}{self.shape})")
+        else:
+            return str(self)
 
     @overload
     def _lookup_indices(self, axis: AxisSelector) -> Optional[int]:  # type: ignore
