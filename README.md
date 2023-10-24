@@ -18,9 +18,21 @@
 > — Patrick Rothfuss, *The Name of the Wind*
 
 Haliax is a [JAX](https:://github.com/google/jax) library for building neural networks with named tensors, in the tradition of Alexander Rush's [Tensor Considered Harmful](https://nlp.seas.harvard.edu/NamedTensor).
-Named tensors improve the legibility and compositionality of tensor programs by using named axes instead of positional indices
-as in NumPy, PyTorch, etc. Here's a minimal attention module implementation in Haliax. For a more detailed introduction,
+Named tensors improve the **legibility** and **compositionality** of tensor programs by using named axes instead of positional indices
+as typically used in NumPy, PyTorch, etc.
+
+Despite the focus on legibility, Haliax
+is also **fast**, typically about as fast as "pure" JAX code.
+Haliax is also built to be **scalable**: it
+can support [Fully-Sharded Data Parallelism (FSDP)](https://engineering.fb.com/2021/07/15/open-source/fsdp/) and Tensor Parallelism with [just a few lines of code](https://colab.research.google.com/drive/1QX4yH3zRFF3Xiibf1aahETcSQ5nbcUMz). Haliax powers [Levanter](https://gihub.com/stanford-crfm/levanter),
+our companion library for training large language models and other foundation models, with scale proven up to 20B parameters
+and up to a TPU v3-256 pod slice.
+
+## Example: Attention
+
+Here's a minimal attention module implementation in Haliax. For a more detailed introduction,
 please see the [Haliax tutorial](https://colab.research.google.com/drive/1TiTcQQ4V5mopbgCu1SVl-oqJtXn7rFnC).
+(We use the excellent [Equinox](https://github.com/patrick-kidger/equinox) library for its module system and tree transformations.)
 
 ```python
 import equinox as eqx
@@ -60,25 +72,25 @@ causal_mask = hax.arange(Pos).broadcast_axis(KPos) >= hax.arange(KPos)
 
 
 class Attention(eqx.Module):
-    proj_qkv: hnn.Linear  # input projection from [Embed] -> [(q, k, v), Head, Key]
+    proj_q: hnn.Linear  #  [Embed] -> [Head, Key]
+    proj_k: hnn.Linear  #  [Embed] -> [Head, Key]
+    proj_v: hnn.Linear  #  [Embed] -> [Head, Key]
     proj_answer: hnn.Linear  # output projection from [Head, Key] -> [Embed]
 
     @staticmethod
     def init(Embed, Head, Key, *, key):
-        Qkv = hax.Axis("qkv", 3)  # create all three at once
-
-        k_qkv, k_ans = jax.random.split(key, 2)
-        proj_qkv = hnn.Linear.init(In=Embed, Out=(Qkv, Head, Key), key=k_qkv)
+        k_q, k_k, k_v, k_ans = jax.random.split(key, 4)
+        proj_q = hnn.Linear.init(In=Embed, Out=(Head, Key), key=k_q)
+        proj_k = hnn.Linear.init(In=Embed, Out=(Head, Key), key=k_k)
+        proj_v = hnn.Linear.init(In=Embed, Out=(Head, Key), key=k_v)
         proj_answer = hnn.Linear.init(In=(Head, Key), Out=Embed, key=k_ans)
-        return Attention(proj_qkv, proj_answer)
+        return Attention(proj_q, proj_k, proj_v, proj_answer)
 
     def __call__(self, x, mask=None):
-        qkv_out = self.proj_qkv(x)
-        q, k, v = qkv_out.unbind("qkv")
-
-        # Rename k and v's Pos as haliax doesn't support unnamed axes or duplicate axes
-        k = k.rename({"position": "key_position"})
-        v = v.rename({"position": "key_position"})
+        q = self.proj_q(x)
+        # Rename "position" to "key_position" for self attention
+        k = self.proj_k(x).rename({"position": "key_position"})
+        v = self.proj_v(x).rename({"position": "key_position"})
 
         answers = attention(Key, KPos, q, k, v, causal_mask)
 
@@ -86,21 +98,12 @@ class Attention(eqx.Module):
         return x
 ```
 
-(We use the excellent [Equinox](https://github.com/patrick-kidger/equinox) library for its module system and tree transformations.)
-
-Haliax is built to be fast: the generated code (using JAX/XLA) should be as fast as handwritten JAX code. Haliax is also built to be scalable: it
-can support FSDP and Tensor Parallelism with just a few lines of code. Haliax's powers [Levanter](https://gihub.com/stanford-crfm/levanter),
-our companion library for training large language models and other foundation models, with scale proven up to 20B parameters
-and up to a TPU v3-256 pod slice.
-
 Haliax was created by [Stanford's Center for Research on Foundation Models (CRFM)](https://crfm.stanford.edu/)'s research engineering team.
 You can find us in the #levanter channel on the unofficial [Jax LLM Discord](https://discord.gg/FkRGNX3ND).
 
 <!--haliax-intro-end-->
 
 ## Documentation
-
-Haliax's API documentation is available at [haliax.readthedocs.io](https://haliax.readthedocs.io/en/latest/).
 
 ### Tutorials
 
@@ -114,10 +117,15 @@ These are some tutorials to get you started with Haliax. They are available as C
 * [Mixed Precision with `jmp`](https://colab.research.google.com/drive/1_4cikwt-UhSH7yRzNRK8ze9msM9r2mEl?usp=sharing) (This one is really a tutorial for [jmp](https://github.com/deepmind/jmp) but it's how to use it with Haliax...)
 
 <!--haliax-tutorials-end-->
+### API Reference
+
+Haliax's API documentation is available at [haliax.readthedocs.io](https://haliax.readthedocs.io/en/latest/).
 
 ## Contributing
 
 We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for more information.
+We also have a list of [good first issues](https://github.com/stanford-crfm/haliax/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
+to help you get started. (If those don't appeal, don't hesitate to reach out to us on Discord!)
 
 ## License
 
