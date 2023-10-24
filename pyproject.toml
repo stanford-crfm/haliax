@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "haliax"
-version = "1.1"
+version = "1.2"
 authors = [
   { name="David Hall", email="dlwh@cs.stanford.edu" },
 ]
@@ -20,8 +20,8 @@ classifiers = [
     "Intended Audience :: Science/Research",
 ]
 dependencies = [
-    # we'll require that you install jax yourself, since the extras vary by system.
-    # jax = {version = ">=0.4.10,<0.5.0"}
+    # we require that you install jax yourself, since the extras vary by system.
+    # jax = {version = ">=0.4.19,<0.5.0"}
     "equinox>=0.10.6",
     "jaxtyping>=0.2.20",
     "safetensors[numpy]",
