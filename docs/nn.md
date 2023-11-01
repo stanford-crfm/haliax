@@ -22,6 +22,7 @@ of the same module (e.g. transformer blocks), which is a common pattern in deep 
 ### Meta
 
 ::: haliax.nn.Stacked
+::: haliax.nn.MLP
 
 ### Convolution
 

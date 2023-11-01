@@ -72,7 +72,7 @@ two solutions: [haliax.slice][] as well as dynamic slices ([haliax.dslice][] a.k
 ## Dynamic Slices
 
 In light of the requirement that all array sizes be known at compile time, Haliax provides both a simple [haliax.slice][]
-function, as well as [haliax.dynamic_slice][], which can be used with `[]`. The simple slice function is just a wrapper
+function, as well as [haliax.dslice][], which can be used with `[]`. The simple slice function is just a wrapper
 around [jax.lax.dynamic_slice][]] and not worth discussing here.
 
 `dslice` is a trick borrowed from the new experimental [jax.experimental.pallas][] module. It's essentially a slice,

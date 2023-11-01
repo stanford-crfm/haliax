@@ -1,6 +1,7 @@
 import equinox as eqx
 import jax.nn
 import jax.random as jrandom
+import pytest
 from jax import numpy as jnp
 
 import haliax as hax
@@ -105,3 +106,42 @@ def test_standardize():
 
     assert actual.axes == (b, c)
     assert jnp.all(jnp.isclose(actual.array, expected))
+
+
+@pytest.mark.parametrize("depth", [0, 1, 2, 3, 4, 5])
+def test_mlp(depth):
+    key = jrandom.PRNGKey(0)
+    H = Axis("H", 10)
+    C = Axis("C", 12)
+    W = Axis("W", 14)
+
+    E = Axis("E", 16)
+
+    hax_mlp = hax.nn.MLP.init((H, C, W), E, width=8, depth=depth, key=key)
+    x = hax.random.uniform(key, (H, C, W))
+    assert hax_mlp(x).axes == (E,)
+
+    hax_mlp = hax.nn.MLP.init((H, W), E, width=8, depth=depth, key=key)
+    assert hax_mlp(x).axes == (C, E)
+
+    # with a named width
+    M = Axis("M", 18)
+    hax_mlp = hax.nn.MLP.init((H, W), E, width=M, depth=depth, key=key)
+    assert hax_mlp(x).axes == (C, E)
+
+    # ensure that we actually use the name for the named width
+    if depth > 0:
+        assert hax_mlp.layers[0].Out == M
+
+        if depth % 2 == 0:
+            assert hax_mlp.layers[-1].In == M.alias("M2")
+        else:
+            assert hax_mlp.layers[-1].In == M
+
+        for i in range(1, depth):
+            if i % 2 == 0:
+                assert hax_mlp.layers[i].In == M.alias("M2")
+                assert hax_mlp.layers[i].Out == M
+            else:
+                assert hax_mlp.layers[i].In == M
+                assert hax_mlp.layers[i].Out == M.alias("M2")

@@ -1,5 +1,4 @@
 import functools
-import typing
 import warnings
 from typing import Optional, Tuple, Union
 
@@ -8,127 +7,45 @@ import jax.numpy as jnp
 
 import haliax
 import haliax as hax
+import haliax.nn.activations
 import haliax.nn.attention as attention
+import haliax.nn.normalization
 
-from ..axis import Axis, AxisSelection, AxisSelector, AxisSpec
+from ..axis import Axis, AxisSelector
 from ..core import NamedArray
-from ..types import Scalar
 from ..util import UNSPECIFIED, Unspecified
-from ..wrap import ReductionFunction, unwrap_namedarrays, wrap_axiswise_call, wrap_elemwise_unary, wrap_reduction_call
+from ..wrap import ReductionFunction
+from .activations import (
+    celu,
+    elu,
+    gelu,
+    glu,
+    hard_sigmoid,
+    hard_silu,
+    hard_swish,
+    hard_tanh,
+    leaky_relu,
+    log_sigmoid,
+    quick_gelu,
+    relu,
+    relu6,
+    selu,
+    sigmoid,
+    silu,
+    soft_sign,
+    softplus,
+    swish,
+)
 from .conv import Conv, ConvTranspose
 from .dropout import Dropout, dropout
 from .embedding import Embedding
 from .linear import Linear
-from .normalization import LayerNorm
+from .mlp import MLP
+from .normalization import LayerNorm, log_softmax, logsumexp, softmax, standardize
 from .scan import Stacked
 
 
-A = typing.TypeVar("A", Scalar, NamedArray, jnp.ndarray)
-
-
-def relu(a: A) -> A:
-    return wrap_elemwise_unary(jnn.relu, a)
-
-
-def relu6(a: A) -> A:
-    return wrap_elemwise_unary(jnn.relu6, a)
-
-
-def sigmoid(a: A) -> A:
-    return wrap_elemwise_unary(jnn.sigmoid, a)
-
-
-def softplus(a: A) -> A:
-    return wrap_elemwise_unary(jnn.softplus, a)
-
-
-def soft_sign(a: A) -> A:
-    return wrap_elemwise_unary(jnn.soft_sign, a)
-
-
-def silu(a: A) -> A:
-    return wrap_elemwise_unary(jnn.silu, a)
-
-
-def swish(a: A) -> A:
-    return wrap_elemwise_unary(jnn.swish, a)
-
-
-def log_sigmoid(a: A) -> A:
-    return wrap_elemwise_unary(jnn.log_sigmoid, a)
-
-
-def leaky_relu(a: A) -> A:
-    return wrap_elemwise_unary(jnn.leaky_relu, a)
-
-
-def hard_sigmoid(a: A) -> A:
-    return wrap_elemwise_unary(jnn.hard_sigmoid, a)
-
-
-def hard_silu(a: A) -> A:
-    return wrap_elemwise_unary(jnn.hard_silu, a)
-
-
-def hard_swish(a: A) -> A:
-    return wrap_elemwise_unary(jnn.hard_swish, a)
-
-
-def hard_tanh(a: A) -> A:
-    return wrap_elemwise_unary(jnn.hard_tanh, a)
-
-
-def elu(a: A) -> A:
-    return wrap_elemwise_unary(jnn.elu, a)
-
-
-def celu(a: A) -> A:
-    return wrap_elemwise_unary(jnn.celu, a)
-
-
-def selu(a: A) -> A:
-    return wrap_elemwise_unary(jnn.selu, a)
-
-
-def gelu(a: A, approximate: bool = True) -> A:
-    return wrap_elemwise_unary(jnn.gelu, a, approximate=approximate)
-
-
-def glu(x: NamedArray, axis: Axis) -> NamedArray:
-    axis_index = x.axes.index(axis)
-    return jnn.glu(x.array, axis_index)
-
-
-def logsumexp(a: A, axis: Optional[AxisSelection] = None) -> A:
-    # TODO: logsumexp indirectly supports where via `b`. we should support it directly
-    return wrap_reduction_call(jnn.logsumexp, a, axis=axis, single_axis_only=False, supports_where=False)
-
-
 # TODO: support where in softmax, etc
-def softmax(a: A, axis: Optional[AxisSelection] = None) -> A:
-    return wrap_axiswise_call(jnn.softmax, a, axis=axis, single_axis_only=False)
-
-
-def log_softmax(a: A, axis: Optional[AxisSelection] = None) -> A:
-    return wrap_axiswise_call(jnn.log_softmax, a, axis=axis, single_axis_only=False)
-
-
-def standardize(
-    x: NamedArray,
-    axis: AxisSpec,
-    *,
-    mean: Optional[NamedArray] = None,
-    variance: Optional[NamedArray] = None,
-    epsilon: float = 1e-5,
-    where: Optional[NamedArray] = None,
-) -> NamedArray:
-    """Analogous to [jax.nn.standardize][], but with support for NamedArrays."""
-    x, mean, variance, where = haliax.broadcast_arrays(x, mean, variance, where)  # type: ignore
-    raw_x, mean, variance, where = unwrap_namedarrays(x, mean, variance, where)
-    axis_indices = x._lookup_indices(axis)
-
-    plain = jnn.standardize(raw_x, axis_indices, mean=mean, variance=variance, epsilon=epsilon, where=where)
-    return NamedArray(plain, x.axes)
 
 
 @functools.wraps(jnn.one_hot)
@@ -183,7 +100,7 @@ def cross_entropy_loss_and_log_normalizers(
 
     :return: tuple of two named arrays, with "per position" losses and log normalizers
     """
-    log_normalizers = hax.nn.logsumexp(pred_y, Label)
+    log_normalizers = haliax.nn.normalization.logsumexp(pred_y, Label)
     neg_log_normalized = log_normalizers - pred_y
 
     loss = hax.dot(Label, target_y, neg_log_normalized)
@@ -191,36 +108,11 @@ def cross_entropy_loss_and_log_normalizers(
     return loss, log_normalizers
 
 
-def quick_gelu(x):
-    return x * sigmoid(1.702 * x)
-
-
 __all__ = [
     "attention",
-    "relu",
-    "relu6",
-    "sigmoid",
-    "softplus",
-    "soft_sign",
-    "silu",
-    "swish",
-    "log_sigmoid",
-    "leaky_relu",
-    "hard_sigmoid",
-    "hard_silu",
-    "hard_swish",
-    "hard_tanh",
-    "elu",
-    "celu",
-    "selu",
-    "gelu",
-    "logsumexp",
-    "softmax",
-    "log_softmax",
     "one_hot",
     "cross_entropy_loss",
     "cross_entropy_loss_and_log_normalizers",
-    "quick_gelu",
     "Conv",
     "ConvTranspose",
     "Dropout",
@@ -229,4 +121,27 @@ __all__ = [
     "Linear",
     "Embedding",
     "Stacked",
+    "relu",
+    "gelu",
+    "quick_gelu",
+    "glu",
+    "relu6",
+    "sigmoid",
+    "soft_sign",
+    "softplus",
+    "swish",
+    "silu",
+    "log_sigmoid",
+    "leaky_relu",
+    "hard_sigmoid",
+    "hard_silu",
+    "hard_swish",
+    "hard_tanh",
+    "logsumexp",
+    "softmax",
+    "log_softmax",
+    "standardize",
+    "elu",
+    "celu",
+    "selu",
 ]
