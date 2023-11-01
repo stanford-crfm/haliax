@@ -19,6 +19,7 @@ from .conv import Conv, ConvTranspose
 from .dropout import Dropout, dropout
 from .embedding import Embedding
 from .linear import Linear
+from .mlp import MLP
 from .normalization import LayerNorm
 from .scan import Stacked
 
