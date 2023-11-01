@@ -18,9 +18,9 @@ class MLP(eqx.Module):
     """
     A multilayer perceptron (MLP) / feed-forward neural network (FFNN).
 
-    MLPs, with stacked linear layers often of the same size with non-semantic axes for hidden
+    MLPs, with their stacked linear layers often with non-semantic axes for hidden
     dims, are not a particular strength of Haliax's design philosophy. Nonetheless, they are a useful tool for
-    prototyping and testing, and can be used as a simple baseline for more complex models.
+    many tasks, and so we provide this module.
 
     In Haliax, all axes must have names, and names must be unique within an array. We considered a few strategies
     for naming the axes of an MLP, and settled on the following: By default, we alternate hidden names between "mlp"
@@ -32,8 +32,6 @@ class MLP(eqx.Module):
     [haliax.nn.Stacked][] with a suitable block.
     """
 
-    Input: Axis = eqx.field(static=True)
-    Output: Axis = eqx.field(static=True)
     activation: Callable = eqx.field(static=True)
     layers: Sequence[Linear]
 
@@ -72,13 +70,19 @@ class MLP(eqx.Module):
             layers.append(Linear.init(cur, Output, use_bias=use_final_bias, key=keys[-1]))
 
         return MLP(
-            Input=Input,
-            Output=Output,
             layers=tuple(layers),
             activation=activation,
         )
 
-    def __call__(self, x: NamedArray, *, key) -> NamedArray:
+    @property
+    def In(self) -> AxisSpec:
+        return self.layers[0].In
+
+    @property
+    def Out(self) -> AxisSpec:
+        return self.layers[-1].Out
+
+    def __call__(self, x: NamedArray, *, key=None) -> NamedArray:
         keys = maybe_rng_split(key, len(self.layers))
         for layer, k in zip(self.layers[:-1], keys):
             x = self.activation(layer(x, key=k))

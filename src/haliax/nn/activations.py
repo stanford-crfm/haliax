@@ -3,7 +3,10 @@ import typing
 from jax import nn as jnn
 from jax import numpy as jnp
 
-from haliax import Axis, NamedArray, Scalar, wrap_elemwise_unary
+from ..axis import Axis
+from ..core import NamedArray
+from ..types import Scalar
+from ..wrap import wrap_elemwise_unary
 
 
 A = typing.TypeVar("A", Scalar, NamedArray, jnp.ndarray)

@@ -131,7 +131,7 @@ See also the section on [Indexing and Slicing](indexing.md).
 Almost all elementwise operations are the same as JAX, except that they work on either [haliax.NamedArray][]
 or [jax.numpy.ndarray][] objects.
 
-Any elementwise operation in [jax.nn][] should be in [haliax.nn][].
+Any elementwise operation in [jax.nn][] should be in [haliax.nn](nn.md).
 
 ### Binary Operations
 
