@@ -7,6 +7,8 @@ import numpy as np
 from jaxtyping import PRNGKeyArray
 
 import haliax
+import haliax.nn.activations
+import haliax.nn.normalization
 import haliax.random as hrandom
 from haliax.axis import Axis, AxisSelection, AxisSelector, AxisSpec
 from haliax.core import NamedArray
@@ -48,7 +50,6 @@ def dot_product_attention_weights(
     :return: NamedArray of shape (QPos, KPos)
     """
     # cf https://github.com/google/flax/blob/509bf97ea272e130d932920f45307ac98947d994/flax/linen/attention.py#L40
-    import haliax.nn as hnn
 
     orig_dtype = query.dtype
     query = query / jnp.sqrt(query.axis_size(Head))
@@ -64,7 +65,7 @@ def dot_product_attention_weights(
     if mask is not None:
         weights = haliax.where(mask, weights, -1e9)
 
-    weights = hnn.softmax(weights, axis=KPos)
+    weights = haliax.nn.normalization.softmax(weights, axis=KPos)
 
     return weights.astype(orig_dtype)
 

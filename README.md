@@ -35,6 +35,8 @@ please see the [Haliax tutorial](https://colab.research.google.com/drive/1TiTcQQ
 (We use the excellent [Equinox](https://github.com/patrick-kidger/equinox) library for its module system and tree transformations.)
 
 ```python
+import haliax.nn.normalization
+import haliax.nn.activations
 import equinox as eqx
 import jax
 import jax.numpy as jnp
@@ -56,7 +58,7 @@ def attention_scores(Key, KPos, query, key, mask):
         scores -= 1E9 * (1.0 - mask)
 
     # convert to probabilities
-    scores = hax.nn.softmax(scores, KPos)
+    scores = haliax.nn.normalization.softmax(scores, KPos)
     return scores
 
 
@@ -72,9 +74,9 @@ causal_mask = hax.arange(Pos).broadcast_axis(KPos) >= hax.arange(KPos)
 
 
 class Attention(eqx.Module):
-    proj_q: hnn.Linear  #  [Embed] -> [Head, Key]
-    proj_k: hnn.Linear  #  [Embed] -> [Head, Key]
-    proj_v: hnn.Linear  #  [Embed] -> [Head, Key]
+    proj_q: hnn.Linear  # [Embed] -> [Head, Key]
+    proj_k: hnn.Linear  # [Embed] -> [Head, Key]
+    proj_v: hnn.Linear  # [Embed] -> [Head, Key]
     proj_answer: hnn.Linear  # output projection from [Head, Key] -> [Embed]
 
     @staticmethod

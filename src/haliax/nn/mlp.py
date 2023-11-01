@@ -4,9 +4,11 @@ import equinox as eqx
 import jax
 from jaxtyping import PRNGKeyArray
 
-import haliax as hax
-import haliax.nn as hnn
-from haliax.jax_utils import maybe_rng_split
+from ..axis import Axis, AxisSpec
+from ..core import NamedArray
+from ..jax_utils import maybe_rng_split
+from .activations import relu
+from .linear import Linear
 
 
 DEFAULT_WIDTH_NAME = "mlp"
@@ -30,18 +32,18 @@ class MLP(eqx.Module):
     [haliax.nn.Stacked][] with a suitable block.
     """
 
-    Input: hax.Axis = eqx.field(static=True)
-    Output: hax.Axis = eqx.field(static=True)
+    Input: Axis = eqx.field(static=True)
+    Output: Axis = eqx.field(static=True)
     activation: Callable = eqx.field(static=True)
-    layers: Sequence[hnn.Linear]
+    layers: Sequence[Linear]
 
     @staticmethod
     def init(
-        Input: hax.AxisSpec,
-        Output: hax.AxisSpec,
-        width: int | hax.Axis,
+        Input: AxisSpec,
+        Output: AxisSpec,
+        width: int | Axis,
         depth: int,
-        activation: Callable = hnn.relu,
+        activation: Callable = relu,
         *,
         use_bias: bool = True,
         use_final_bias: bool = True,
@@ -56,18 +58,18 @@ class MLP(eqx.Module):
 
         if depth == 0:
             # special case: no hidden layers
-            layers.append(hnn.Linear.init(Input, Output, use_bias=use_final_bias, key=keys[0]))
+            layers.append(Linear.init(Input, Output, use_bias=use_final_bias, key=keys[0]))
         else:
             # first hidden layer
-            layers.append(hnn.Linear.init(Input, Width, use_bias=use_bias, key=keys[0]))
+            layers.append(Linear.init(Input, Width, use_bias=use_bias, key=keys[0]))
             # middle hidden layers
             cur = Width
             next = Width2
             for i in range(1, depth):
-                layers.append(hnn.Linear.init(cur, next, use_bias=use_bias, key=keys[i]))
+                layers.append(Linear.init(cur, next, use_bias=use_bias, key=keys[i]))
                 cur, next = next, cur
             # final hidden layer
-            layers.append(hnn.Linear.init(cur, Output, use_bias=use_final_bias, key=keys[-1]))
+            layers.append(Linear.init(cur, Output, use_bias=use_final_bias, key=keys[-1]))
 
         return MLP(
             Input=Input,
@@ -76,15 +78,15 @@ class MLP(eqx.Module):
             activation=activation,
         )
 
-    def __call__(self, x: hax.NamedArray, *, key) -> hax.NamedArray:
+    def __call__(self, x: NamedArray, *, key) -> NamedArray:
         keys = maybe_rng_split(key, len(self.layers))
         for layer, k in zip(self.layers[:-1], keys):
             x = self.activation(layer(x, key=k))
         return self.layers[-1](x, key=keys[-1])
 
 
-def _get_width(Width: int | hax.Axis) -> hax.Axis:
+def _get_width(Width: int | Axis) -> Axis:
     if isinstance(Width, int):
-        return hax.Axis(DEFAULT_WIDTH_NAME, Width)
+        return Axis(DEFAULT_WIDTH_NAME, Width)
     else:
         return Width
