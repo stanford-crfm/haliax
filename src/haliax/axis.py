@@ -281,14 +281,31 @@ def overlapping_axes(ax1: AxisSelection, ax2: AxisSelection) -> Tuple[AxisSelect
     return tuple(out)
 
 
-def axis_name(ax: AxisSelector) -> str:
+@overload
+def axis_name(ax: AxisSelector) -> str:  # type: ignore
+    ...
+
+
+@overload
+def axis_name(ax: Sequence[AxisSelector]) -> Tuple[str, ...]:  # type: ignore
+    ...
+
+
+def axis_name(ax: AxisSelection) -> Union[str, Tuple[str, ...]]:
     """
     Returns the name of the axis. If ax is a string, returns ax. If ax is an Axis, returns ax.name
     """
-    if isinstance(ax, Axis):
-        return ax.name
+
+    def _ax_name(ax: AxisSelector) -> str:
+        if isinstance(ax, Axis):
+            return ax.name
+        else:
+            return ax
+
+    if isinstance(ax, (Axis, str)):
+        return _ax_name(ax)
     else:
-        return ax
+        return tuple(_ax_name(x) for x in ax)
 
 
 class dslice(eqx.Module):

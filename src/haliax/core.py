@@ -180,9 +180,10 @@ class NamedArray:
             raise ValueError(f"Axis {axes} not found")
         else:
             result = []
-            for i in indices:
+            assert isinstance(axes, Sequence)
+            for i, ax in zip(indices, axes):
                 if i is None:
-                    raise ValueError(f"Axis {axes} not found")
+                    raise ValueError(f"Axis {ax} not found in {self.shape}")
                 result.append(self.axes[i])
             return tuple(result)
 
