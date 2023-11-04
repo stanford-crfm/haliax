@@ -191,6 +191,7 @@ def concatenate(axis: AxisSelector, arrays: Sequence[NamedArray]) -> NamedArray:
     # we want to use the axis name for `axis`, because it's not uncommon for those to be different lengths in the arrays
     axes = axes[:axis_index] + (aname,) + axes[axis_index + 1 :]
     arrays = [a.rearrange(axes) for a in arrays]
+    print([a.axes for a in arrays])
 
     new_axes = arrays[0].axes[:axis_index] + (axis,) + arrays[0].axes[axis_index + 1 :]
     return NamedArray(jnp.concatenate([a.array for a in arrays], axis=axis_index), new_axes)
