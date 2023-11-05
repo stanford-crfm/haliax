@@ -60,3 +60,31 @@ def test_maxpool2d():
     answer = jnp.array([[[7, 9, 11], [25, 27, 29]], [[7, 9, 11], [25, 27, 29]]])
 
     assert jnp.all(output.array == answer)
+
+
+def test_maxpool3d():
+    _x = jnp.arange(64).reshape(4, 4, 4)
+    x = hax.named(_x, ("H", "W", "D"))
+    # max_pool = eqx.nn.MaxPool3d(2, (3, 2, 1))
+    output = max_pool((hax.Axis("H", 2), hax.Axis("W", 2), hax.Axis("D", 2)), x, stride=(3, 2, 1))
+
+    answer = jnp.array([[[21, 22, 23], [29, 30, 31]]])
+
+    assert jnp.all(output.array == answer)
+
+    # max_pool = eqx.nn.MaxPool3d(
+    #     kernel_size=3, padding=(0, 1, 1), stride=2, use_ceil=True
+    # )
+    # answer = jnp.asarray(
+    #     [
+    #         [[37, 39, 39], [45, 47, 47], [45, 47, 47]],
+    #         [[53, 55, 55], [61, 63, 63], [61, 63, 63]],
+    #     ]
+    # )
+    # output = max_pool(
+    #     (hax.Axis("H", 3), hax.Axis("W", 3), hax.Axis("D", 3)),
+    #     x,
+    #     stride=2,
+    #     padding=( (0, 1), (2, 2), (2, 2) ),
+    # )
+    # assert jnp.all(output.array == answer)
