@@ -15,12 +15,16 @@ from ..util import ensure_tuple
 Padding = Literal["SAME", "VALID"] | int | tuple[tuple[int, int], ...]
 
 
+# TODO: add ceil_mode
+# TODO: add dilation?
+
+
 def pool(
     Window: AxisSpec,
     inputs: NamedArray,
     init: Scalar,
     reduce_fn: Callable[[Scalar, Scalar], Scalar],
-    strides: Optional[tuple[int, ...]] = None,
+    stride: Optional[int | tuple[int, ...]] = None,
     padding: Padding = "VALID",
 ) -> NamedArray:
     """
@@ -36,8 +40,8 @@ def pool(
         inputs: input data with dimensions (batch, window dims..., features).
         init: the initial value for the reduction
         reduce_fn: a reduce function of the form `(T, T) -> T`.
-        strides: a sequence of `n` integers, representing the inter-window
-          strides (default: `(1, ..., 1)`).
+        stride: int, or a sequence of `n` integers, representing the inter-window
+          stride (default: `(1, ..., 1)`).
         padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
           of `n` `(low, high)` integer pairs that give the padding to apply before
           and after each spatial dimension, or an integer to pad all dimensions
@@ -56,23 +60,25 @@ def pool(
         else:
             dims.append(1)
 
-    if strides is not None and len(Window) != len(strides):
-        raise ValueError(f"len(Window) ({len(Window)}) != len(strides) ({len(strides)})")
+    if isinstance(stride, int):
+        stride = (stride,) * len(Window)
 
-    if strides is not None:
-        strides = ensure_tuple(strides)
-        stride_map = {w.name: s for w, s in zip(Window, strides)}
-        strides_out = []
+    if stride is not None:
+        if len(Window) != len(stride):
+            raise ValueError(f"len(Window) ({len(Window)}) != len(stride) ({len(stride)})")
+        stride = ensure_tuple(stride)
+        stride_map = {w.name: s for w, s in zip(Window, stride)}
+        stride_out = []
         for ax in inputs.axes:
             if ax.name in stride_map:
-                strides_out.append(stride_map[ax.name])
+                stride_out.append(stride_map[ax.name])
             else:
-                strides_out.append(1)
+                stride_out.append(1)
 
-        strides = tuple(strides_out)
-        del strides_out
+        stride = tuple(stride_out)
+        del stride_out
     else:
-        strides = (1,) * len(dims)
+        stride = (1,) * len(dims)
 
     if isinstance(padding, int):
         pout = []
@@ -104,7 +110,7 @@ def pool(
     # TODO: Flax suggests there must be a batch dim? Is this true?
 
     assert inputs.ndim == len(dims), f"len({inputs.shape}) != len({dims})"
-    y = jax.lax.reduce_window(inputs.array, init, reduce_fn, dims, strides, padding)
+    y = jax.lax.reduce_window(inputs.array, init, reduce_fn, dims, stride, padding)
 
     out_axes = unsize_axes(inputs.axes, Window)
 
@@ -125,7 +131,7 @@ def _patch_up_reduce_fn(reduce_fn):
 
 
 def max_pool(
-    Window: AxisSpec, inputs: NamedArray, strides: Optional[tuple[int, ...]] = None, padding: Padding = "VALID"
+    Window: AxisSpec, inputs: NamedArray, stride: Optional[int | tuple[int, ...]] = None, padding: Padding = "VALID"
 ) -> NamedArray:
     """
     Max pooling.
@@ -133,19 +139,19 @@ def max_pool(
     Args:
         Window: the size of the window to pool over
         inputs: input data with dimensions (batch, window dims..., features).
-        strides: a sequence of `n` integers, representing the inter-window
-          strides (default: `(1, ..., 1)`).
+        stride: a sequence of `n` integers, representing the inter-window
+          stride (default: `(1, ..., 1)`).
         padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
           of `n` `(low, high)` integer pairs that give the padding to apply before
           and after each spatial dimension.
     Returns:
       The maximum value in each window slice.
     """
-    return pool(Window, inputs, -float("inf"), jax.lax.max, strides, padding)
+    return pool(Window, inputs, -float("inf"), jax.lax.max, stride, padding)
 
 
 def min_pool(
-    Window: AxisSpec, inputs: NamedArray, strides: Optional[tuple[int, ...]] = None, padding: Padding = "VALID"
+    Window: AxisSpec, inputs: NamedArray, stride: Optional[tuple[int, ...]] = None, padding: Padding = "VALID"
 ) -> NamedArray:
     """
     Min pooling.
@@ -153,19 +159,19 @@ def min_pool(
     Args:
         Window: the size of the window to pool over
         inputs: input data with dimensions (batch, window dims..., features).
-        strides: a sequence of `n` integers, representing the inter-window
-        strides (default: `(1, ..., 1)`).
+        stride: a sequence of `n` integers, representing the inter-window
+        stride (default: `(1, ..., 1)`).
         padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
         of `n` `(low, high)` integer pairs that give the padding to apply before
         and after each spatial dimension.
     Returns:
     The minimum value in each window slice.
     """
-    return pool(Window, inputs, float("inf"), jax.lax.min, strides, padding)
+    return pool(Window, inputs, float("inf"), jax.lax.min, stride, padding)
 
 
 def mean_pool(
-    Window: AxisSpec, inputs: NamedArray, strides: Optional[tuple[int, ...]] = None, padding: Padding = "VALID"
+    Window: AxisSpec, inputs: NamedArray, stride: Optional[tuple[int, ...]] = None, padding: Padding = "VALID"
 ):
     """
     Mean pooling.
@@ -173,15 +179,15 @@ def mean_pool(
     Args:
         Window: the size of the window to pool over
         inputs: input data with dimensions (batch, window dims..., features).
-        strides: a sequence of `n` integers, representing the inter-window
-          strides (default: `(1, ..., 1)`).
+        stride: a sequence of `n` integers, representing the inter-window
+          stride (default: `(1, ..., 1)`).
         padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
           of `n` `(low, high)` integer pairs that give the padding to apply before
           and after each spatial dimension.
     Returns:
       The mean value in each window slice.
     """
-    tots = pool(Window, inputs, 0, jax.lax.add, strides, padding)
+    tots = pool(Window, inputs, 0, jax.lax.add, stride, padding)
     Window = ensure_tuple(Window)
     window_size = reduce(lambda x, y: x * y, [w.size for w in Window])
     return tots / window_size

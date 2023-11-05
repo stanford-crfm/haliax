@@ -249,8 +249,19 @@ class NamedArray:
             return tuple(self._lookup_indices(a) for a in axis)
 
     # Axis rearrangement
-    def rearrange(self, axis: Sequence[Union[AxisSelector, EllipsisType]]) -> "NamedArray":
-        return haliax.rearrange(self, axis)
+    @typing.overload
+    def rearrange(self, axes: Sequence[AxisSelector | EllipsisType]) -> "NamedArray":
+        """See [haliax.rearrange][] for details."""
+        pass
+
+    @typing.overload
+    def rearrange(self, expression: str, **bindings: AxisSelector | int) -> "NamedArray":
+        """See [haliax.rearrange][] for details."""
+        pass
+
+    def rearrange(self, *args, **kwargs) -> "NamedArray":
+        """See [haliax.rearrange][] for details."""
+        return haliax.rearrange(self, *args, **kwargs)
 
     def broadcast_to(self, axes: AxisSpec) -> "NamedArray":
         axes = ensure_tuple(axes)
