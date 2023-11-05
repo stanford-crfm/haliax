@@ -218,6 +218,20 @@ def without_axes(axis_spec: AxisSelection, to_remove: AxisSelection) -> AxisSele
     return _dict_to_spec(axis_spec_dict)
 
 
+def unsize_axes(axis_spec: AxisSpec, to_unsize: AxisSelection) -> AxisSelection:
+    """Returns a new axis spec that is the same as the original, but with any axes in to_unsize with their sizes
+    removed. Raises if any axis in to_unsize is not present in axis_spec"""
+    to_unsize = ensure_tuple(to_unsize)
+    axis_spec_dict: dict[str, Optional[int]] = _spec_to_dict(axis_spec)  # type: ignore
+    for ax in to_unsize:
+        name = axis_name(ax)
+        if name not in axis_spec_dict:
+            raise ValueError(f"Axis {name} not present in axis spec {axis_spec}")
+        axis_spec_dict[name] = None
+
+    return _dict_to_spec(axis_spec_dict)
+
+
 @overload
 def replace_axis(axis_spec: AxisSpec, old: AxisSelector, new: AxisSpec) -> AxisSpec:
     ...
