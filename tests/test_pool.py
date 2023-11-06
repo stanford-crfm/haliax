@@ -1,3 +1,4 @@
+import jax
 import jax.numpy as jnp
 
 import haliax
@@ -151,3 +152,17 @@ def test_mean_pool3d():
     answer = jnp.array([[[4, 6]], [[36, 38]]])
 
     assert jnp.all(output.array == answer)
+
+
+def test_poolbackprop():
+    def max_pool_mean(x):
+        pooled = max_pool(
+            (hax.Axis("H", 2), hax.Axis("W", 2), hax.Axis("D", 2)), x, stride=1, padding=((0, 1), (0, 1), (0, 1))
+        )
+        return hax.mean(pooled).scalar()
+
+    _x = jnp.arange(64, dtype=jnp.float32).reshape(1, 4, 4, 4)
+    x = hax.named(_x, ("B", "H", "W", "D"))
+    grad_fn = jax.value_and_grad(max_pool_mean)
+
+    grad_fn(x)
