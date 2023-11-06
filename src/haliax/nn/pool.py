@@ -6,9 +6,9 @@ import jax
 
 import haliax
 
-from .. import Scalar
 from ..axis import AxisSpec, axis_spec_to_shape_dict, unsize_axes
 from ..core import NamedArray
+from ..types import Scalar
 from ..util import ensure_tuple
 
 

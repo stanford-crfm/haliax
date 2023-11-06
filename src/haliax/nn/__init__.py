@@ -42,6 +42,7 @@ from .embedding import Embedding
 from .linear import Linear
 from .mlp import MLP
 from .normalization import LayerNorm, log_softmax, logsumexp, softmax, standardize
+from .pool import max_pool, mean_pool, min_pool
 from .scan import Stacked
 
 
@@ -144,4 +145,7 @@ __all__ = [
     "elu",
     "celu",
     "selu",
+    "max_pool",
+    "mean_pool",
+    "min_pool",
 ]
