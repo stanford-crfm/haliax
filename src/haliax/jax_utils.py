@@ -126,3 +126,13 @@ def named_call(f=_UNSPECIFIED, name: Optional[str] = None):
                 name = f.__qualname__
 
         return jax.named_scope(name)(f)
+
+
+def is_pallas_dslice(x: object) -> bool:
+    try:
+        from jax.experimental.pallas import dslice as pdslice
+    except ImportError:
+        return False
+
+    _PALLAS_DSLICE_TYPE = type(pdslice(0, 1))
+    return isinstance(x, _PALLAS_DSLICE_TYPE)

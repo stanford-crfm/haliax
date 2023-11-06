@@ -118,8 +118,6 @@ def pool(
         if padding not in ("SAME", "VALID"):
             raise ValueError(f"padding must be 'SAME' or 'VALID', got {padding}")
 
-    # TODO: Flax suggests there must be a batch dim? Is this true?
-
     assert inputs.ndim == len(dims), f"len({inputs.shape}) != len({dims})"
     y = jax.lax.reduce_window(inputs.array, init, reduce_fn, dims, stride, padding)
 
@@ -231,7 +229,7 @@ def _use_ceil_padding(
     window_padding: dict[str, tuple[int, int]],
     window_stride: dict[str, int],
 ):
-    # cribbed from equinox
+    # cribbed/adapted from equinox
     new_padding = {}
     for ax in window_inputs.keys():
         input_size = window_inputs[ax]
@@ -239,10 +237,8 @@ def _use_ceil_padding(
         stride = window_stride[ax]
         left_padding, right_padding = window_padding[ax]
         if (input_size + left_padding + right_padding - kernel_size) % stride == 0:
-            # new_padding.append((left_padding, right_padding))
             new_padding[ax] = (left_padding, right_padding)
         else:
-            # new_padding.append((left_padding, right_padding + stride))
             new_padding[ax] = (left_padding, right_padding + stride)
 
     return new_padding

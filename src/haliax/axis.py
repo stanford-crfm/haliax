@@ -392,16 +392,6 @@ def dblock(idx: int, size: int) -> dslice:
     return dslice(idx * size, size)
 
 
-def is_pallas_dslice(x: object) -> bool:
-    try:
-        from jax.experimental.pallas import dslice as pdslice
-    except ImportError:
-        return False
-
-    _PALLAS_DSLICE_TYPE = type(pdslice(0, 1))
-    return isinstance(x, _PALLAS_DSLICE_TYPE)
-
-
 __all__ = [
     "Axis",
     "AxisSelector",
@@ -410,8 +400,10 @@ __all__ = [
     "axis_name",
     "concat_axes",
     "union_axes",
+    "axis_spec_to_shape_dict",
     "ds",
     "dslice",
+    "dblock",
     "eliminate_axes",
     "is_axis_compatible",
     "overlapping_axes",
@@ -419,5 +411,5 @@ __all__ = [
     "selects_axis",
     "union_axes",
     "without_axes",
-    "is_pallas_dslice",
+    "unsize_axes",
 ]

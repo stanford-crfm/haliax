@@ -14,7 +14,7 @@ import numpy as np
 
 import haliax
 import haliax.axis
-from haliax.jax_utils import is_jax_array_like
+from haliax.jax_utils import is_jax_array_like, is_pallas_dslice
 from haliax.util import ensure_tuple
 
 from ._src.util import index_where, py_slice, slice_t
@@ -26,7 +26,6 @@ from .axis import (
     axis_name,
     dslice,
     eliminate_axes,
-    is_pallas_dslice,
     selects_axis,
     union_axes,
 )
