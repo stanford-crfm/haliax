@@ -12,9 +12,9 @@ def test_maxpool1d():
     D = hax.Axis("D", 14)
     x = hax.arange(D)
     output = max_pool((D.resize(2),), x, stride=(3,))
-    answer = hax.named(jnp.array([1, 4, 7, 10, 13], dtype=jnp.int32), "D")
+    answer = jnp.array([1, 4, 7, 10, 13], dtype=jnp.int32)
 
-    assert jnp.all((output == answer).array)
+    assert jnp.all(output.array == answer)
 
     answer = jnp.array([2, 5, 8, 11])
     output = max_pool(D.resize(3), x, stride=(3,), padding=0)
@@ -23,13 +23,20 @@ def test_maxpool1d():
     # test batch axes
     B = hax.Axis("B", 2)
     x = x.rearrange("(B D) -> B D", B=B)
-    output = max_pool(D.resize(2), x, stride=(3,))
-    print(output)
+    output = max_pool(D.resize(2), x, stride=(3,), padding="VALID")
     answer = jnp.array([[1, 4], [8, 11]])
+    assert jnp.all(output.array == answer)
+
+    output = max_pool(D.resize(2), x, stride=(3,), use_ceil=True)
+    answer = jnp.array([[1, 4, 6], [8, 11, 13]])
     assert jnp.all(output.array == answer)
 
     output = max_pool(D.resize(3), x, stride=(3,), padding=0)
     answer = jnp.array([[2, 5], [9, 12]])
+    assert jnp.all(output.array == answer)
+
+    output = max_pool(D.resize(3), x, stride=(3,), padding=0, use_ceil=True)
+    answer = jnp.array([[2, 5, 6], [9, 12, 13]])
     assert jnp.all(output.array == answer)
 
     output = max_pool(D.resize(2), x, stride=(3,), padding="SAME")
@@ -75,16 +82,17 @@ def test_maxpool3d():
     # max_pool = eqx.nn.MaxPool3d(
     #     kernel_size=3, padding=(0, 1, 1), stride=2, use_ceil=True
     # )
-    # answer = jnp.asarray(
-    #     [
-    #         [[37, 39, 39], [45, 47, 47], [45, 47, 47]],
-    #         [[53, 55, 55], [61, 63, 63], [61, 63, 63]],
-    #     ]
-    # )
-    # output = max_pool(
-    #     (hax.Axis("H", 3), hax.Axis("W", 3), hax.Axis("D", 3)),
-    #     x,
-    #     stride=2,
-    #     padding=( (0, 1), (2, 2), (2, 2) ),
-    # )
-    # assert jnp.all(output.array == answer)
+    answer = jnp.asarray(
+        [
+            [[37, 39, 39], [45, 47, 47], [45, 47, 47]],
+            [[53, 55, 55], [61, 63, 63], [61, 63, 63]],
+        ]
+    )
+    output = max_pool(
+        (hax.Axis("H", 3), hax.Axis("W", 3), hax.Axis("D", 3)),
+        x,
+        stride=2,
+        padding=((0, 1), (1, 1), (1, 1)),
+        use_ceil=True,
+    )
+    assert jnp.all(output.array == answer)

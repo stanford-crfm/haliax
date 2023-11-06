@@ -7,15 +7,15 @@ import jax
 import haliax
 
 from .. import Scalar
-from ..axis import AxisSpec, unsize_axes
+from ..axis import AxisSpec, axis_spec_to_shape_dict, unsize_axes
 from ..core import NamedArray
 from ..util import ensure_tuple
 
 
 Padding = Literal["SAME", "VALID"] | int | tuple[tuple[int, int], ...]
 
+DEFAULT_PADDING: Literal["VALID"] = "VALID"
 
-# TODO: add ceil_mode
 # TODO: add dilation?
 
 
@@ -25,7 +25,8 @@ def pool(
     init: Scalar,
     reduce_fn: Callable[[Scalar, Scalar], Scalar],
     stride: Optional[int | tuple[int, ...]] = None,
-    padding: Padding = "VALID",
+    padding: Padding = DEFAULT_PADDING,
+    use_ceil: bool = False,
 ) -> NamedArray:
     """
     General function for pooling. Broadly based on the Flax implementation.
@@ -44,7 +45,8 @@ def pool(
           stride (default: `(1, ..., 1)`).
         padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
           of `n` `(low, high)` integer pairs that give the padding to apply before
-          and after each spatial dimension, or an integer to pad all dimensions
+          and after each spatial dimension, or an integer to pad all dimensions.
+        use_ceil: if True, will use ceil instead of floor to compute the output shape
     Returns:
       The output of the reduction for each window slice.
     """
@@ -52,7 +54,7 @@ def pool(
 
     reduce_fn = _patch_up_reduce_fn(reduce_fn)
 
-    window_map = {w.name: w.size for w in Window}
+    window_map = axis_spec_to_shape_dict(Window)
     dims = []
     for ax in inputs.axes:
         if ax.name in window_map:
@@ -79,18 +81,12 @@ def pool(
         del stride_out
     else:
         stride = (1,) * len(dims)
+        stride_map = {w.name: 1 for w in Window}
 
     if isinstance(padding, int):
-        pout = []
-        for ax in inputs.axes:
-            if ax.name in window_map:
-                pout.append((padding, padding))
-            else:
-                pout.append((0, 0))
+        padding = ((padding, padding),) * len(Window)
 
-        padding = tuple(pout)
-
-    elif not isinstance(padding, str):
+    if not isinstance(padding, str):
         padding = tuple(map(tuple, padding))  # type: ignore
         if len(padding) != len(Window):
             raise ValueError(f"len(padding) ({len(padding)}) != len(Window) ({len(Window)})")
@@ -98,6 +94,15 @@ def pool(
             raise ValueError(f"each entry in padding must be length 2, got {padding}")
 
         padding_map = {w.name: p for w, p in zip(Window, padding)}
+        if use_ceil:
+            window_inputs = {w.name: ax.size for w, ax in zip(Window, inputs.axes)}
+            padding_map = _use_ceil_padding(
+                window_inputs=window_inputs,
+                window_kernel=window_map,
+                window_padding=padding_map,
+                window_stride=stride_map,
+            )
+
         padding_out = []
         for ax in inputs.axes:
             if ax.name in padding_map:
@@ -105,7 +110,13 @@ def pool(
             else:
                 padding_out.append((0, 0))
 
-        padding = tuple(padding)
+        padding = tuple(padding_out)
+    elif padding == "VALID" and use_ceil:
+        padding = "SAME"
+    else:
+        padding = padding.upper()  # type: ignore
+        if padding not in ("SAME", "VALID"):
+            raise ValueError(f"padding must be 'SAME' or 'VALID', got {padding}")
 
     # TODO: Flax suggests there must be a batch dim? Is this true?
 
@@ -131,7 +142,11 @@ def _patch_up_reduce_fn(reduce_fn):
 
 
 def max_pool(
-    Window: AxisSpec, inputs: NamedArray, stride: Optional[int | tuple[int, ...]] = None, padding: Padding = "VALID"
+    Window: AxisSpec,
+    inputs: NamedArray,
+    stride: Optional[int | tuple[int, ...]] = None,
+    padding: Padding = DEFAULT_PADDING,
+    use_ceil: bool = False,
 ) -> NamedArray:
     """
     Max pooling.
@@ -147,11 +162,15 @@ def max_pool(
     Returns:
       The maximum value in each window slice.
     """
-    return pool(Window, inputs, -float("inf"), jax.lax.max, stride, padding)
+    return pool(Window, inputs, -float("inf"), jax.lax.max, stride, padding, use_ceil=use_ceil)
 
 
 def min_pool(
-    Window: AxisSpec, inputs: NamedArray, stride: Optional[tuple[int, ...]] = None, padding: Padding = "VALID"
+    Window: AxisSpec,
+    inputs: NamedArray,
+    stride: Optional[tuple[int, ...]] = None,
+    padding: Padding = DEFAULT_PADDING,
+    use_ceil: bool = False,
 ) -> NamedArray:
     """
     Min pooling.
@@ -160,19 +179,24 @@ def min_pool(
         Window: the size of the window to pool over
         inputs: input data with dimensions (batch, window dims..., features).
         stride: a sequence of `n` integers, representing the inter-window
-        stride (default: `(1, ..., 1)`).
+                stride (default: `(1, ..., 1)`).
         padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
-        of `n` `(low, high)` integer pairs that give the padding to apply before
-        and after each spatial dimension.
+            of `n` `(low, high)` integer pairs that give the padding to apply before
+            and after each spatial dimension.
+        use_ceil: if True, will use ceil instead of floor to compute the output shape
     Returns:
     The minimum value in each window slice.
     """
-    return pool(Window, inputs, float("inf"), jax.lax.min, stride, padding)
+    return pool(Window, inputs, float("inf"), jax.lax.min, stride, padding, use_ceil=use_ceil)
 
 
 def mean_pool(
-    Window: AxisSpec, inputs: NamedArray, stride: Optional[tuple[int, ...]] = None, padding: Padding = "VALID"
-):
+    Window: AxisSpec,
+    inputs: NamedArray,
+    stride: Optional[tuple[int, ...]] = None,
+    padding: Padding = DEFAULT_PADDING,
+    use_ceil: bool = False,
+) -> NamedArray:
     """
     Mean pooling.
 
@@ -187,7 +211,30 @@ def mean_pool(
     Returns:
       The mean value in each window slice.
     """
-    tots = pool(Window, inputs, 0, jax.lax.add, stride, padding)
+    tots = pool(Window, inputs, 0, jax.lax.add, stride, padding, use_ceil=use_ceil)
     Window = ensure_tuple(Window)
     window_size = reduce(lambda x, y: x * y, [w.size for w in Window])
     return tots / window_size
+
+
+def _use_ceil_padding(
+    window_inputs: dict[str, int],
+    window_kernel: dict[str, int],
+    window_padding: dict[str, tuple[int, int]],
+    window_stride: dict[str, int],
+):
+    # cribbed from equinox
+    new_padding = {}
+    for ax in window_inputs.keys():
+        input_size = window_inputs[ax]
+        kernel_size = window_kernel[ax]
+        stride = window_stride[ax]
+        left_padding, right_padding = window_padding[ax]
+        if (input_size + left_padding + right_padding - kernel_size) % stride == 0:
+            # new_padding.append((left_padding, right_padding))
+            new_padding[ax] = (left_padding, right_padding)
+        else:
+            # new_padding.append((left_padding, right_padding + stride))
+            new_padding[ax] = (left_padding, right_padding + stride)
+
+    return new_padding

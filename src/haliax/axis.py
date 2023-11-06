@@ -34,6 +34,10 @@ str and Axis"""
 AxisSpec = Union[Axis, Sequence[Axis]]
 """AxisSpec is a type that can be used to specify the axes of an array, usually for creation or adding a new axis
  whose size can't be determined another way. Axis or sequence of Axis"""
+ShapeDict = Mapping[str, int]
+"""ShapeDict is a type that can be used to specify the axes of an array, usually for creation or adding a new axis"""
+PartialShapeDict = Mapping[str, Optional[int]]
+"""Similar to an AxisSelection, in dict form."""
 
 
 def selects_axis(selector: AxisSelection, selected: AxisSelection) -> bool:
@@ -46,7 +50,7 @@ def selects_axis(selector: AxisSelection, selected: AxisSelection) -> bool:
         except ValueError:
             return False
 
-    selector_dict = _spec_to_dict(selector)
+    selector_dict = axis_spec_to_shape_dict(selector)
 
     selected_tuple = ensure_tuple(selected)  # type: ignore
     for ax in selected_tuple:
@@ -81,16 +85,16 @@ def is_axis_compatible(ax1: AxisSelector, ax2: AxisSelector):
 
 
 @overload
-def _spec_to_dict(axis_spec: AxisSpec) -> Dict[str, int]:  # type: ignore
+def axis_spec_to_shape_dict(axis_spec: AxisSpec) -> Dict[str, int]:  # type: ignore
     ...
 
 
 @overload
-def _spec_to_dict(axis_spec: AxisSelection) -> Dict[str, Optional[int]]:  # type: ignore
+def axis_spec_to_shape_dict(axis_spec: AxisSelection) -> Dict[str, Optional[int]]:  # type: ignore
     ...
 
 
-def _spec_to_dict(axis_spec: AxisSelection) -> Dict[str, Optional[int]]:  # type: ignore
+def axis_spec_to_shape_dict(axis_spec: AxisSelection) -> Dict[str, Optional[int]]:  # type: ignore
     spec = ensure_tuple(axis_spec)  # type: ignore
     shape_dict: Dict[str, Optional[int]] = {}
     for ax in spec:
@@ -158,8 +162,8 @@ def union_axes(a1: AxisSelection, a2: AxisSelection) -> AxisSelection:
     a1 = ensure_tuple(a1)
     a2 = ensure_tuple(a2)
 
-    a1_dict = _spec_to_dict(a1)
-    a2_dict = _spec_to_dict(a2)
+    a1_dict = axis_spec_to_shape_dict(a1)
+    a2_dict = axis_spec_to_shape_dict(a2)
 
     for ax, sz in a2_dict.items():
         if ax in a1_dict:
@@ -185,7 +189,7 @@ def eliminate_axes(axis_spec: AxisSelection, to_remove: AxisSelection) -> AxisSe
     """Returns a new axis spec that is the same as the original, but without any axes in axes. Raises if any axis in to_remove is
     not present in axis_spec"""
     to_remove = ensure_tuple(to_remove)
-    axis_spec_dict = _spec_to_dict(axis_spec)
+    axis_spec_dict = axis_spec_to_shape_dict(axis_spec)
     for ax in to_remove:
         name = axis_name(ax)
         if name not in axis_spec_dict:
@@ -209,7 +213,7 @@ def without_axes(axis_spec: AxisSelection, to_remove: AxisSelection) -> AxisSele
     """As eliminate_axes, but does not raise if any axis in to_remove is not present in axis_spec"""
 
     to_remove = ensure_tuple(to_remove)
-    axis_spec_dict = _spec_to_dict(axis_spec)
+    axis_spec_dict = axis_spec_to_shape_dict(axis_spec)
     for ax in to_remove:
         name = axis_name(ax)
         if name in axis_spec_dict:
@@ -222,7 +226,7 @@ def unsize_axes(axis_spec: AxisSpec, to_unsize: AxisSelection) -> AxisSelection:
     """Returns a new axis spec that is the same as the original, but with any axes in to_unsize with their sizes
     removed. Raises if any axis in to_unsize is not present in axis_spec"""
     to_unsize = ensure_tuple(to_unsize)
-    axis_spec_dict: dict[str, Optional[int]] = _spec_to_dict(axis_spec)  # type: ignore
+    axis_spec_dict: dict[str, Optional[int]] = axis_spec_to_shape_dict(axis_spec)  # type: ignore
     for ax in to_unsize:
         name = axis_name(ax)
         if name not in axis_spec_dict:
@@ -271,7 +275,7 @@ def overlapping_axes(ax1: AxisSelection, ax2: AxisSelection) -> Tuple[AxisSelect
 
 def overlapping_axes(ax1: AxisSelection, ax2: AxisSelection) -> Tuple[AxisSelector, ...]:
     """Returns a tuple of axes that are present in both ax1 and ax2"""
-    ax2_dict = _spec_to_dict(ax2)
+    ax2_dict = axis_spec_to_shape_dict(ax2)
     out: List[AxisSelector] = []
     ax1 = ensure_tuple(ax1)
 
