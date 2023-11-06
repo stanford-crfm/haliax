@@ -4,7 +4,7 @@ from typing import Dict, List, Mapping, Optional, Sequence, Tuple, Union, overlo
 
 import equinox as eqx
 
-from haliax.util import ensure_tuple
+from haliax.util import ensure_tuple, maybe_untuple
 
 from ._src.util import index_where
 
@@ -109,7 +109,7 @@ def axis_spec_to_shape_dict(axis_spec: AxisSelection) -> Dict[str, Optional[int]
 
 
 def _dict_to_spec(axis_spec: Mapping[str, Optional[int]]) -> AxisSelection:
-    return tuple(Axis(name, size) if size is not None else name for name, size in axis_spec.items())
+    return maybe_untuple(tuple(Axis(name, size) if size is not None else name for name, size in axis_spec.items()))
 
 
 @overload
@@ -222,9 +222,27 @@ def without_axes(axis_spec: AxisSelection, to_remove: AxisSelection) -> AxisSele
     return _dict_to_spec(axis_spec_dict)
 
 
-def unsize_axes(axis_spec: AxisSpec, to_unsize: AxisSelection) -> AxisSelection:
-    """Returns a new axis spec that is the same as the original, but with any axes in to_unsize with their sizes
-    removed. Raises if any axis in to_unsize is not present in axis_spec"""
+@typing.overload
+def unsize_axes(axis_spec: AxisSelection, to_unsize: AxisSelection) -> AxisSelection:
+    ...
+
+
+@typing.overload
+def unsize_axes(axis_spec: AxisSelection) -> AxisSelection:
+    ...
+
+
+def unsize_axes(axis_spec: AxisSelection, to_unsize: Optional[AxisSelection] = None) -> AxisSelection:
+    """
+    This function is used to remove the sizes of axes in an axis spec.
+    There are two overloads:
+    - If to_unsize is None, then all axes in axis_spec will be unsized
+    - If to_unsize is not None, then all axes in to_unsize will be unsized. Raises if any axis in to_unsize is not present in axis_spec
+    """
+
+    if to_unsize is None:
+        return maybe_untuple(tuple(axis_name(ax) for ax in ensure_tuple(axis_spec)))  # type: ignore
+
     to_unsize = ensure_tuple(to_unsize)
     axis_spec_dict: dict[str, Optional[int]] = axis_spec_to_shape_dict(axis_spec)  # type: ignore
     for ax in to_unsize:

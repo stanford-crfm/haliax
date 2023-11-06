@@ -27,6 +27,15 @@ def ensure_tuple(x: Union[Sequence[T], T]) -> Tuple[T, ...]:
     return (x,)
 
 
+def maybe_untuple(x: Union[Sequence[T], T]) -> Union[T, Sequence[T]]:
+    """
+    If x is a tuple with one element, return that element. Otherwise return x.
+    """
+    if isinstance(x, tuple) and len(x) == 1:
+        return x[0]
+    return x
+
+
 class StringHolderEnum(type):
     """Like a python enum but just holds string constants, as opposed to wrapped string constants"""
 

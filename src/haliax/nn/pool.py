@@ -168,7 +168,7 @@ def max_pool(
 def min_pool(
     Window: AxisSpec,
     inputs: NamedArray,
-    stride: Optional[tuple[int, ...]] = None,
+    stride: Optional[int | tuple[int, ...]] = None,
     padding: Padding = DEFAULT_PADDING,
     use_ceil: bool = False,
 ) -> NamedArray:
@@ -193,9 +193,11 @@ def min_pool(
 def mean_pool(
     Window: AxisSpec,
     inputs: NamedArray,
-    stride: Optional[tuple[int, ...]] = None,
+    stride: Optional[int | tuple[int, ...]] = None,
     padding: Padding = DEFAULT_PADDING,
+    *,
     use_ceil: bool = False,
+    count_include_pad: bool = False,
 ) -> NamedArray:
     """
     Mean pooling.
@@ -212,9 +214,15 @@ def mean_pool(
       The mean value in each window slice.
     """
     tots = pool(Window, inputs, 0, jax.lax.add, stride, padding, use_ceil=use_ceil)
-    Window = ensure_tuple(Window)
-    window_size = reduce(lambda x, y: x * y, [w.size for w in Window])
-    return tots / window_size
+    if count_include_pad:
+        Window = ensure_tuple(Window)
+        window_size = reduce(lambda x, y: x * y, [w.size for w in Window])
+        return tots / window_size
+    else:
+        inputs_axes_without_batches = inputs.resolve_axis(unsize_axes(Window))
+        ones = haliax.ones(inputs_axes_without_batches)
+        tots = tots / pool(Window, ones, 0.0, jax.lax.add, stride, padding)
+        return tots
 
 
 def _use_ceil_padding(

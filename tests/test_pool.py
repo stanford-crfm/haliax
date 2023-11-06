@@ -2,7 +2,7 @@ import jax.numpy as jnp
 
 import haliax
 import haliax as hax
-from haliax.nn.pool import max_pool
+from haliax.nn.pool import max_pool, mean_pool
 
 
 # Tests largely cribbed from equinox
@@ -18,6 +18,11 @@ def test_maxpool1d():
 
     answer = jnp.array([2, 5, 8, 11])
     output = max_pool(D.resize(3), x, stride=(3,), padding=0)
+    assert jnp.all(output.array == answer)
+
+    # max_pool = eqx.nn.MaxPool1d(kernel_size=3, stride=3, padding=0, use_ceil=True)
+    answer = jnp.array([2, 5, 8, 11, 13])
+    output = max_pool(D.resize(3), x, stride=(3,), padding=0, use_ceil=True)
     assert jnp.all(output.array == answer)
 
     # test batch axes
@@ -72,16 +77,12 @@ def test_maxpool2d():
 def test_maxpool3d():
     _x = jnp.arange(64).reshape(4, 4, 4)
     x = hax.named(_x, ("H", "W", "D"))
-    # max_pool = eqx.nn.MaxPool3d(2, (3, 2, 1))
     output = max_pool((hax.Axis("H", 2), hax.Axis("W", 2), hax.Axis("D", 2)), x, stride=(3, 2, 1))
 
     answer = jnp.array([[[21, 22, 23], [29, 30, 31]]])
 
     assert jnp.all(output.array == answer)
 
-    # max_pool = eqx.nn.MaxPool3d(
-    #     kernel_size=3, padding=(0, 1, 1), stride=2, use_ceil=True
-    # )
     answer = jnp.asarray(
         [
             [[37, 39, 39], [45, 47, 47], [45, 47, 47]],
@@ -95,4 +96,58 @@ def test_maxpool3d():
         padding=((0, 1), (1, 1), (1, 1)),
         use_ceil=True,
     )
+    assert jnp.all(output.array == answer)
+
+
+def test_mean_pool_1d():
+    D = hax.Axis("D", 14)
+    x = hax.arange(D)
+    output = mean_pool((D.resize(2),), x, stride=(3,))
+    answer = jnp.array([0.5, 3.5, 6.5, 9.5, 12.5])
+
+    assert jnp.all(output.array == answer)
+
+    # no pad
+    output = mean_pool(D.resize(3), x, stride=(3,), padding=0)
+    answer = jnp.array([1, 4, 7, 10])
+    assert jnp.all(output.array == answer)
+
+    # pad, no include pad in avg
+    output = mean_pool(D.resize(3), x, stride=(3,), padding="SAME", count_include_pad=False)
+    answer = jnp.array([1, 4, 7, 10, 12.5])
+
+    assert jnp.all(output.array == answer)
+
+    output = mean_pool(D.resize(3), x, stride=(3,), padding="SAME", count_include_pad=True)
+    answer = jnp.array([1, 4, 7, 10, (12 + 13) / 3.0])
+
+    assert jnp.all(output.array == answer)
+
+
+def test_mean_pool_2d():
+    _x = jnp.arange(36).reshape(6, 6)
+    x = hax.named(_x, ("H", "W"))
+
+    output = mean_pool((hax.Axis("H", 1), hax.Axis("W", 3)), x, stride=2)
+    answer = jnp.array([[1, 3], [13, 15], [25, 27]])
+
+    assert jnp.all(output.array == answer)
+
+    # test batch axes
+    B = hax.Axis("B", 2)
+    x = haliax.stack(B, [x, x])
+
+    output = mean_pool((hax.Axis("H", 1), hax.Axis("W", 3)), x, stride=2)
+    answer = jnp.array([[[1, 3], [13, 15], [25, 27]], [[1, 3], [13, 15], [25, 27]]])
+
+    assert jnp.all(output.array == answer)
+
+
+def test_mean_pool3d():
+    _x = jnp.arange(64).reshape(4, 4, 4)
+    x = hax.named(_x, ("H", "W", "D"))
+    output = mean_pool((hax.Axis("H", 1), hax.Axis("W", 3), hax.Axis("D", 1)), x, stride=2)
+
+    answer = jnp.array([[[4, 6]], [[36, 38]]])
+
     assert jnp.all(output.array == answer)
