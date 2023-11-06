@@ -34,7 +34,7 @@ def pool(
     Pooling functions are implemented using the ReduceWindow XLA op.
 
     Notes:
-        JAX only implements pooling for a few specific reductions (min, max, sum).
+        JAX only implements autodiff for a few specific reductions (min, max, sum).
 
     Args:
         Window: the size of the window to pool over
