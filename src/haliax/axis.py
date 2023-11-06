@@ -4,7 +4,7 @@ from typing import Dict, List, Mapping, Optional, Sequence, Tuple, Union, overlo
 
 import equinox as eqx
 
-from haliax.util import ensure_tuple, maybe_untuple
+from haliax.util import ensure_tuple
 
 from ._src.util import index_where
 
@@ -109,7 +109,7 @@ def axis_spec_to_shape_dict(axis_spec: AxisSelection) -> Dict[str, Optional[int]
 
 
 def _dict_to_spec(axis_spec: Mapping[str, Optional[int]]) -> AxisSelection:
-    return maybe_untuple(tuple(Axis(name, size) if size is not None else name for name, size in axis_spec.items()))
+    return tuple(Axis(name, size) if size is not None else name for name, size in axis_spec.items())
 
 
 @overload
@@ -241,7 +241,7 @@ def unsize_axes(axis_spec: AxisSelection, to_unsize: Optional[AxisSelection] = N
     """
 
     if to_unsize is None:
-        return maybe_untuple(tuple(axis_name(ax) for ax in ensure_tuple(axis_spec)))  # type: ignore
+        return tuple(axis_name(ax) for ax in ensure_tuple(axis_spec))  # type: ignore
 
     to_unsize = ensure_tuple(to_unsize)
     axis_spec_dict: dict[str, Optional[int]] = axis_spec_to_shape_dict(axis_spec)  # type: ignore
