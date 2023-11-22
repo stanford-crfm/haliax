@@ -77,11 +77,12 @@ def cross_entropy_loss(
             f"target_y has dtype {target_y.dtype}, which is not a floating point type. This is probably a mistake."
         )
 
-    if reduction is UNSPECIFIED:
-        reduction = haliax.mean
-
     if reduction is not None:
+        if reduction is UNSPECIFIED:
+            reduction = haliax.mean
         loss = reduction(loss, where=where, axis=reduction_axis)
+    elif where is not None:
+        loss = hax.where(where, loss, 0)
 
     return loss
 
