@@ -192,21 +192,24 @@ class NamedArray:
         # * array is a tracer, in which case we want just the named shape (and an indication that it's a tracer)
         # * array is a jnp.ndarray, in which case we want the named shape and the array
 
-        if isinstance(self.array, jax.core.Tracer):
-            return f"NamedArray(Tracer<{self.dtype}{self.shape}>)"
-        elif self.ndim <= 1:
-            return f"NamedArray({self.dtype}{self.shape}, {self.array})"
+        if is_jax_array_like(self.array):
+            if isinstance(self.array, jax.core.Tracer):
+                return f"NamedArray(Tracer<{self.dtype}{self.shape}>)"
+            elif self.ndim <= 1:
+                return f"NamedArray({self.dtype}{self.shape}, {self.array})"
+            else:
+                return f"NamedArray({self.dtype}{self.shape},\n{self.array})"
         else:
-            return f"NamedArray({self.dtype}{self.shape},\n{self.array})"
+            return f"NamedArray(???{self.shape}, {self.array})"
 
     def __tree_pp__(self, **kwargs):
         # For Equinox's tree pretty printer
         import jax._src.pretty_printer as pp
 
-        if kwargs.get("short_arrays", True):
+        if kwargs.get("short_arrays", True) and is_jax_array_like(self.array):
             return pp.text(f"Named({self.dtype}{self.shape})")
         else:
-            return str(self)
+            return pp.text(str(self))
 
     @overload
     def _lookup_indices(self, axis: AxisSelector) -> Optional[int]:  # type: ignore
