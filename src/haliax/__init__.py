@@ -9,6 +9,7 @@ import haliax.debug as debug
 import haliax.nn as nn
 import haliax.random as random
 import haliax.tree_util as tree_util
+import haliax.util as util
 
 from ._src.rearrange import rearrange
 from .axis import (
@@ -52,6 +53,7 @@ from .ops import clip, isclose, pad_left, trace, tril, triu, where
 from .partitioning import auto_sharded, axis_mapping, fsdp, named_jit, shard_with_axis_mapping
 from .specialized_fns import top_k
 from .types import Scalar
+from .util import is_named_array
 from .wrap import (
     ReductionFunction,
     SimpleReductionFunction,
@@ -998,4 +1000,5 @@ __all__ = [
     "top_k",
     "ravel",
     "flatten",
+    "is_named_array",
 ]
