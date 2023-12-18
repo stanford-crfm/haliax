@@ -378,10 +378,6 @@ class NamedArray:
     def clip(self, a_min=None, a_max=None) -> Any:
         return haliax.clip(self, a_min=a_min, a_max=a_max)
 
-    # TODO
-    # def compress(self, condition, axis: Optional[int] = None) -> Any:
-    #     ...
-
     def conj(self) -> "NamedArray":
         return NamedArray(self.array.conj(), self.axes)
 
@@ -449,10 +445,6 @@ class NamedArray:
     @property
     def real(self) -> "NamedArray":
         return NamedArray(self.array.real, self.axes)
-
-    # TODO: what should reshape look like?
-    # def reshape(self, *args, order='C') -> Any:
-    #     ...
 
     def round(self, decimals=0) -> "NamedArray":
         return haliax.round(self, decimals=decimals)
