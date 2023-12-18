@@ -516,13 +516,12 @@ def physical_axis_name(axis: AxisSelector, mapping: Optional[ResourceMapping] = 
 def physical_axis_size(axis: AxisSelector, mapping: Optional[ResourceMapping] = None) -> Optional[int]:
     """Get the physical axis size for a logical axis. This is the product of the size of all physical axes
     that this logical axis is mapped to."""
-    # TODO: shouldn't be accessing this internal api, but...
-    from jax.experimental.maps import thread_resources
+    mesh = _get_mesh()
 
-    try:
-        mesh_shape = thread_resources.env.shape
-    except AttributeError:
-        raise ValueError("No resource mapping found")
+    if mesh is None:
+        raise ValueError("No mesh found")
+
+    mesh_shape = mesh.shape
 
     name: Union[None, str, Sequence[str]] = physical_axis_name(axis, mapping)
     if name is None:
