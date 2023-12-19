@@ -71,16 +71,16 @@ SeqLen = hax.Axis("seqlen", 512)
 axis_mapping = {"batch": "data", }
 
 batch = hax.zeros((Batch, SeqLen), dtype=jnp.float32)
-batch = hax.shard_with_axis_mapping(batch, axis_mapping)
+batch = hax.shard(batch, axis_mapping)
 
 # we also have "auto_sharded" and support context mappings for axis mappings:
 with hax.axis_mapping({"batch": "data"}):
     batch = hax.zeros((Batch, SeqLen), dtype=jnp.float32)
-    batch = hax.auto_sharded(batch)
+    batch = hax.shard(batch)
 ```
 
 Unlike in JAX, which has separate APIs for partitioning arrays inside and outside of `jit`, Haliax has a single API:
-both `hax.shard_with_axis_mapping` and `hax.auto_sharded` work inside and outside of `jit`. Haliax automatically
+`hax.shard` work inside and outside of `jit`. Haliax automatically
 chooses which JAX function to use based on context.
 
 
@@ -108,6 +108,11 @@ with hax.axis_mapping({"batch": "data"}):
 ### Sharding Arrays and PyTrees
 
 These functions are used to shard arrays and PyTrees of arrays, e.g. Modules.
+This is the main function you will use to shard arrays:
+
+::: haliax.shard
+
+These are older functions that are being deprecated and will be removed in a future release:
 
 ::: haliax.shard_with_axis_mapping
 ::: haliax.auto_sharded

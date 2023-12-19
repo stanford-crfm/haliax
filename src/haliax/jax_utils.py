@@ -126,3 +126,7 @@ def named_call(f=_UNSPECIFIED, name: Optional[str] = None):
                 name = f.__qualname__
 
         return jax.named_scope(name)(f)
+
+
+def is_in_jit():
+    return isinstance(jnp.zeros((), dtype=jnp.float32), jax.core.Tracer)
