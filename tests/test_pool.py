@@ -1,3 +1,4 @@
+import equinox as eqx
 import jax
 import jax.numpy as jnp
 
@@ -154,7 +155,7 @@ def test_mean_pool3d():
     assert jnp.all(output.array == answer)
 
 
-def test_poolbackprop():
+def test_pool_backprop():
     def max_pool_mean(x):
         pooled = max_pool(
             (hax.Axis("H", 2), hax.Axis("W", 2), hax.Axis("D", 2)), x, stride=1, padding=((0, 1), (0, 1), (0, 1))
@@ -165,4 +166,18 @@ def test_poolbackprop():
     x = hax.named(_x, ("B", "H", "W", "D"))
     grad_fn = jax.value_and_grad(max_pool_mean)
 
-    grad_fn(x)
+    hax_loss, hax_grad = grad_fn(x)
+
+    # compare it to eqx
+
+    eqx_max_pool = eqx.nn.MaxPool3d(2, (1, 1, 1), padding=((0, 1), (0, 1), (0, 1)))
+
+    def eqx_max_pool_mean(x):
+        pooled = eqx_max_pool(x)
+        return pooled.mean()
+
+    eqx_grad_fn = jax.value_and_grad(eqx_max_pool_mean)
+    eqx_loss, eqx_grad = eqx_grad_fn(_x)
+
+    assert jnp.allclose(hax_loss, eqx_loss)
+    assert jnp.allclose(hax_grad.array, eqx_grad)
