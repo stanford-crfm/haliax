@@ -1,9 +1,11 @@
 import functools
-from typing import Dict, Generic, Optional, Protocol, Type, TypeVar
+from typing import Dict, Generic, Optional, Protocol, Sequence, Type, TypeVar
 
 import equinox as eqx
+import jax
 
 import haliax
+import haliax.util
 from haliax.jax_utils import filter_checkpoint
 
 from ..axis import Axis
@@ -109,3 +111,30 @@ class Stacked(eqx.Module, Generic[M]):
     # TODO: this is for logic that's in levanter. We should move that logic to haliax I guess?
     def _state_dict_key_map(self) -> Dict[str, Optional[str]]:
         return {"stacked": None}
+
+    def unstacked(self) -> Sequence[M]:
+        """
+        Returns the unstacked version of this module. This is useful for logging or saving checkpoints.
+        Returns:
+            A sequence of modules, one for each element of the stack
+        """
+
+        def unbatch_leaf(x):
+            if haliax.is_named_array(x):
+                if haliax.selects_axis(x.axes, self.Block):
+                    return haliax.unbind(x, self.Block)
+                else:
+                    return tuple(x for _ in range(self.Block.size))
+            elif haliax.jax_utils.is_jax_array_like(x):
+                assert (
+                    x.shape[0] == self.Block.size
+                ), f"Expected first dimension to be {self.Block.size}, got {x.shape[0]}"
+                return tuple(x[i] for i in range(self.Block.size))
+            else:
+                return tuple(x for _ in range(self.Block.size))
+
+        leaves, structure = jax.tree_util.tree_flatten(self.stacked, is_leaf=haliax.is_named_array)
+        unstacked_leaves = tuple(map(unbatch_leaf, leaves))
+        # now we need to transpose the leaves
+        unstacked_leaves = tuple(zip(*unstacked_leaves))
+        return tuple(map(lambda x: jax.tree_util.tree_unflatten(structure, x), unstacked_leaves))

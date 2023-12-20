@@ -191,21 +191,24 @@ class NamedArray:
         # * array is a tracer, in which case we want just the named shape (and an indication that it's a tracer)
         # * array is a jnp.ndarray, in which case we want the named shape and the array
 
-        if isinstance(self.array, jax.core.Tracer):
-            return f"NamedArray(Tracer<{self.dtype}{self.shape}>)"
-        elif self.ndim <= 1:
-            return f"NamedArray({self.dtype}{self.shape}, {self.array})"
+        if is_jax_array_like(self.array):
+            if isinstance(self.array, jax.core.Tracer):
+                return f"NamedArray(Tracer<{self.dtype}{self.shape}>)"
+            elif self.ndim <= 1:
+                return f"NamedArray({self.dtype}{self.shape}, {self.array})"
+            else:
+                return f"NamedArray({self.dtype}{self.shape},\n{self.array})"
         else:
-            return f"NamedArray({self.dtype}{self.shape},\n{self.array})"
+            return f"NamedArray(???{self.shape}, {self.array})"
 
     def __tree_pp__(self, **kwargs):
         # For Equinox's tree pretty printer
         import jax._src.pretty_printer as pp
 
-        if kwargs.get("short_arrays", True):
+        if kwargs.get("short_arrays", True) and is_jax_array_like(self.array):
             return pp.text(f"Named({self.dtype}{self.shape})")
         else:
-            return str(self)
+            return pp.text(str(self))
 
     @overload
     def _lookup_indices(self, axis: AxisSelector) -> Optional[int]:  # type: ignore
@@ -385,10 +388,6 @@ class NamedArray:
     def clip(self, a_min=None, a_max=None) -> Any:
         return haliax.clip(self, a_min=a_min, a_max=a_max)
 
-    # TODO
-    # def compress(self, condition, axis: Optional[int] = None) -> Any:
-    #     ...
-
     def conj(self) -> "NamedArray":
         return NamedArray(self.array.conj(), self.axes)
 
@@ -456,10 +455,6 @@ class NamedArray:
     @property
     def real(self) -> "NamedArray":
         return NamedArray(self.array.real, self.axes)
-
-    # TODO: what should reshape look like?
-    # def reshape(self, *args, order='C') -> Any:
-    #     ...
 
     def round(self, decimals=0) -> "NamedArray":
         return haliax.round(self, decimals=decimals)
@@ -1033,7 +1028,7 @@ def dot(axis: AxisSelection, *arrays: NamedArray, precision: PrecisionLike = Non
     )
 
     out = NamedArray(output, output_axes)
-    return haliax.auto_sharded(out)
+    return haliax.shard(out)
 
 
 def split(a: NamedArray, axis: AxisSelector, new_axes: Sequence[Axis]) -> Sequence[NamedArray]:
@@ -1080,9 +1075,8 @@ def unbind(array: NamedArray, axis: AxisSelector) -> List[NamedArray]:
     # instead we just loop over the axes pulling one out at a time
     axis_size = array.axes[axis_index].size
     arrays = [jnp.take(array.array, i, axis=axis_index) for i in range(axis_size)]
-    from haliax.partitioning import auto_sharded
 
-    return [auto_sharded(NamedArray(a, new_axes)) for a in arrays]
+    return [haliax.shard(NamedArray(a, new_axes)) for a in arrays]
 
 
 def roll(array: NamedArray, shift: Union[int, Tuple[int, ...]], axis: AxisSelection) -> NamedArray:

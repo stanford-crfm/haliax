@@ -17,7 +17,7 @@ class Static(eqx.Module):
     value: Any = eqx.field(static=True)
 
 
-def shaped_rng_split(key, split_shape: Union[int, Sequence[int]] = 2) -> jrandom.KeyArray:
+def shaped_rng_split(key, split_shape: Union[int, Sequence[int]] = 2) -> PRNGKeyArray:
     if isinstance(split_shape, int):
         num_splits = split_shape
         split_shape = (num_splits,) + key.shape
@@ -126,6 +126,10 @@ def named_call(f=_UNSPECIFIED, name: Optional[str] = None):
                 name = f.__qualname__
 
         return jax.named_scope(name)(f)
+
+
+def is_in_jit():
+    return isinstance(jnp.zeros((), dtype=jnp.float32), jax.core.Tracer)
 
 
 def is_pallas_dslice(x: object) -> bool:

@@ -2,6 +2,7 @@ import contextlib
 import functools
 import threading
 import typing
+import warnings
 from math import prod
 from typing import Callable, Mapping, Optional, ParamSpec, Sequence, TypeVar, Union
 
@@ -20,7 +21,7 @@ from jaxtyping import PyTree
 
 from .axis import Axis, AxisSelection, AxisSelector
 from .core import NamedArray
-from .jax_utils import Static, is_jax_array_like
+from .jax_utils import Static, is_in_jit, is_jax_array_like
 from .tree_util import hashable_combine, hashable_partition
 from .util import StringHolderEnum, ensure_tuple, is_named_array
 
@@ -32,6 +33,7 @@ ResourceMapping = Mapping[(str), PhysicalAxisSpec]
 F = typing.TypeVar("F", bound=typing.Callable)
 Args = ParamSpec("Args")
 R = typing.TypeVar("R", covariant=True)
+T = TypeVar("T", bound=PyTree)
 
 
 class ResourceAxis(StringHolderEnum):
@@ -84,9 +86,6 @@ def current_thread_local_mapping():
     return _mapping_holder.thread_data.resource_mapping
 
 
-T = TypeVar("T", bound=PyTree)
-
-
 def auto_sharded(x: T, mesh: Optional[Mesh] = None) -> T:
     """
     Shard a PyTree using the global axis mapping. NamedArrays in the PyTree are sharded using the axis mapping
@@ -99,10 +98,10 @@ def auto_sharded(x: T, mesh: Optional[Mesh] = None) -> T:
     if mapping is None:
         return x
 
-    return shard_with_axis_mapping(x, mapping, mesh)
+    return shard(x, mapping, mesh)
 
 
-def shard_with_axis_mapping(x: T, mapping: ResourceMapping, mesh: Optional[Mesh] = None) -> T:
+def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] = None) -> T:
     """
     Shard a PyTree using the provided axis mapping. NamedArrays in the PyTree are sharded using the axis mapping.
     Other arrays are not sharded (unless they're already sharded).
@@ -110,7 +109,18 @@ def shard_with_axis_mapping(x: T, mapping: ResourceMapping, mesh: Optional[Mesh]
     Inside of a jit context, this method grounds out in calls to `with_sharding_constraint`. Outside of a jit
     context, this method grounds out in either device_put or make_array_from_callback, depending on whether the
     resulting sharding spans more than one host.
+
+    Outside of jit, this method will warn if there is no resource mapping found.
     """
+
+    if mapping is None:
+        mapping = current_thread_local_mapping()
+
+    if mapping is None:
+        if not is_in_jit():
+            warnings.warn("No resource mapping found. Not sharding.", RuntimeWarning)
+
+        return x
 
     def _do_device_put(x):
         if not is_named_array(x):
@@ -144,6 +154,12 @@ def shard_with_axis_mapping(x: T, mapping: ResourceMapping, mesh: Optional[Mesh]
                 return NamedArray(raw_x, x.axes)
 
     return jax.tree_util.tree_map(_do_device_put, x, is_leaf=is_named_array)
+
+
+@functools.wraps(shard)
+def shard_with_axis_mapping(x: T, mapping: ResourceMapping, mesh: Optional[Mesh] = None) -> T:
+    # warnings.warn("`shard_with_axis_mapping` is deprecated. Use `shard` instead", DeprecationWarning)
+    return shard(x, mapping, mesh)
 
 
 def infer_resource_partitions(
@@ -351,10 +367,13 @@ def named_jit(
     Functionally this is very similar to something like:
 
     ```python
-     arg = hax.shard_with_axis_mapping(arg, in_axis_resources)
+     def wrapped_fn(arg):
+        result = fn(arg)
+        return hax.shard(result, out_axis_resources)
+
+     arg = hax.shard(arg, in_axis_resources)
      with hax.axis_mapping(axis_resources):
-        result = jax.jit(fn, **pjit_args)(arg)
-    result = hax.shard_with_axis_mapping(result, out_axis_resources)
+        result = jax.jit(wrapped_fn, **pjit_args)(arg)
     return result
     ```
 
@@ -516,13 +535,12 @@ def physical_axis_name(axis: AxisSelector, mapping: Optional[ResourceMapping] = 
 def physical_axis_size(axis: AxisSelector, mapping: Optional[ResourceMapping] = None) -> Optional[int]:
     """Get the physical axis size for a logical axis. This is the product of the size of all physical axes
     that this logical axis is mapped to."""
-    # TODO: shouldn't be accessing this internal api, but...
-    from jax.experimental.maps import thread_resources
+    mesh = _get_mesh()
 
-    try:
-        mesh_shape = thread_resources.env.shape
-    except AttributeError:
-        raise ValueError("No resource mapping found")
+    if mesh is None:
+        raise ValueError("No mesh found")
+
+    mesh_shape = mesh.shape
 
     name: Union[None, str, Sequence[str]] = physical_axis_name(axis, mapping)
     if name is None:
@@ -574,6 +592,8 @@ __all__ = [
     "ResourceMapping",
     "axis_mapping",
     "auto_sharded",
+    "shard",
+    "shard_with_axis_mapping",
     "infer_resource_partitions",
     "named_jit",
     "fsdp",

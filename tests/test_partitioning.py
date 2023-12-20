@@ -137,10 +137,10 @@ def test_shard_with_axis_mapping_outside_pjit():
         x = hax.ones((Dim1, Dim2))
         y = hax.ones((Dim2, Dim3))
 
-        x = hax.shard_with_axis_mapping(x, resource_map)
+        x = hax.shard(x, resource_map)
         assert x.array.sharding == NamedSharding(mesh, PartitionSpec(None, ResourceAxis.DATA))
 
-        y = hax.shard_with_axis_mapping(y, resource_map)
+        y = hax.shard(y, resource_map)
         assert y.array.sharding == NamedSharding(mesh, PartitionSpec(ResourceAxis.DATA, ResourceAxis.MODEL))
 
 
@@ -157,7 +157,7 @@ def test_named_jit_works_without_axis_resources():
         assert r.array.sharding.is_fully_replicated
 
         def foo2(x):
-            return hax.shard_with_axis_mapping(x, resource_map)
+            return hax.shard(x, resource_map)
 
         pjit_foo2 = named_jit(foo2)
         r2 = pjit_foo2(hax.ones((Dim1, Dim2)))
@@ -180,10 +180,10 @@ def test_shard_with_axis_mapping_inside_jit():
 
         @named_jit(in_axis_resources={}, out_axis_resources=resource_map)
         def do_shard(x, y):
-            x = hax.shard_with_axis_mapping(x, resource_map)
+            x = hax.shard(x, resource_map)
             assert_inside_pjit(x, NamedSharding(mesh, PartitionSpec(None, ResourceAxis.DATA)))
 
-            y = hax.shard_with_axis_mapping(y, resource_map)
+            y = hax.shard(y, resource_map)
             assert_inside_pjit(y, NamedSharding(mesh, PartitionSpec(ResourceAxis.DATA, ResourceAxis.MODEL)))
 
             return x, y
