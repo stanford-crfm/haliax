@@ -17,7 +17,7 @@ class Static(eqx.Module):
     value: Any = eqx.field(static=True)
 
 
-def shaped_rng_split(key, split_shape: Union[int, Sequence[int]] = 2) -> jrandom.KeyArray:
+def shaped_rng_split(key, split_shape: Union[int, Sequence[int]] = 2) -> PRNGKeyArray:
     if isinstance(split_shape, int):
         num_splits = split_shape
         split_shape = (num_splits,) + key.shape
