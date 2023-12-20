@@ -49,7 +49,7 @@ from .scan import Stacked
 
 
 @functools.wraps(jnn.one_hot)
-def one_hot(x: Union[NamedArray, int], class_axis: Axis, *, dtype=jnp.float_) -> NamedArray:
+def one_hot(x: Union[NamedArray, int], class_axis: Axis, *, dtype=None) -> NamedArray:
     if isinstance(x, NamedArray):
         array = jnn.one_hot(x.array, num_classes=class_axis.size, dtype=dtype)
         return NamedArray(array, x.axes + (class_axis,))
