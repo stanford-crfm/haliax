@@ -33,6 +33,15 @@ provided. Similarly, for transposed convolutions, we have [haliax.nn.ConvTranspo
 ::: haliax.nn.Conv
 ::: haliax.nn.ConvTranspose
 
+### Pooling
+
+As with convolutions, we don't distinguish between 1D, 2D, and 3D pooling, and instead have a single
+pooling operation for each of the kinds of reductions:
+
+::: haliax.nn.max_pool
+::: haliax.nn.mean_pool
+::: haliax.nn.min_pool
+
 ## Attention
 
 We don't provide an explicit attention module, but we do provide an attention function and several related functions:

@@ -14,7 +14,7 @@ import numpy as np
 
 import haliax
 import haliax.axis
-from haliax.jax_utils import is_jax_array_like
+from haliax.jax_utils import is_jax_array_like, is_pallas_dslice
 from haliax.util import ensure_tuple
 
 from ._src.util import index_where, py_slice, slice_t
@@ -26,7 +26,6 @@ from .axis import (
     axis_name,
     dslice,
     eliminate_axes,
-    is_pallas_dslice,
     selects_axis,
     union_axes,
 )
@@ -252,8 +251,19 @@ class NamedArray:
             return tuple(self._lookup_indices(a) for a in axis)
 
     # Axis rearrangement
-    def rearrange(self, axis: Sequence[Union[AxisSelector, EllipsisType]]) -> "NamedArray":
-        return haliax.rearrange(self, axis)
+    @typing.overload
+    def rearrange(self, axes: Sequence[AxisSelector | EllipsisType]) -> "NamedArray":
+        """See [haliax.rearrange][] for details."""
+        pass
+
+    @typing.overload
+    def rearrange(self, expression: str, **bindings: AxisSelector | int) -> "NamedArray":
+        """See [haliax.rearrange][] for details."""
+        pass
+
+    def rearrange(self, *args, **kwargs) -> "NamedArray":
+        """See [haliax.rearrange][] for details."""
+        return haliax.rearrange(self, *args, **kwargs)
 
     def broadcast_to(self, axes: AxisSpec) -> "NamedArray":
         axes = ensure_tuple(axes)
