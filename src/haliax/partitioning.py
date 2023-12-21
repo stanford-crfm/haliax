@@ -209,12 +209,12 @@ def infer_resource_partitions(
         elif is_jax_array_like(node):
             sharding = getattr(node, "sharding", None)
             # TODO: these are usually replicated. Is there a better way to tell?
-            if isinstance(sharding, SingleDeviceSharding):
+            if node.shape == ():
+                return NamedSharding(mesh, PartitionSpec())
+            elif isinstance(sharding, SingleDeviceSharding):
                 return NamedSharding(mesh, PartitionSpec(None))
             elif sharding is not None:
                 return sharding
-            elif node.shape == ():
-                return NamedSharding(mesh, PartitionSpec())
             # elif use_auto_sharding:
             # TODO: auto doesn't seem to really work reliably yet
             #     compat between 0.4.10 and 0.4.11
