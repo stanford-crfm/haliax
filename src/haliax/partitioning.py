@@ -14,7 +14,6 @@ from equinox import module_update_wrapper
 from equinox._compile_utils import compile_cache
 
 # from jax._src.sharding_impls import AUTO
-from jax.experimental.pjit import pjit
 from jax.lax import with_sharding_constraint
 from jax.sharding import Mesh, NamedSharding, PartitionSpec, SingleDeviceSharding
 from jaxtyping import PyTree
@@ -497,7 +496,7 @@ def _named_pjit_cache(fun_names, **jitkwargs) -> WrappedCallable:
         jitkwargs["out_shardings"] = (out_shardings, None)
 
     # TODO: jit should work here, but there's a weird error. see if it goes away on its own
-    return pjit(
+    return jax.jit(
         fun_wrapped,
         donate_argnums=0,
         static_argnums=2,
