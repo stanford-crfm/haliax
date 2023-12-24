@@ -1,4 +1,5 @@
 import functools
+import typing
 import warnings
 from typing import Optional, Tuple, Union
 
@@ -11,7 +12,7 @@ import haliax.nn.activations
 import haliax.nn.attention as attention
 import haliax.nn.normalization
 
-from ..axis import Axis, AxisSelector
+from ..axis import Axis, AxisSelection, AxisSelector
 from ..core import NamedArray
 from ..util import UNSPECIFIED, Unspecified
 from ..wrap import ReductionFunction
@@ -62,14 +63,38 @@ def one_hot(x: Union[NamedArray, int], class_axis: Axis, *, dtype=None) -> Named
         return haliax.named(array, class_axis)
 
 
+@typing.overload
 def cross_entropy_loss(
     pred_y: NamedArray,
     Label: AxisSelector,
     target_y: NamedArray,
     reduction: Optional[ReductionFunction] | Unspecified = UNSPECIFIED,
     where: Optional[NamedArray] = None,
-    reduction_axis: Optional[AxisSelector] = None,
+    reduction_axis: None = None,
+) -> jnp.ndarray | NamedArray:
+    ...
+
+
+@typing.overload
+def cross_entropy_loss(
+    pred_y: NamedArray,
+    Label: AxisSelector,
+    target_y: NamedArray,
+    reduction: Optional[ReductionFunction] | Unspecified = UNSPECIFIED,
+    where: Optional[NamedArray] = None,
+    reduction_axis: AxisSelection = ...,
 ) -> NamedArray:
+    ...
+
+
+def cross_entropy_loss(
+    pred_y: NamedArray,
+    Label: AxisSelector,
+    target_y: NamedArray,
+    reduction: Optional[ReductionFunction] | Unspecified = UNSPECIFIED,
+    where: Optional[NamedArray] = None,
+    reduction_axis: Optional[AxisSelection] = None,
+) -> jnp.ndarray | NamedArray:
     loss, _ = cross_entropy_loss_and_log_normalizers(pred_y, Label, target_y)
 
     # if target_y isn't some kind of floating point, something is wrong, so warn

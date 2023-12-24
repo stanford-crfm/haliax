@@ -1,3 +1,4 @@
+import typing
 from typing import Optional, Protocol
 
 import jax
@@ -113,6 +114,26 @@ def unwrap_namedarrays(*a):
 
 
 class ReductionFunction(Protocol):
+    @typing.overload
+    def __call__(
+        self,
+        array: NamedArray,
+        axis: None = None,
+        where: Optional[NamedArray] = None,
+        **kwargs,
+    ) -> jnp.ndarray:
+        ...
+
+    @typing.overload
+    def __call__(
+        self,
+        array: NamedArray,
+        axis: AxisSelection,
+        where: Optional[NamedArray] = None,
+        **kwargs,
+    ) -> NamedArray:
+        ...
+
     def __call__(
         self,
         array: NamedArray,
