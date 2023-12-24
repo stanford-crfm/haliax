@@ -45,7 +45,7 @@ def wrap_reduction_call(
 
             if axis is None:
                 result = fn(a.array, axis=None, **kwargs)
-                if jnp.isscalar(result):
+                if jnp.isscalar(result) or result.shape == ():
                     return result
                 else:
                     return NamedArray(result, ())
@@ -75,7 +75,7 @@ def wrap_reduction_call(
 def wrap_axiswise_call(fn, a, axis: Optional[AxisSelection], *, single_axis_only: bool, **kwargs):
     if isinstance(a, NamedArray):
         if axis is None:
-            return NamedArray(fn(a.array, axis=None, **kwargs), a.axes)
+            return fn(a.array, axis=None, **kwargs)
         else:
             indices = ensure_tuple(a._lookup_indices(axis))
             if any(x is None for x in indices):
@@ -112,17 +112,6 @@ def unwrap_namedarrays(*a):
     return tuple(x.array if isinstance(x, NamedArray) else x for x in a)
 
 
-__all__ = [
-    "wrap_elemwise_unary",
-    "wrap_reduction_call",
-    "wrap_axiswise_call",
-    "wrap_elemwise_binary",
-    "unwrap_namedarrays",
-    "ReductionFunction",
-    "SimpleReductionFunction",
-]
-
-
 class ReductionFunction(Protocol):
     def __call__(
         self,
@@ -137,3 +126,14 @@ class ReductionFunction(Protocol):
 class SimpleReductionFunction(Protocol):
     def __call__(self, array: NamedArray, axis: Optional[AxisSelector] = None, **kwargs) -> NamedArray:
         ...
+
+
+__all__ = [
+    "wrap_elemwise_unary",
+    "wrap_reduction_call",
+    "wrap_axiswise_call",
+    "wrap_elemwise_binary",
+    "unwrap_namedarrays",
+    "ReductionFunction",
+    "SimpleReductionFunction",
+]

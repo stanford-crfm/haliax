@@ -98,7 +98,7 @@ def test_reduction_functions():
     m1 = NamedArray(rand_m, (Height, Width, Depth))
 
     # sum out everything
-    assert jnp.all(jnp.equal(hax.sum(m1).array, jnp.sum(m1.array)))
+    assert jnp.all(jnp.equal(hax.sum(m1), jnp.sum(m1.array)))
     # ensure it's a scalar
 
     assert jnp.all(jnp.equal(hax.sum(m1, axis=Height).array, jnp.sum(m1.array, axis=0)))
@@ -124,7 +124,7 @@ def test_reduction_functions():
     )
 
     # argmax
-    assert jnp.all(jnp.equal(hax.argmax(m1).array, jnp.argmax(m1.array)))
+    assert jnp.all(jnp.equal(hax.argmax(m1, axis=None), jnp.argmax(m1.array)))
     assert jnp.all(jnp.equal(hax.argmax(m1, axis=Height).array, jnp.argmax(m1.array, axis=0)))
 
 
@@ -141,7 +141,7 @@ def test_reduction_functions_with_where():
     jmask = m1.array > 0.5
 
     # sum out everything
-    assert jnp.all(jnp.equal(hax.sum(m1, where=mask).array, jnp.sum(rand_m, where=jmask)))
+    assert jnp.all(jnp.equal(hax.sum(m1, where=mask), jnp.sum(rand_m, where=jmask)))
     # ensure it's a scalar
 
     assert jnp.all(jnp.equal(hax.sum(m1, axis=H, where=mask).array, jnp.sum(rand_m, axis=0, where=jmask)))

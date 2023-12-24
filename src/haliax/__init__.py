@@ -448,35 +448,136 @@ def trunc(a: A) -> A:
 
 
 # Reduction functions
-def all(array: NamedArray, axis: Optional[AxisSelection] = None, *, where: Optional[NamedArray] = None) -> NamedArray:
+@typing.overload
+def all(array: NamedArray, *, where: Optional[NamedArray] = None) -> jnp.ndarray:
+    ...
+
+
+@typing.overload
+def all(array: NamedArray, axis: None, *, where: Optional[NamedArray] = None) -> jnp.ndarray:
+    ...
+
+
+@typing.overload
+def all(array: NamedArray, axis: AxisSelection, *, where: Optional[NamedArray] = None) -> NamedArray:
+    ...
+
+
+def all(
+    array: NamedArray, axis: Optional[AxisSelection] = None, *, where: Optional[NamedArray] = None
+) -> jnp.ndarray | NamedArray:
     """
     Named version of [jax.numpy.all](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.all.html#jax.numpy.all).
     """
     return wrap_reduction_call(jnp.all, array, axis, where, single_axis_only=False, supports_where=True)
 
 
-def amax(array: NamedArray, axis: Optional[AxisSelection] = None, *, where: Optional[NamedArray] = None) -> NamedArray:
+@typing.overload
+def amax(array: NamedArray, *, where: Optional[NamedArray] = None) -> jnp.ndarray:
+    ...
+
+
+@typing.overload
+def amax(array: NamedArray, axis: None, *, where: Optional[NamedArray] = None) -> jnp.ndarray:
+    ...
+
+
+@typing.overload
+def amax(array: NamedArray, axis: AxisSelection, *, where: Optional[NamedArray] = None) -> NamedArray:
+    ...
+
+
+def amax(array: NamedArray, axis: Optional[AxisSelection] = None, *, where: Optional[NamedArray] = None):
     """
     Aliax for max. See max for details.
     """
     return wrap_reduction_call(jnp.amax, array, axis, where, single_axis_only=False, supports_where=True)
 
 
-def any(array: NamedArray, axis: Optional[AxisSelection] = None, *, where: Optional[NamedArray] = None) -> NamedArray:
+@typing.overload
+def any(array: NamedArray, *, where: Optional[NamedArray] = None) -> jnp.ndarray:
+    ...
+
+
+@typing.overload
+def any(array: NamedArray, axis: None, *, where: Optional[NamedArray] = None) -> jnp.ndarray:
+    ...
+
+
+@typing.overload
+def any(array: NamedArray, axis: AxisSelection, *, where: Optional[NamedArray] = None) -> NamedArray:
+    ...
+
+
+def any(array: NamedArray, axis: Optional[AxisSelection] = None, *, where: Optional[NamedArray] = None):
     """True if any elements along a given axis or axes are True. If axis is None, any elements are True."""
     return wrap_reduction_call(jnp.any, array, axis, where, single_axis_only=False, supports_where=True)
 
 
-def argmax(array: NamedArray, axis: Optional[AxisSelector] = None) -> NamedArray:
+@typing.overload
+def argmax(array: NamedArray, axis: None) -> jnp.ndarray:
+    ...
+
+
+@typing.overload
+def argmax(array: NamedArray, axis: AxisSelector) -> NamedArray:
+    ...
+
+
+def argmax(array: NamedArray, axis: Optional[AxisSelector]):
     return wrap_reduction_call(jnp.argmax, array, axis, None, single_axis_only=True, supports_where=False)
 
 
-def argmin(array: NamedArray, axis: Optional[AxisSelector] = None) -> NamedArray:
+@typing.overload
+def argmin(array: NamedArray, axis: None) -> jnp.ndarray:
+    ...
+
+
+@typing.overload
+def argmin(array: NamedArray, axis: AxisSelector) -> NamedArray:
+    ...
+
+
+def argmin(array: NamedArray, axis: Optional[AxisSelector]):
     return wrap_reduction_call(jnp.argmin, array, axis, None, single_axis_only=True, supports_where=False)
 
 
-def max(array: NamedArray, axis: Optional[AxisSelection] = None, *, where: Optional[NamedArray] = None) -> NamedArray:
+@typing.overload
+def max(array: NamedArray, *, where: Optional[NamedArray] = None) -> jnp.ndarray:
+    ...
+
+
+@typing.overload
+def max(array: NamedArray, axis: None, *, where: Optional[NamedArray] = None) -> jnp.ndarray:
+    ...
+
+
+@typing.overload
+def max(array: NamedArray, axis: AxisSelection, *, where: Optional[NamedArray] = None) -> NamedArray:
+    ...
+
+
+def max(array: NamedArray, axis: Optional[AxisSelection] = None, *, where: Optional[NamedArray] = None):
     return wrap_reduction_call(jnp.max, array, axis, where, single_axis_only=False, supports_where=True)
+
+
+@typing.overload
+def mean(array: NamedArray, *, where: Optional[NamedArray] = None, dtype: Optional[DTypeLike] = None) -> jnp.ndarray:
+    ...
+
+
+@typing.overload
+def mean(
+    array: NamedArray, axis: None, *, where: Optional[NamedArray] = None, dtype: Optional[DTypeLike] = None
+) -> jnp.ndarray:
+    ...
+
+
+@typing.overload
+def mean(
+    array: NamedArray, axis: AxisSelection, *, where: Optional[NamedArray] = None, dtype: Optional[DTypeLike] = None
+) -> NamedArray:
+    ...
 
 
 def mean(
@@ -485,12 +586,46 @@ def mean(
     *,
     where: Optional[NamedArray] = None,
     dtype: Optional[DTypeLike] = None,
-) -> NamedArray:
+):
     return wrap_reduction_call(jnp.mean, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype)
+
+
+@typing.overload
+def min(array: NamedArray, *, where: Optional[NamedArray] = None) -> jnp.ndarray:
+    ...
+
+
+@typing.overload
+def min(array: NamedArray, axis: None, *, where: Optional[NamedArray] = None) -> jnp.ndarray:
+    ...
+
+
+@typing.overload
+def min(array: NamedArray, axis: AxisSelection, *, where: Optional[NamedArray] = None) -> NamedArray:
+    ...
 
 
 def min(array: NamedArray, axis: Optional[AxisSelection] = None, *, where: Optional[NamedArray] = None) -> NamedArray:
     return wrap_reduction_call(jnp.min, array, axis, where, single_axis_only=False, supports_where=True)
+
+
+@typing.overload
+def prod(array: NamedArray, *, where: Optional[NamedArray] = None, dtype: Optional[DTypeLike] = None) -> jnp.ndarray:
+    ...
+
+
+@typing.overload
+def prod(
+    array: NamedArray, axis: None, *, where: Optional[NamedArray] = None, dtype: Optional[DTypeLike] = None
+) -> jnp.ndarray:
+    ...
+
+
+@typing.overload
+def prod(
+    array: NamedArray, axis: AxisSelection, *, where: Optional[NamedArray] = None, dtype: Optional[DTypeLike] = None
+) -> NamedArray:
+    ...
 
 
 def prod(
@@ -499,18 +634,43 @@ def prod(
     *,
     where: Optional[NamedArray] = None,
     dtype: Optional[DTypeLike] = None,
-) -> NamedArray:
+):
     return wrap_reduction_call(jnp.prod, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype)
 
 
-def ptp(array: NamedArray, axis: Optional[AxisSelection] = None, *, where: Optional[NamedArray] = None) -> NamedArray:
-    return wrap_reduction_call(jnp.ptp, array, axis, where, single_axis_only=False, supports_where=True)
+@typing.overload
+def std(
+    array: NamedArray,
+    *,
+    where: Optional[NamedArray] = None,
+    ddof: int = 0,
+    dtype: Optional[DTypeLike] = None,
+) -> jnp.ndarray:
+    ...
 
 
-def product(
-    array: NamedArray, axis: Optional[AxisSelection] = None, *, where: Optional[NamedArray] = None
+@typing.overload
+def std(
+    array: NamedArray,
+    axis: None,
+    *,
+    where: Optional[NamedArray] = None,
+    ddof: int = 0,
+    dtype: Optional[DTypeLike] = None,
+) -> jnp.ndarray:
+    ...
+
+
+@typing.overload
+def std(
+    array: NamedArray,
+    axis: AxisSelection,
+    *,
+    where: Optional[NamedArray] = None,
+    ddof: int = 0,
+    dtype: Optional[DTypeLike] = None,
 ) -> NamedArray:
-    return wrap_reduction_call(jnp.product, array, axis, where, single_axis_only=False, supports_where=True)
+    ...
 
 
 def std(
@@ -526,7 +686,91 @@ def std(
     )
 
 
+@typing.overload
+def ptp(array: NamedArray, *, where: Optional[NamedArray] = None) -> jnp.ndarray:
+    ...
+
+
+@typing.overload
+def ptp(array: NamedArray, axis: None, *, where: Optional[NamedArray] = None) -> jnp.ndarray:
+    ...
+
+
+@typing.overload
+def ptp(array: NamedArray, axis: AxisSelection, *, where: Optional[NamedArray] = None) -> NamedArray:
+    ...
+
+
+def ptp(array: NamedArray, axis: Optional[AxisSelection] = None, *, where: Optional[NamedArray] = None):
+    return wrap_reduction_call(jnp.ptp, array, axis, where, single_axis_only=False, supports_where=True)
+
+
+@typing.overload
+def product(
+    array: NamedArray, *, where: Optional[NamedArray] = None, dtype: Optional[DTypeLike] = None
+) -> jnp.ndarray:
+    ...
+
+
+@typing.overload
+def product(
+    array: NamedArray, axis: None, *, where: Optional[NamedArray] = None, dtype: Optional[DTypeLike] = None
+) -> jnp.ndarray:
+    ...
+
+
+@typing.overload
+def product(
+    array: NamedArray, axis: AxisSelection, *, where: Optional[NamedArray] = None, dtype: Optional[DTypeLike] = None
+) -> NamedArray:
+    ...
+
+
+def product(
+    array: NamedArray,
+    axis: Optional[AxisSelection] = None,
+    *,
+    where: Optional[NamedArray] = None,
+    dtype: Optional[DTypeLike] = None,
+) -> jnp.ndarray | NamedArray:
+    return wrap_reduction_call(
+        jnp.product, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype
+    )
+
+
 _sum = sum
+
+
+@typing.overload
+def sum(
+    array: NamedArray,
+    *,
+    where: Optional[NamedArray] = None,
+    dtype: Optional[DTypeLike] = None,
+) -> jnp.ndarray:
+    ...
+
+
+@typing.overload
+def sum(
+    array: NamedArray,
+    axis: None,
+    *,
+    where: Optional[NamedArray] = None,
+    dtype: Optional[DTypeLike] = None,
+) -> jnp.ndarray:
+    ...
+
+
+@typing.overload
+def sum(
+    array: NamedArray,
+    axis: AxisSelection,
+    *,
+    where: Optional[NamedArray] = None,
+    dtype: Optional[DTypeLike] = None,
+) -> NamedArray:
+    ...
 
 
 def sum(
@@ -535,8 +779,43 @@ def sum(
     *,
     where: Optional[NamedArray] = None,
     dtype: Optional[DTypeLike] = None,
-) -> NamedArray:
+) -> jnp.ndarray | NamedArray:
     return wrap_reduction_call(jnp.sum, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype)
+
+
+@typing.overload
+def var(
+    array: NamedArray,
+    *,
+    where: Optional[NamedArray] = None,
+    ddof: int = 0,
+    dtype: Optional[DTypeLike] = None,
+) -> jnp.ndarray:
+    ...
+
+
+@typing.overload
+def var(
+    array: NamedArray,
+    axis: None,
+    *,
+    where: Optional[NamedArray] = None,
+    ddof: int = 0,
+    dtype: Optional[DTypeLike] = None,
+) -> jnp.ndarray:
+    ...
+
+
+@typing.overload
+def var(
+    array: NamedArray,
+    axis: AxisSelection,
+    *,
+    where: Optional[NamedArray] = None,
+    ddof: int = 0,
+    dtype: Optional[DTypeLike] = None,
+) -> NamedArray:
+    ...
 
 
 def var(
@@ -555,31 +834,75 @@ def var(
 # "Normalization" functions that use an axis but don't change the shape
 
 
-def cumsum(a: NamedArray, axis: Optional[AxisSelector] = None, dtype: Optional[DTypeLike] = None) -> NamedArray:
+@typing.overload
+def cumsum(a: NamedArray, axis: None, *, dtype: Optional[DTypeLike] = None) -> jnp.ndarray:
+    ...
+
+
+@typing.overload
+def cumsum(a: NamedArray, axis: AxisSelector, *, dtype: Optional[DTypeLike] = None) -> NamedArray:
+    ...
+
+
+def cumsum(
+    a: NamedArray, axis: Optional[AxisSelector], *, dtype: Optional[DTypeLike] = None
+) -> jnp.ndarray | NamedArray:
     """
     Named version of [jax.numpy.cumsum](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.cumsum.html)
     """
     return wrap_axiswise_call(jnp.cumsum, a, axis, dtype=dtype, single_axis_only=True)
 
 
-def cumprod(a: NamedArray, axis: Optional[AxisSelector] = None, dtype: Optional[DTypeLike] = None) -> NamedArray:
+@typing.overload
+def cumprod(a: NamedArray, axis: None, *, dtype: Optional[DTypeLike] = None) -> jnp.ndarray:
+    ...
+
+
+@typing.overload
+def cumprod(a: NamedArray, axis: AxisSelector, *, dtype: Optional[DTypeLike] = None) -> NamedArray:
+    ...
+
+
+def cumprod(a: NamedArray, axis: Optional[AxisSelector], dtype: Optional[DTypeLike] = None) -> NamedArray:
     """
     Named version of [jax.numpy.cumprod](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.cumprod.html)
     """
     return wrap_axiswise_call(jnp.cumprod, a, axis, dtype=dtype, single_axis_only=True)
 
 
-def sort(a: NamedArray, axis: Optional[AxisSelector] = None) -> NamedArray:
+@typing.overload
+def sort(a: NamedArray, *, axis: None) -> jnp.ndarray:
+    ...
+
+
+@typing.overload
+def sort(a: NamedArray, *, axis: AxisSelector) -> NamedArray:
+    ...
+
+
+def sort(a: NamedArray, axis: Optional[AxisSelector]) -> jnp.ndarray | NamedArray:
     """
     Named version of [jax.numpy.sort](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.sort.html)
     """
     return wrap_axiswise_call(jnp.sort, a, axis, single_axis_only=True)
 
 
-def argsort(a: NamedArray, axis: Optional[AxisSelector] = None) -> NamedArray:
+@typing.overload
+def argsort(a: NamedArray, axis: None) -> jnp.ndarray:
+    ...
+
+
+@typing.overload
+def argsort(a: NamedArray, axis: AxisSelector) -> NamedArray:
+    ...
+
+
+def argsort(a: NamedArray, axis: Optional[AxisSelector]) -> jnp.ndarray | NamedArray:
     """
     Named version of [jax.numpy.argsort](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.argsort.html)
     """
+    if axis is None:
+        return jnp.argsort(a.array)
     return wrap_axiswise_call(jnp.argsort, a, axis, single_axis_only=True)
 
 
