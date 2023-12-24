@@ -136,11 +136,11 @@ class NamedArray:
 
     @overload
     def axis_size(self, axis: AxisSelector) -> int:  # type: ignore
-        ...
+        ...  # pragma: no cover
 
     @overload
     def axis_size(self, axis: Sequence[AxisSelector]) -> Tuple[int, ...]:  # type: ignore
-        ...
+        ...  # pragma: no cover
 
     def axis_size(self, axis: AxisSelection) -> Union[int, Tuple[int, ...]]:
         """
@@ -161,11 +161,11 @@ class NamedArray:
 
     @overload
     def resolve_axis(self, axis: AxisSelector) -> Axis:  # type: ignore
-        ...
+        ...  # pragma: no cover
 
     @overload
     def resolve_axis(self, axis: Sequence[AxisSelector]) -> Tuple[Axis, ...]:  # type: ignore
-        ...
+        ...  # pragma: no cover
 
     def resolve_axis(self, axes: AxisSelection) -> AxisSpec:  # type: ignore
         """
@@ -212,11 +212,11 @@ class NamedArray:
 
     @overload
     def _lookup_indices(self, axis: AxisSelector) -> Optional[int]:  # type: ignore
-        ...
+        ...  # pragma: no cover
 
     @overload
     def _lookup_indices(self, axis: Sequence[AxisSelector]) -> Tuple[Optional[int], ...]:
-        ...
+        ...  # pragma: no cover
 
     def _lookup_indices(self, axis: AxisSelection) -> Union[Optional[int], Tuple[Optional[int], ...]]:
         """
@@ -323,11 +323,11 @@ class NamedArray:
     def __getitem__(
         self, item: Tuple[AxisSelector, NamedIndex, AxisSelector, NamedIndex]
     ) -> Union["NamedArray", jnp.ndarray]:
-        ...
+        ...  # pragma: no cover
 
     @overload
     def __getitem__(self, item: Mapping[AxisSelector, NamedIndex]) -> Union["NamedArray", jnp.ndarray]:
-        ...
+        ...  # pragma: no cover
 
     def __getitem__(self, idx) -> Union["NamedArray", jnp.ndarray]:
         """Syntactic sugar for [haliax.index][], which is the actual implementation.
@@ -368,11 +368,11 @@ class NamedArray:
     # np.ndarray methods:
     @typing.overload
     def all(self, axis: None = ..., *, where: Optional["NamedArray"] = ...) -> jnp.ndarray:
-        ...
+        ...  # pragma: no cover
 
     @typing.overload
     def all(self, axis: AxisSelection, *, where: Optional["NamedArray"] = ...) -> "NamedArray":
-        ...
+        ...  # pragma: no cover
 
     def all(
         self, axis: Optional[AxisSelection] = None, *, where: Optional["NamedArray"] = None
@@ -381,11 +381,11 @@ class NamedArray:
 
     @typing.overload
     def any(self, axis: None = ..., *, where: Optional["NamedArray"] = ...) -> jnp.ndarray:
-        ...
+        ...  # pragma: no cover
 
     @typing.overload
     def any(self, axis: AxisSelection, *, where: Optional["NamedArray"] = ...) -> "NamedArray":
-        ...
+        ...  # pragma: no cover
 
     def any(
         self, axis: Optional[AxisSelection] = None, *, where: Optional["NamedArray"] = None
@@ -394,22 +394,22 @@ class NamedArray:
 
     @typing.overload
     def argmax(self, *, axis: None = ...) -> jnp.ndarray:
-        ...
+        ...  # pragma: no cover
 
     @typing.overload
     def argmax(self, axis: AxisSelector) -> "NamedArray":
-        ...
+        ...  # pragma: no cover
 
     def argmax(self, axis: Optional[AxisSelector] = None) -> Union[jnp.ndarray, "NamedArray"]:
         return haliax.argmax(self, axis=axis)
 
     @typing.overload
     def argmin(self, *, axis: None = ...) -> jnp.ndarray:
-        ...
+        ...  # pragma: no cover
 
     @typing.overload
     def argmin(self, axis: AxisSelector) -> "NamedArray":
-        ...
+        ...  # pragma: no cover
 
     def argmin(self, axis: Optional[AxisSelector] = None) -> Union[jnp.ndarray, "NamedArray"]:
         return haliax.argmin(self, axis=axis)
@@ -434,22 +434,22 @@ class NamedArray:
 
     @typing.overload
     def cumprod(self, axis: None, *, dtype=None) -> jnp.ndarray:
-        ...
+        ...  # pragma: no cover
 
     @typing.overload
     def cumprod(self, axis: AxisSelector, *, dtype=None) -> "NamedArray":
-        ...
+        ...  # pragma: no cover
 
     def cumprod(self, axis: Optional[AxisSelector], *, dtype=None) -> Union[jnp.ndarray, "NamedArray"]:
         return haliax.cumprod(self, axis=axis, dtype=dtype)
 
     @typing.overload
     def cumsum(self, axis: None, *, dtype=None) -> jnp.ndarray:
-        ...
+        ...  # pragma: no cover
 
     @typing.overload
     def cumsum(self, axis: AxisSelector, *, dtype=None) -> "NamedArray":
-        ...
+        ...  # pragma: no cover
 
     def cumsum(self, axis: Optional[AxisSelector], *, dtype=None) -> "NamedArray":
         return haliax.cumsum(self, axis=axis, dtype=dtype)
@@ -467,7 +467,7 @@ class NamedArray:
         *,
         where=None,
     ) -> jnp.ndarray:
-        ...
+        ...  # pragma: no cover
 
     @typing.overload
     def max(
@@ -476,7 +476,7 @@ class NamedArray:
         *,
         where=None,
     ) -> jnp.ndarray:
-        ...
+        ...  # pragma: no cover
 
     @typing.overload
     def max(
@@ -485,7 +485,7 @@ class NamedArray:
         *,
         where=None,
     ) -> "NamedArray":
-        ...
+        ...  # pragma: no cover
 
     def max(
         self,
@@ -502,7 +502,7 @@ class NamedArray:
         dtype=None,
         where=None,
     ) -> jnp.ndarray:
-        ...
+        ...  # pragma: no cover
 
     @typing.overload
     def mean(
@@ -512,7 +512,7 @@ class NamedArray:
         dtype=None,
         where=None,
     ) -> jnp.ndarray:
-        ...
+        ...  # pragma: no cover
 
     @typing.overload
     def mean(
@@ -522,7 +522,7 @@ class NamedArray:
         dtype=None,
         where=None,
     ) -> "NamedArray":
-        ...
+        ...  # pragma: no cover
 
     def mean(
         self,
@@ -535,15 +535,15 @@ class NamedArray:
 
     @typing.overload
     def min(self, *, where=None) -> jnp.ndarray:
-        ...
+        ...  # pragma: no cover
 
     @typing.overload
     def min(self, axis: None, *, where=None) -> jnp.ndarray:
-        ...
+        ...  # pragma: no cover
 
     @typing.overload
     def min(self, axis: AxisSelection, *, where=None) -> "NamedArray":
-        ...
+        ...  # pragma: no cover
 
     def min(
         self,
@@ -560,7 +560,7 @@ class NamedArray:
         dtype=None,
         where=None,
     ) -> jnp.ndarray:
-        ...
+        ...  # pragma: no cover
 
     @typing.overload
     def prod(
@@ -570,7 +570,7 @@ class NamedArray:
         dtype=None,
         where=None,
     ) -> jnp.ndarray:
-        ...
+        ...  # pragma: no cover
 
     @typing.overload
     def prod(
@@ -580,7 +580,7 @@ class NamedArray:
         dtype=None,
         where=None,
     ) -> "NamedArray":
-        ...
+        ...  # pragma: no cover
 
     def prod(
         self,
@@ -603,7 +603,7 @@ class NamedArray:
         dtype=None,
         where=None,
     ) -> jnp.ndarray:
-        ...
+        ...  # pragma: no cover
 
     @typing.overload
     def product(
@@ -613,7 +613,7 @@ class NamedArray:
         dtype=None,
         where=None,
     ) -> jnp.ndarray:
-        ...
+        ...  # pragma: no cover
 
     @typing.overload
     def product(
@@ -623,7 +623,7 @@ class NamedArray:
         dtype=None,
         where=None,
     ) -> "NamedArray":
-        ...
+        ...  # pragma: no cover
 
     def product(
         self,
@@ -641,15 +641,15 @@ class NamedArray:
 
     @typing.overload
     def ptp(self) -> jnp.ndarray:
-        ...
+        ...  # pragma: no cover
 
     @typing.overload
     def ptp(self, axis: None) -> jnp.ndarray:
-        ...
+        ...  # pragma: no cover
 
     @typing.overload
     def ptp(self, axis: AxisSelection) -> "NamedArray":
-        ...
+        ...  # pragma: no cover
 
     def ptp(self, axis: Optional[AxisSelection] = None) -> Union[jnp.ndarray, "NamedArray"]:
         return haliax.ptp(self, axis=axis)
@@ -666,15 +666,15 @@ class NamedArray:
 
     @typing.overload
     def std(self, *, dtype=None, ddof=0, where=None) -> jnp.ndarray:
-        ...
+        ...  # pragma: no cover
 
     @typing.overload
     def std(self, axis: None, *, dtype=None, ddof=0, where=None) -> jnp.ndarray:
-        ...
+        ...  # pragma: no cover
 
     @typing.overload
     def std(self, axis: AxisSelection, *, dtype=None, ddof=0, where=None) -> "NamedArray":
-        ...
+        ...  # pragma: no cover
 
     def std(
         self, axis: Optional[AxisSelection] = None, *, dtype=None, ddof=0, where=None
@@ -683,15 +683,15 @@ class NamedArray:
 
     @typing.overload
     def sum(self, *, dtype=None, where=None) -> jnp.ndarray:
-        ...
+        ...  # pragma: no cover
 
     @typing.overload
     def sum(self, axis: None, *, dtype=None, where=None) -> jnp.ndarray:
-        ...
+        ...  # pragma: no cover
 
     @typing.overload
     def sum(self, axis: AxisSelection, *, dtype=None, where=None) -> "NamedArray":
-        ...
+        ...  # pragma: no cover
 
     def sum(
         self,
@@ -718,15 +718,15 @@ class NamedArray:
 
     @typing.overload
     def var(self, *, dtype=None, ddof=0, where=None) -> jnp.ndarray:
-        ...
+        ...  # pragma: no cover
 
     @typing.overload
     def var(self, axis: None, *, dtype=None, ddof=0, where=None) -> jnp.ndarray:
-        ...
+        ...  # pragma: no cover
 
     @typing.overload
     def var(self, axis: AxisSelection, *, dtype=None, ddof=0, where=None) -> "NamedArray":
-        ...
+        ...  # pragma: no cover
 
     def var(
         self,
@@ -1567,14 +1567,14 @@ def _is_subsequence(needle, haystack):
 def broadcast_arrays(
     *arrays: NamedArray, require_subset: bool = True, ensure_order: bool = True
 ) -> Tuple[NamedArray, ...]:
-    ...
+    ...  # pragma: no cover
 
 
 @overload
 def broadcast_arrays(
     *arrays: Optional[NamedOrNumeric], require_subset: bool = True, ensure_order: bool = True
 ) -> Tuple[Optional[NamedOrNumeric], ...]:
-    ...
+    ...  # pragma: no cover
 
 
 def broadcast_arrays(
@@ -1603,21 +1603,21 @@ def broadcast_arrays(
 def broadcast_arrays_and_return_axes(
     *arrays: NamedArray, require_subset: bool = True, ensure_order: bool = True
 ) -> Tuple[Tuple[NamedArray, ...], Tuple[Axis, ...]]:
-    ...
+    ...  # pragma: no cover
 
 
 @overload
 def broadcast_arrays_and_return_axes(
     *arrays: NamedOrNumeric, require_subset: bool = True, ensure_order: bool = True
 ) -> Tuple[Tuple[NamedOrNumeric, ...], Tuple[Axis, ...]]:
-    ...
+    ...  # pragma: no cover
 
 
 @overload
 def broadcast_arrays_and_return_axes(
     *arrays: Optional[NamedOrNumeric], require_subset: bool = True, ensure_order: bool = True
 ) -> Tuple[Tuple[Optional[NamedOrNumeric], ...], Tuple[Axis, ...]]:
-    ...
+    ...  # pragma: no cover
 
 
 def broadcast_arrays_and_return_axes(
