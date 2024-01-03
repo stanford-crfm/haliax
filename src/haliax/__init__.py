@@ -449,12 +449,7 @@ def trunc(a: A) -> A:
 
 # Reduction functions
 @typing.overload
-def all(array: NamedArray, *, where: Optional[NamedArray] = None) -> jnp.ndarray:
-    ...
-
-
-@typing.overload
-def all(array: NamedArray, axis: None, *, where: Optional[NamedArray] = None) -> jnp.ndarray:
+def all(array: NamedArray, axis: None = None, *, where: Optional[NamedArray] = None) -> jnp.ndarray:
     ...
 
 
@@ -473,12 +468,7 @@ def all(
 
 
 @typing.overload
-def amax(array: NamedArray, *, where: Optional[NamedArray] = None) -> jnp.ndarray:
-    ...
-
-
-@typing.overload
-def amax(array: NamedArray, axis: None, *, where: Optional[NamedArray] = None) -> jnp.ndarray:
+def amax(array: NamedArray, axis: None = None, *, where: Optional[NamedArray] = None) -> jnp.ndarray:
     ...
 
 
@@ -495,12 +485,7 @@ def amax(array: NamedArray, axis: Optional[AxisSelection] = None, *, where: Opti
 
 
 @typing.overload
-def any(array: NamedArray, *, where: Optional[NamedArray] = None) -> jnp.ndarray:
-    ...
-
-
-@typing.overload
-def any(array: NamedArray, axis: None, *, where: Optional[NamedArray] = None) -> jnp.ndarray:
+def any(array: NamedArray, axis: None = None, *, where: Optional[NamedArray] = None) -> jnp.ndarray:
     ...
 
 
@@ -543,12 +528,7 @@ def argmin(array: NamedArray, axis: Optional[AxisSelector]):
 
 
 @typing.overload
-def max(array: NamedArray, *, where: Optional[NamedArray] = None) -> jnp.ndarray:
-    ...
-
-
-@typing.overload
-def max(array: NamedArray, axis: None, *, where: Optional[NamedArray] = None) -> jnp.ndarray:
+def max(array: NamedArray, axis: None = None, *, where: Optional[NamedArray] = None) -> jnp.ndarray:
     ...
 
 
@@ -562,13 +542,8 @@ def max(array: NamedArray, axis: Optional[AxisSelection] = None, *, where: Optio
 
 
 @typing.overload
-def mean(array: NamedArray, *, where: Optional[NamedArray] = None, dtype: Optional[DTypeLike] = None) -> jnp.ndarray:
-    ...
-
-
-@typing.overload
 def mean(
-    array: NamedArray, axis: None, *, where: Optional[NamedArray] = None, dtype: Optional[DTypeLike] = None
+    array: NamedArray, axis: None = None, *, where: Optional[NamedArray] = None, dtype: Optional[DTypeLike] = None
 ) -> jnp.ndarray:
     ...
 
@@ -591,12 +566,7 @@ def mean(
 
 
 @typing.overload
-def min(array: NamedArray, *, where: Optional[NamedArray] = None) -> jnp.ndarray:
-    ...
-
-
-@typing.overload
-def min(array: NamedArray, axis: None, *, where: Optional[NamedArray] = None) -> jnp.ndarray:
+def min(array: NamedArray, axis: None = None, *, where: Optional[NamedArray] = None) -> jnp.ndarray:
     ...
 
 
@@ -610,13 +580,8 @@ def min(array: NamedArray, axis: Optional[AxisSelection] = None, *, where: Optio
 
 
 @typing.overload
-def prod(array: NamedArray, *, where: Optional[NamedArray] = None, dtype: Optional[DTypeLike] = None) -> jnp.ndarray:
-    ...
-
-
-@typing.overload
 def prod(
-    array: NamedArray, axis: None, *, where: Optional[NamedArray] = None, dtype: Optional[DTypeLike] = None
+    array: NamedArray, axis: None = None, *, where: Optional[NamedArray] = None, dtype: Optional[DTypeLike] = None
 ) -> jnp.ndarray:
     ...
 
@@ -641,18 +606,7 @@ def prod(
 @typing.overload
 def std(
     array: NamedArray,
-    *,
-    where: Optional[NamedArray] = None,
-    ddof: int = 0,
-    dtype: Optional[DTypeLike] = None,
-) -> jnp.ndarray:
-    ...
-
-
-@typing.overload
-def std(
-    array: NamedArray,
-    axis: None,
+    axis: None = None,
     *,
     where: Optional[NamedArray] = None,
     ddof: int = 0,
@@ -687,12 +641,7 @@ def std(
 
 
 @typing.overload
-def ptp(array: NamedArray, *, where: Optional[NamedArray] = None) -> jnp.ndarray:
-    ...
-
-
-@typing.overload
-def ptp(array: NamedArray, axis: None, *, where: Optional[NamedArray] = None) -> jnp.ndarray:
+def ptp(array: NamedArray, axis: None = None, *, where: Optional[NamedArray] = None) -> jnp.ndarray:
     ...
 
 
@@ -707,14 +656,7 @@ def ptp(array: NamedArray, axis: Optional[AxisSelection] = None, *, where: Optio
 
 @typing.overload
 def product(
-    array: NamedArray, *, where: Optional[NamedArray] = None, dtype: Optional[DTypeLike] = None
-) -> jnp.ndarray:
-    ...
-
-
-@typing.overload
-def product(
-    array: NamedArray, axis: None, *, where: Optional[NamedArray] = None, dtype: Optional[DTypeLike] = None
+    array: NamedArray, axis: None = None, *, where: Optional[NamedArray] = None, dtype: Optional[DTypeLike] = None
 ) -> jnp.ndarray:
     ...
 
@@ -744,17 +686,7 @@ _sum = sum
 @typing.overload
 def sum(
     array: NamedArray,
-    *,
-    where: Optional[NamedArray] = None,
-    dtype: Optional[DTypeLike] = None,
-) -> jnp.ndarray:
-    ...
-
-
-@typing.overload
-def sum(
-    array: NamedArray,
-    axis: None,
+    axis: None = None,
     *,
     where: Optional[NamedArray] = None,
     dtype: Optional[DTypeLike] = None,
@@ -786,18 +718,7 @@ def sum(
 @typing.overload
 def var(
     array: NamedArray,
-    *,
-    where: Optional[NamedArray] = None,
-    ddof: int = 0,
-    dtype: Optional[DTypeLike] = None,
-) -> jnp.ndarray:
-    ...
-
-
-@typing.overload
-def var(
-    array: NamedArray,
-    axis: None,
+    axis: None = None,
     *,
     where: Optional[NamedArray] = None,
     ddof: int = 0,
@@ -899,7 +820,10 @@ def argsort(a: NamedArray, axis: AxisSelector) -> NamedArray:
 
 def argsort(a: NamedArray, axis: Optional[AxisSelector]) -> jnp.ndarray | NamedArray:
     """
-    Named version of [jax.numpy.argsort](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.argsort.html)
+    Named version of [jax.numpy.argsort](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.argsort.html).
+
+    If `axis` is None, the returned array will be a 1D array of indices that would sort the flattened array,
+    identical to `jax.numpy.argsort(a.array)`.
     """
     if axis is None:
         return jnp.argsort(a.array)

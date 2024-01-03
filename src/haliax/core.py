@@ -393,7 +393,7 @@ class NamedArray:
         return haliax.any(self, axis=axis, where=where)
 
     @typing.overload
-    def argmax(self, *, axis: None = ...) -> jnp.ndarray:
+    def argmax(self, *, axis: None) -> jnp.ndarray:
         ...
 
     @typing.overload
@@ -404,14 +404,14 @@ class NamedArray:
         return haliax.argmax(self, axis=axis)
 
     @typing.overload
-    def argmin(self, *, axis: None = ...) -> jnp.ndarray:
+    def argmin(self, *, axis: None) -> jnp.ndarray:
         ...
 
     @typing.overload
     def argmin(self, axis: AxisSelector) -> "NamedArray":
         ...
 
-    def argmin(self, axis: Optional[AxisSelector] = None) -> Union[jnp.ndarray, "NamedArray"]:
+    def argmin(self, axis: Optional[AxisSelector]) -> Union[jnp.ndarray, "NamedArray"]:
         return haliax.argmin(self, axis=axis)
 
     def argsort(self, axis: AxisSelector) -> "NamedArray":
@@ -462,133 +462,49 @@ class NamedArray:
         return NamedArray(self.array.imag, self.axes)
 
     @typing.overload
-    def max(
-        self,
-        *,
-        where=None,
-    ) -> jnp.ndarray:
+    def max(self, axis: None = None, *, where=None) -> jnp.ndarray:
         ...
 
     @typing.overload
-    def max(
-        self,
-        axis: None,
-        *,
-        where=None,
-    ) -> jnp.ndarray:
+    def max(self, axis: AxisSelection, *, where=None) -> "NamedArray":
         ...
 
-    @typing.overload
-    def max(
-        self,
-        axis: AxisSelection,
-        *,
-        where=None,
-    ) -> "NamedArray":
-        ...
-
-    def max(
-        self,
-        axis: Optional[AxisSelection] = None,
-        *,
-        where=None,
-    ) -> Union[jnp.ndarray, "NamedArray"]:
+    def max(self, axis: Optional[AxisSelection] = None, *, where=None) -> Union[jnp.ndarray, "NamedArray"]:
         return haliax.max(self, axis=axis, where=where)
 
     @typing.overload
-    def mean(
-        self,
-        *,
-        dtype=None,
-        where=None,
-    ) -> jnp.ndarray:
+    def mean(self, axis: None = None, *, dtype=None, where=None) -> jnp.ndarray:
         ...
 
     @typing.overload
-    def mean(
-        self,
-        axis: None,
-        *,
-        dtype=None,
-        where=None,
-    ) -> jnp.ndarray:
-        ...
-
-    @typing.overload
-    def mean(
-        self,
-        axis: AxisSelection,
-        *,
-        dtype=None,
-        where=None,
-    ) -> "NamedArray":
+    def mean(self, axis: AxisSelection, *, dtype=None, where=None) -> "NamedArray":
         ...
 
     def mean(
-        self,
-        axis: Optional[AxisSelection] = None,
-        *,
-        dtype=None,
-        where=None,
+        self, axis: Optional[AxisSelection] = None, *, dtype=None, where=None
     ) -> Union[jnp.ndarray, "NamedArray"]:
         return haliax.mean(self, axis=axis, dtype=dtype, where=where)
 
     @typing.overload
-    def min(self, *, where=None) -> jnp.ndarray:
-        ...
-
-    @typing.overload
-    def min(self, axis: None, *, where=None) -> jnp.ndarray:
+    def min(self, axis: None = None, *, where=None) -> jnp.ndarray:
         ...
 
     @typing.overload
     def min(self, axis: AxisSelection, *, where=None) -> "NamedArray":
         ...
 
-    def min(
-        self,
-        axis: Optional[AxisSelection] = None,
-        *,
-        where=None,
-    ) -> Union[jnp.ndarray, "NamedArray"]:
+    def min(self, axis: Optional[AxisSelection] = None, *, where=None) -> Union[jnp.ndarray, "NamedArray"]:
         return haliax.min(self, axis=axis, where=where)
 
     @typing.overload
-    def prod(
-        self,
-        *,
-        dtype=None,
-        where=None,
-    ) -> jnp.ndarray:
+    def prod(self, axis: None = None, *, dtype=None, where=None) -> jnp.ndarray:
         ...
 
     @typing.overload
-    def prod(
-        self,
-        axis: None,
-        *,
-        dtype=None,
-        where=None,
-    ) -> jnp.ndarray:
+    def prod(self, axis: AxisSelection, *, dtype=None, where=None) -> "NamedArray":
         ...
 
-    @typing.overload
-    def prod(
-        self,
-        axis: AxisSelection,
-        *,
-        dtype=None,
-        where=None,
-    ) -> "NamedArray":
-        ...
-
-    def prod(
-        self,
-        axis: Optional[AxisSelection] = None,
-        *,
-        dtype=None,
-        where=None,
-    ) -> "NamedArray":
+    def prod(self, axis: Optional[AxisSelection] = None, *, dtype=None, where=None) -> "NamedArray":
         return haliax.prod(
             self,
             axis=axis,
@@ -597,32 +513,11 @@ class NamedArray:
         )
 
     @typing.overload
-    def product(
-        self,
-        *,
-        dtype=None,
-        where=None,
-    ) -> jnp.ndarray:
+    def product(self, axis: None = None, *, dtype=None, where=None) -> jnp.ndarray:
         ...
 
     @typing.overload
-    def product(
-        self,
-        axis: None,
-        *,
-        dtype=None,
-        where=None,
-    ) -> jnp.ndarray:
-        ...
-
-    @typing.overload
-    def product(
-        self,
-        axis: AxisSelection,
-        *,
-        dtype=None,
-        where=None,
-    ) -> "NamedArray":
+    def product(self, axis: AxisSelection, *, dtype=None, where=None) -> "NamedArray":
         ...
 
     def product(
@@ -640,11 +535,7 @@ class NamedArray:
         )
 
     @typing.overload
-    def ptp(self) -> jnp.ndarray:
-        ...
-
-    @typing.overload
-    def ptp(self, axis: None) -> jnp.ndarray:
+    def ptp(self, axis: None = None) -> jnp.ndarray:
         ...
 
     @typing.overload
@@ -665,11 +556,7 @@ class NamedArray:
         return haliax.sort(self, axis=axis)
 
     @typing.overload
-    def std(self, *, dtype=None, ddof=0, where=None) -> jnp.ndarray:
-        ...
-
-    @typing.overload
-    def std(self, axis: None, *, dtype=None, ddof=0, where=None) -> jnp.ndarray:
+    def std(self, axis: None = None, *, dtype=None, ddof=0, where=None) -> jnp.ndarray:
         ...
 
     @typing.overload
@@ -682,11 +569,7 @@ class NamedArray:
         return haliax.std(self, axis=axis, dtype=dtype, ddof=ddof, where=where)
 
     @typing.overload
-    def sum(self, *, dtype=None, where=None) -> jnp.ndarray:
-        ...
-
-    @typing.overload
-    def sum(self, axis: None, *, dtype=None, where=None) -> jnp.ndarray:
+    def sum(self, axis: None = None, *, dtype=None, where=None) -> jnp.ndarray:
         ...
 
     @typing.overload
@@ -717,25 +600,14 @@ class NamedArray:
         return haliax.trace(self, offset=offset, axis1=axis1, axis2=axis2, dtype=dtype)
 
     @typing.overload
-    def var(self, *, dtype=None, ddof=0, where=None) -> jnp.ndarray:
-        ...
-
-    @typing.overload
-    def var(self, axis: None, *, dtype=None, ddof=0, where=None) -> jnp.ndarray:
+    def var(self, axis: None = None, *, dtype=None, ddof=0, where=None) -> jnp.ndarray:
         ...
 
     @typing.overload
     def var(self, axis: AxisSelection, *, dtype=None, ddof=0, where=None) -> "NamedArray":
         ...
 
-    def var(
-        self,
-        axis: Optional[AxisSelection] = None,
-        dtype=None,
-        ddof=0,
-        *,
-        where=None,
-    ) -> "NamedArray":
+    def var(self, axis: Optional[AxisSelection] = None, dtype=None, ddof=0, *, where=None) -> "NamedArray":
         return haliax.var(
             self,
             axis=axis,
