@@ -11,6 +11,7 @@ import haliax.random as random
 import haliax.tree_util as tree_util
 import haliax.util as util
 
+from ._src.dot import dot
 from ._src.rearrange import rearrange
 from .axis import (
     Axis,
@@ -32,7 +33,6 @@ from .core import (
     broadcast_arrays,
     broadcast_axis,
     broadcast_to,
-    dot,
     enable_shape_checks,
     flatten,
     flatten_axes,
