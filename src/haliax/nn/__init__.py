@@ -50,17 +50,31 @@ from .scan import Stacked
 # TODO: support where in softmax, etc
 
 
-@functools.wraps(jnn.one_hot)
-def one_hot(x: Union[NamedArray, int], class_axis: Axis, *, dtype=None) -> NamedArray:
+def one_hot(x: NamedArray | int, class_axis: Axis, *, dtype=None) -> NamedArray:
+    """
+    Convert an integer to a one-hot vector. This is basically a generalization of [jax.nn.one_hot][]
+    for NamedArrays.
+
+    Args:
+        x: the integer or NamedArray of integers to convert
+        class_axis: the axis to convert to one-hot
+        dtype: the dtype of the result. If None, it will default to jax's default (currently float_)
+    Returns:
+        a NamedArray with the same axes as `x` plus `class_axis`, with 1s in the appropriate places
+    """
     if isinstance(x, NamedArray):
         array = jnn.one_hot(x.array, num_classes=class_axis.size, dtype=dtype)
-        return NamedArray(array, x.axes + (class_axis,))
+        return hax.auto_sharded(hax.named(array, x.axes + (class_axis,)))
     else:
         assert isinstance(x, int)
         assert class_axis.size > x >= -class_axis.size
 
-        array = jnp.zeros(class_axis.size, dtype=dtype).at[x].set(1)
-        return haliax.named(array, class_axis)
+        one = 1
+        if dtype is not None:
+            one = dtype(one)
+
+        array = jnp.zeros(class_axis.size, dtype=dtype).at[x].set(one)
+        return hax.auto_sharded(haliax.named(array, class_axis))
 
 
 @typing.overload
