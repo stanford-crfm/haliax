@@ -11,6 +11,7 @@ import jax
 import jax.numpy as jnp
 import numpy
 import numpy as np
+from jax.typing import DTypeLike
 
 import haliax
 import haliax.axis
@@ -454,8 +455,18 @@ class NamedArray:
     def cumsum(self, axis: Optional[AxisSelector], *, dtype=None) -> "NamedArray":
         return haliax.cumsum(self, axis=axis, dtype=dtype)
 
-    def dot(self, axis: AxisSelection, b, *, precision: PrecisionLike = None) -> "NamedArray":
-        return dot(axis, self, b, precision=precision)
+    @typing.overload
+    def dot(self, axis: None, *b, precision: PrecisionLike = None) -> jnp.ndarray:
+        ...
+
+    @typing.overload
+    def dot(self, axis: AxisSelection, *b, precision: PrecisionLike = None) -> "NamedArray":
+        ...
+
+    def dot(
+        self, axis: Optional[AxisSelection], *b, precision: PrecisionLike = None
+    ) -> Union[jnp.ndarray, "NamedArray"]:
+        return dot(axis, self, *b, precision=precision)
 
     @property
     def imag(self) -> "NamedArray":
@@ -1093,7 +1104,22 @@ def index(array: NamedArray, slices: Mapping[AxisSelector, NamedIndex]) -> Union
     return haliax.named(sliced, new_axes)
 
 
+@typing.overload
+def dot(axis: None, *arrays: NamedArray, precision: PrecisionLike = None) -> jnp.ndarray:
+    ...
+
+
+@typing.overload
 def dot(axis: AxisSelection, *arrays: NamedArray, precision: PrecisionLike = None) -> NamedArray:
+    ...
+
+
+def dot(
+    axis: Optional[AxisSelection],
+    *arrays: NamedArray,
+    precision: PrecisionLike = None,
+    preferred_element_type: Optional[DTypeLike] = None,
+) -> jnp.ndarray | NamedArray:
     """Returns the tensor product of two NamedArrays. The axes `axis` are contracted over,
     and any other axes that are shared between the arrays are batched over. Non-contracted Axes in one
     that are not in the other are preserved.
@@ -1103,15 +1129,21 @@ def dot(axis: AxisSelection, *arrays: NamedArray, precision: PrecisionLike = Non
         *arrays (NamedArray): The arrays to contract.
         precision (PrecisionLike, optional): The precision to use. Defaults to None. This argument is passed to `jax.numpy.einsum`,
             which in turn passes it to jax.lax.dot_general.
+        preferred_element_type (DTypeLike, optional): The preferred element type of the result. Defaults to None.
+            This argument is passed to `jax.numpy.einsum`,
 
     Returns:
         NamedArray: The result of the contraction.
     """
     _ensure_no_mismatched_axes(*arrays)
-    output_axes: Tuple[Axis, ...] = ft.reduce(union_axes, (a.axes for a in arrays), ())  # type: ignore
-    output_axes = eliminate_axes(output_axes, axis)
 
-    axis = ensure_tuple(axis)
+    all_axes: Tuple[Axis, ...] = ft.reduce(union_axes, (a.axes for a in arrays), ())  # type: ignore
+    output_axes: Tuple[Axis, ...]
+    if axis is None:
+        # we want to contract over all the axes
+        output_axes = ()
+    else:
+        output_axes = eliminate_axes(all_axes, axis)
 
     array_specs = []
 
@@ -1133,14 +1165,27 @@ def dot(axis: AxisSelection, *arrays: NamedArray, precision: PrecisionLike = Non
     # now compute the output axes:
     output_spec = " ".join(str(axis_mappings[ax.name]) for ax in output_axes)
 
-    output = jnp.einsum(
-        ", ".join(array_specs) + "-> " + output_spec,
-        *[a.array for a in arrays],
-        precision=precision,
-    )
+    # get a name for jax so it's easier to interpret logs
+    if axis is None:
+        jax_str = f"contract {', '.join(axis_name(ax) for a in all_axes)} -> <scalar>"
+    else:
+        axis = ensure_tuple(axis)
+        jax_str = f"contract {', '.join(axis_name(ax) for a in axis)} -> {', '.join(a.name for a in output_axes)}"
 
-    out = NamedArray(output, output_axes)
-    return haliax.shard(out)
+    with jax.named_scope(jax_str):
+        output = jnp.einsum(
+            ", ".join(array_specs) + "-> " + output_spec,
+            *[a.array for a in arrays],
+            precision=precision,
+            preferred_element_type=preferred_element_type,
+        )
+
+    if axis is None:
+        assert output.ndim == 0
+        return output
+    else:
+        out = NamedArray(output, output_axes)
+        return haliax.shard(out)
 
 
 def split(a: NamedArray, axis: AxisSelector, new_axes: Sequence[Axis]) -> Sequence[NamedArray]:
