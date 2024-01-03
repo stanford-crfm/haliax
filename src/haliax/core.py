@@ -1185,7 +1185,7 @@ def dot(
         return output
     else:
         out = NamedArray(output, output_axes)
-        return haliax.shard(out)
+        return haliax.auto_sharded(out)
 
 
 def split(a: NamedArray, axis: AxisSelector, new_axes: Sequence[Axis]) -> Sequence[NamedArray]:
@@ -1233,7 +1233,7 @@ def unbind(array: NamedArray, axis: AxisSelector) -> List[NamedArray]:
     axis_size = array.axes[axis_index].size
     arrays = [jnp.take(array.array, i, axis=axis_index) for i in range(axis_size)]
 
-    return [haliax.shard(NamedArray(a, new_axes)) for a in arrays]
+    return [haliax.auto_sharded(NamedArray(a, new_axes)) for a in arrays]
 
 
 def roll(array: NamedArray, shift: Union[int, Tuple[int, ...]], axis: AxisSelection) -> NamedArray:

@@ -11,6 +11,61 @@ from .jax_utils import maybe_rng_split
 from .util import is_named_array
 
 
+def tree_map(fn, tree, *rest, is_leaf=None):
+    """
+    Version of [jax.tree_util.tree_map][] that automatically treats NamedArrays as leaves.
+    """
+    if is_leaf is None:
+        is_leaf = lambda x: isinstance(x, NamedArray)
+    else:
+        is_leaf = lambda x: is_leaf(x) or is_named_array(x)
+
+    return jax.tree_util.tree_map(fn, tree, *rest, is_leaf=is_leaf)
+
+
+def tree_flatten(tree, is_leaf=None):
+    """
+    Version of [jax.tree_util.tree_flatten][] that automatically treats NamedArrays as leaves.
+    """
+    if is_leaf is None:
+        is_leaf = lambda x: isinstance(x, NamedArray)
+    else:
+        is_leaf = lambda x: is_leaf(x) or is_named_array(x)
+
+    return jax.tree_util.tree_flatten(tree, is_leaf=is_leaf)
+
+
+def tree_unflatten(treedef, leaves):
+    """
+    Provided for consistency with tree_flatten.
+    """
+    return jax.tree_util.tree_unflatten(treedef, leaves)
+
+
+def tree_leaves(tree, is_leaf=None):
+    """
+    Version of [jax.tree_util.tree_leaves][] that automatically treats NamedArrays as leaves.
+    """
+    if is_leaf is None:
+        is_leaf = lambda x: isinstance(x, NamedArray)
+    else:
+        is_leaf = lambda x: is_leaf(x) or is_named_array(x)
+
+    return jax.tree_util.tree_leaves(tree, is_leaf=is_leaf)
+
+
+def tree_structure(tree, is_leaf=None):
+    """
+    Version of [jax.tree_util.tree_structure][] that automatically treats NamedArrays as leaves.
+    """
+    if is_leaf is None:
+        is_leaf = lambda x: isinstance(x, NamedArray)
+    else:
+        is_leaf = lambda x: is_leaf(x) or is_named_array(x)
+
+    return jax.tree_util.tree_structure(tree, is_leaf=is_leaf)
+
+
 def resize_axis(tree: PyTree[NamedArray], old_axis: AxisSelector, new_size: int, key: Optional[PRNGKeyArray] = None):
     """Resizes the NamedArrays of a PyTree along a given axis. If the array needs to grow and key is not none, then the
     new elements are sampled from a truncated normal distribution with the same mean and standard deviation as the

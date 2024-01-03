@@ -112,10 +112,14 @@ This is the main function you will use to shard arrays:
 
 ::: haliax.shard
 
-These are older functions that are being deprecated and will be removed in a future release:
+This function is like `shard` but does not issue a warning if there is no context axis mapping.
+It's useful for library code where there may or may not be a context mapping:
+
+::: haliax.auto_sharded
+
+This is an older function that is being deprecated in favor of `shard`. It is functionally equivalent to `shard`:
 
 ::: haliax.shard_with_axis_mapping
-::: haliax.auto_sharded
 
 ### `named_jit` and friends
 

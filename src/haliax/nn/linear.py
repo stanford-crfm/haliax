@@ -45,11 +45,11 @@ class Linear(eqx.Module):
         """
         del key
         q = inputs.dot(self.In, self.weight)
-        q = hax.shard(q)
+        q = hax.auto_sharded(q)
 
         if self.bias is not None:
             q = q + self.bias
-            q = hax.shard(q)
+            q = hax.auto_sharded(q)
 
         return q
 

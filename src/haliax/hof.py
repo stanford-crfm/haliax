@@ -8,6 +8,8 @@ import jax
 import jax.lax as lax
 from jaxtyping import PyTree
 
+import haliax.tree_util as htu
+
 from ._src.util import index_where
 from .axis import Axis, AxisSelector, selects_axis
 from .core import NamedArray
@@ -103,10 +105,11 @@ def scan(
         # We have to be careful that we don't try to create NamedArrays that have the shape of the scanned result
         # but don't yet have the scanned axis as ones of `axes`, so we use _ScannedArrayResult that doesn't check
         # invariants until we're ready to create the result.
-        axis_first_xs = jax.tree_util.tree_map(_ensure_first(axis), scanned_xs, is_leaf=is_named_array)
+        axis_first_xs = htu.tree_map(_ensure_first(axis), scanned_xs)
 
         # now get a template of an element of "X"
-        x_elem = jax.tree_util.tree_map(_select_0th(axis), axis_first_xs, is_leaf=is_named_array)
+        x_elem = htu.tree_map(_select_0th(axis), axis_first_xs)
+        # NB: we don't want to use htu.tree_structure here because we want to eliminate the leading axis
         x_elem_structure = jax.tree_util.tree_structure(x_elem)
 
         # now we can fold over the axis
@@ -117,9 +120,10 @@ def scan(
             scanned_x = eqx.combine(scanned_x, unscanned_xs, is_leaf=is_named_array)
             args, kwargs = scanned_x
             carry, y = f(carry, *args, **kwargs)
-            y = jax.tree_util.tree_map(_pacify_named_arrays, y, is_leaf=is_named_array)
+            y = htu.tree_map(_pacify_named_arrays, y)
             return carry, y
 
+        # as above, we don't want to use htu.tree_leaves here because we want to eliminate the leading axis
         leaves = jax.tree_util.tree_leaves(axis_first_xs)
         carry, ys = lax.scan(wrapped_fn, init, leaves, reverse=reverse, unroll=unroll)
         true_axis = _infer_axis_size_from_result(ys, axis)
@@ -306,18 +310,14 @@ def vmap(
         padded_spec_args = broadcast_prefix(padded_spec_args, actual_bound.args, is_leaf=is_named_array)
         padded_spec_kwargs = broadcast_prefix(padded_spec_kwargs, actual_bound.kwargs)
 
-        arg_axis_specs = jax.tree_util.tree_map(
-            _index_of_batch_axis, actual_bound.args, padded_spec_args, is_leaf=is_named_array
-        )
+        arg_axis_specs = htu.tree_map(_index_of_batch_axis, actual_bound.args, padded_spec_args)
 
-        kwarg_axis_specs = jax.tree_util.tree_map(
-            _index_of_batch_axis, actual_bound.kwargs, padded_spec_kwargs, is_leaf=is_named_array
-        )
+        kwarg_axis_specs = htu.tree_map(_index_of_batch_axis, actual_bound.kwargs, padded_spec_kwargs)
 
         # now we can actually vmap. We used "pacified" versions of NamedArrays that don't check
         # invariants, because intermediates creating during tracing won't have the axes right
-        arg_axis_specs = jax.tree_util.tree_map(_pacify_named_arrays, arg_axis_specs, is_leaf=is_named_array)
-        kwarg_axis_specs = jax.tree_util.tree_map(_pacify_named_arrays, kwarg_axis_specs, is_leaf=is_named_array)
+        arg_axis_specs = htu.tree_map(_pacify_named_arrays, arg_axis_specs)
+        kwarg_axis_specs = htu.tree_map(_pacify_named_arrays, kwarg_axis_specs)
 
         def wrapped_fn(args, kwargs):
             # the args that come in here are pacified. Their names will still have the batch axis even though the array
@@ -330,14 +330,14 @@ def vmap(
             out = fn(*unchilled_args, **unchilled_kwargs)
 
             # now we need to pacify the output, which may include NamedArrays, and add the batch axis back at the end
-            chilled = jax.tree_util.tree_map(_pacify_named_arrays, out, is_leaf=is_named_array)
+            chilled = htu.tree_map(_pacify_named_arrays, out)
             arrays, nonarrays = eqx.partition(chilled, is_jax_array_like)
             return arrays, Static(nonarrays)
 
         spmd_axis_name = physical_axis_name(axis)
 
-        args = jax.tree_util.tree_map(_pacify_named_arrays, actual_bound.args, is_leaf=is_named_array)
-        kwargs = jax.tree_util.tree_map(_pacify_named_arrays, actual_bound.kwargs, is_leaf=is_named_array)
+        args = htu.tree_map(_pacify_named_arrays, actual_bound.args)
+        kwargs = htu.tree_map(_pacify_named_arrays, actual_bound.kwargs)
 
         result_dynamic, result_static = jax.vmap(
             wrapped_fn,
