@@ -9,7 +9,7 @@ import jax.numpy as jnp
 
 from ..axis import Axis, AxisSelector, axis_name
 from ..core import NamedArray
-from ..partitioning import shard
+from ..partitioning import auto_sharded
 
 
 @dataclasses.dataclass
@@ -389,7 +389,7 @@ def einops_rearrange(array: NamedArray, expression: str, **bindings: AxisSelecto
     if plan.intermediate_axes != array.axes:
         raw_array = raw_array.reshape([ax.size for ax in plan.intermediate_axes])
         array = NamedArray(raw_array, plan.intermediate_axes)
-        array = shard(array)
+        array = auto_sharded(array)
         raw_array = array.array
 
     final_shape = tuple(ax.size for ax in plan.final_axes)
@@ -401,7 +401,7 @@ def einops_rearrange(array: NamedArray, expression: str, **bindings: AxisSelecto
     else:
         finished_array = raw_array
 
-    return shard(NamedArray(finished_array, plan.final_axes))
+    return auto_sharded(NamedArray(finished_array, plan.final_axes))
 
 
 def _plan_rearrange(

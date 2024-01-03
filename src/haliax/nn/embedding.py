@@ -34,7 +34,7 @@ class Embedding(eqx.Module):
         return input_embeds
 
     def unembed(self, input_embeds):
-        return input_embeds.dot(self.Embed, self.weight)
+        return input_embeds.dot(self.weight, axis=self.Embed)
 
     def resize_embeddings(self, new_size: int, key: Optional[PRNGKeyArray] = None):
         new_weights = resize_axis(self.weight, self.Vocab, new_size, key=key)

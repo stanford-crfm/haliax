@@ -151,9 +151,9 @@ Reductions are similar to JAX, except that they use an axis name instead of an a
 
 ### Matrix Multiplication
 
-| JAX                                                 | Haliax                                 |
-|-----------------------------------------------------|----------------------------------------|
-| [`jnp.dot(z, x)`][jax.numpy.dot]                    | [`hax.dot("batch", z, x)`][haliax.dot] |
-| [`jnp.matmul(z, x)`][jax.numpy.matmul]              | [`hax.dot("batch", z, x)`][haliax.dot] |
-| [`jnp.dot(w, x.t)`][jax.numpy.dot]                  | [`hax.dot("embed", w, x)`][haliax.dot] |
-| [`jnp.einsum("ij,j -> i", x, w)`][jax.numpy.einsum] | [`hax.dot("embed", x, w)`][haliax.dot] |
+| JAX                                                 | Haliax                                      |
+|-----------------------------------------------------|---------------------------------------------|
+| [`jnp.dot(z, x)`][jax.numpy.dot]                    | [`hax.dot(z, x, axis="batch")`][haliax.dot] |
+| [`jnp.matmul(z, x)`][jax.numpy.matmul]              | [`hax.dot(z, x, axis="batch")`][haliax.dot] |
+| [`jnp.dot(w, x.t)`][jax.numpy.dot]                  | [`hax.dot(w, x, axis="embed")`][haliax.dot] |
+| [`jnp.einsum("ij,j -> i", x, w)`][jax.numpy.einsum] | [`hax.dot(x, w, axis="embed")`][haliax.dot]  |

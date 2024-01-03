@@ -455,18 +455,32 @@ class NamedArray:
     def cumsum(self, axis: Optional[AxisSelector], *, dtype=None) -> "NamedArray":
         return haliax.cumsum(self, axis=axis, dtype=dtype)
 
+    # Deprecated overload
     @typing.overload
     def dot(self, axis: None, *b, precision: PrecisionLike = None) -> jnp.ndarray:
         ...
 
+    # Deprecated overload
     @typing.overload
     def dot(self, axis: AxisSelection, *b, precision: PrecisionLike = None) -> "NamedArray":
         ...
 
-    def dot(
-        self, axis: Optional[AxisSelection], *b, precision: PrecisionLike = None
-    ) -> Union[jnp.ndarray, "NamedArray"]:
-        return dot(axis, self, *b, precision=precision)
+    @typing.overload
+    def dot(self, *args, axis: AxisSelection, precision: PrecisionLike = None) -> "NamedArray":
+        ...
+
+    @typing.overload
+    def dot(self, *args, axis: None, precision: PrecisionLike = None) -> jnp.ndarray:
+        ...
+
+    def dot(self, *args, **kwargs) -> Union[jnp.ndarray, "NamedArray"]:
+        if "axis" in kwargs or len(args) == 0:
+            return dot(self, *args, **kwargs)
+        else:
+            axis = args[0]
+            args = args[1:]
+            # We want to get the deprecation warning for this style
+            return dot(axis, self, *args, **kwargs)
 
     @property
     def imag(self) -> "NamedArray":
@@ -1104,29 +1118,61 @@ def index(array: NamedArray, slices: Mapping[AxisSelector, NamedIndex]) -> Union
     return haliax.named(sliced, new_axes)
 
 
+# deprecated overload
 @typing.overload
-def dot(axis: None, *arrays: NamedArray, precision: PrecisionLike = None) -> jnp.ndarray:
+def dot(
+    axis: None,
+    *arrays: NamedArray,
+    precision: PrecisionLike = None,
+    preferred_element_type: Optional[DTypeLike] = None,
+) -> jnp.ndarray:
+    ...
+
+
+# deprecated overload
+@typing.overload
+def dot(
+    axis: AxisSelection,
+    *arrays: NamedArray,
+    precision: PrecisionLike = None,
+    preferred_element_type: Optional[DTypeLike] = None,
+) -> NamedArray:
     ...
 
 
 @typing.overload
-def dot(axis: AxisSelection, *arrays: NamedArray, precision: PrecisionLike = None) -> NamedArray:
+def dot(
+    *arrays: NamedArray,
+    axis: AxisSelection,
+    precision: PrecisionLike = None,
+    preferred_element_type: Optional[DTypeLike] = None,
+) -> NamedArray:
+    ...
+
+
+@typing.overload
+def dot(
+    *arrays: NamedArray,
+    axis: None,
+    precision: PrecisionLike = None,
+    preferred_element_type: Optional[DTypeLike] = None,
+) -> jnp.ndarray:
     ...
 
 
 def dot(
-    axis: Optional[AxisSelection],
-    *arrays: NamedArray,
+    *arrays,
     precision: PrecisionLike = None,
     preferred_element_type: Optional[DTypeLike] = None,
+    **kwargs,
 ) -> jnp.ndarray | NamedArray:
     """Returns the tensor product of two NamedArrays. The axes `axis` are contracted over,
     and any other axes that are shared between the arrays are batched over. Non-contracted Axes in one
     that are not in the other are preserved.
 
     Args:
-        axis (AxisSelection): The axes to contract over.
         *arrays (NamedArray): The arrays to contract.
+        axis (AxisSelection): The axes to contract over.
         precision (PrecisionLike, optional): The precision to use. Defaults to None. This argument is passed to `jax.numpy.einsum`,
             which in turn passes it to jax.lax.dot_general.
         preferred_element_type (DTypeLike, optional): The preferred element type of the result. Defaults to None.
@@ -1135,6 +1181,19 @@ def dot(
     Returns:
         NamedArray: The result of the contraction.
     """
+    if len(arrays) == 0:
+        raise ValueError("Must provide at least one array to dot")
+
+    if "axis" in kwargs:
+        axis = kwargs["axis"]
+    else:
+        axis = arrays[0]
+        arrays = arrays[1:]
+        if isinstance(axis, NamedArray):
+            raise ValueError("Must provide an axis to dot")
+
+        warnings.warn("Axis has been changed to a keyword argument. Please update your code.", DeprecationWarning)
+
     _ensure_no_mismatched_axes(*arrays)
 
     all_axes: Tuple[Axis, ...] = ft.reduce(union_axes, (a.axes for a in arrays), ())  # type: ignore

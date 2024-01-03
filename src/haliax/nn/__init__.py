@@ -130,7 +130,7 @@ def cross_entropy_loss_and_log_normalizers(
     log_normalizers = haliax.nn.normalization.logsumexp(pred_y, Label)
     neg_log_normalized = log_normalizers - pred_y
 
-    loss = hax.dot(Label, target_y, neg_log_normalized)
+    loss = hax.dot(target_y, neg_log_normalized, axis=Label)
 
     return loss, log_normalizers
 

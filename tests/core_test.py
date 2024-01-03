@@ -16,16 +16,16 @@ def test_dot():
     m1 = NamedArray(jnp.ones((Height.size, Width.size, Depth.size)), (Height, Width, Depth))
     m2 = NamedArray(jnp.ones((Depth.size, Width.size, Height.size)), (Depth, Width, Height))
 
-    assert jnp.all(jnp.equal(hax.dot(Height, m1, m2).array, jnp.einsum("ijk,kji->jk", m1.array, m2.array)))
+    assert jnp.all(jnp.equal(hax.dot(m1, m2, axis=Height).array, jnp.einsum("ijk,kji->jk", m1.array, m2.array)))
     assert jnp.all(
         jnp.equal(
-            hax.dot((Height, Width), m1, m2).array,
+            hax.dot(m1, m2, axis=(Height, Width)).array,
             jnp.einsum("ijk,kji->k", m1.array, m2.array),
         )
     )
     assert jnp.all(
         jnp.equal(
-            hax.dot((Height, Width, Depth), m1, m2).array,
+            hax.dot(m1, m2, axis=(Height, Width, Depth)).array,
             jnp.einsum("ijk,kji->", m1.array, m2.array),
         )
     )
@@ -39,16 +39,16 @@ def test_dot_string_selection():
     m1 = NamedArray(jnp.ones((Height.size, Width.size, Depth.size)), (Height, Width, Depth))
     m2 = NamedArray(jnp.ones((Depth.size, Width.size, Height.size)), (Depth, Width, Height))
 
-    assert jnp.all(jnp.equal(hax.dot("Height", m1, m2).array, jnp.einsum("ijk,kji->jk", m1.array, m2.array)))
+    assert jnp.all(jnp.equal(hax.dot(m1, m2, axis="Height").array, jnp.einsum("ijk,kji->jk", m1.array, m2.array)))
     assert jnp.all(
         jnp.equal(
-            hax.dot(("Height", "Width"), m1, m2).array,
+            hax.dot(m1, m2, axis=("Height", "Width")).array,
             jnp.einsum("ijk,kji->k", m1.array, m2.array),
         )
     )
     assert jnp.all(
         jnp.equal(
-            hax.dot(("Height", "Width", "Depth"), m1, m2).array,
+            hax.dot(m1, m2, axis=("Height", "Width", "Depth")).array,
             jnp.einsum("ijk,kji->", m1.array, m2.array),
         )
     )
@@ -65,7 +65,7 @@ def test_dot_errors_if_different_sized_axes():
     m2 = NamedArray(jnp.ones((Depth.size, Width.size, H2.size)), (Depth, Width, H2))
 
     with pytest.raises(ValueError):
-        hax.dot("Height", m1, m2)
+        hax.dot(m1, m2, axis="Height")
 
 
 def test_unary_np_functions():

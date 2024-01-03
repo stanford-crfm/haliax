@@ -8,6 +8,7 @@ import haliax
 
 from ..axis import AxisSpec, axis_spec_to_shape_dict, unsize_axes
 from ..core import NamedArray
+from ..partitioning import auto_sharded
 from ..types import Scalar
 from ..util import ensure_tuple
 
@@ -123,7 +124,7 @@ def pool(
 
     out_axes = unsize_axes(inputs.axes, Window)
 
-    return haliax.named(y, out_axes)
+    return auto_sharded(haliax.named(y, out_axes))
 
 
 def _patch_up_reduce_fn(reduce_fn):

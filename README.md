@@ -52,7 +52,7 @@ Embed = hax.Axis("embed", 512)  # embedding size
 
 def attention_scores(Key, KPos, query, key, mask):
     # how similar is each query to each key
-    scores = hax.dot(Key, query, key) / jnp.sqrt(Key.size)
+    scores = hax.dot(query, key, axis=Key) / jnp.sqrt(Key.size)
 
     if mask is not None:
         scores -= 1E9 * (1.0 - mask)
@@ -64,7 +64,7 @@ def attention_scores(Key, KPos, query, key, mask):
 
 def attention(Key, KPos, query, key, value, mask):
     scores = attention_scores(Key, KPos, query, key, mask)
-    answers = hax.dot(KPos, scores, value)
+    answers = hax.dot(scores, value, axis=KPos)
 
     return answers
 
