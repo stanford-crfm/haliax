@@ -2,6 +2,7 @@ from typing import Callable, MutableMapping, Sequence, TypeAlias, TypeVar
 
 
 T = TypeVar("T")
+U = TypeVar("U")
 py_slice = slice
 slice_t: TypeAlias = slice
 
@@ -13,7 +14,7 @@ def index_where(pred: Callable[[T], bool], xs: Sequence[T]) -> int:
     raise ValueError("No element satisfies predicate")
 
 
-class IdentityMap(MutableMapping):
+class IdentityMap(MutableMapping[T, U]):
     """Map that compares keys by identity.
 
     This is a map that compares keys by identity instead of equality. It is

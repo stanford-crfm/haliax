@@ -1,7 +1,7 @@
 import dataclasses
 import inspect
 from functools import wraps
-from typing import Any, Callable, Tuple, TypeVar, Union
+from typing import Any, Callable, ParamSpec, Protocol, Tuple, TypeVar, Union, overload
 
 import equinox as eqx
 import jax
@@ -18,12 +18,44 @@ from .util import is_jax_or_hax_array_like, is_named_array
 
 BoolAxisSpec = Union[bool, Callable[[Any], bool]]
 Carry = TypeVar("Carry")
-X = TypeVar("X")
-Y = TypeVar("Y")
+X = TypeVar("X", contravariant=True)
+Y = TypeVar("Y", covariant=True)
+Args = ParamSpec("Args")
+
+
+class ScanFn(Protocol[Carry, Args, Y]):
+    """ """
+
+    def __call__(self, carry: Carry, *args: Args.args, **kwargs: Args.kwargs) -> Tuple[Carry, Y]:
+        ...
+
+
+@overload
+def scan(
+    f: Callable[[Carry, X], Tuple[Carry, Y]],
+    axis: AxisSelector,
+    *,
+    reverse: bool = False,
+    unroll: int = 1,
+    is_scanned: BoolAxisSpec = is_jax_or_hax_array_like,
+) -> Callable[[Carry, PyTree[X]], Tuple[Carry, PyTree[Y]]]:
+    ...
+
+
+@overload
+def scan(
+    f: Callable,
+    axis: AxisSelector,
+    *,
+    reverse: bool = False,
+    unroll: int = 1,
+    is_scanned: BoolAxisSpec = is_jax_or_hax_array_like,
+) -> Callable:
+    ...
 
 
 def scan(
-    f: Callable[[Carry, X], Tuple[Carry, Y]],
+    f: Callable,  # : ScanFn[Carry, Args, Y],  This confuses mypy too much
     axis: AxisSelector,
     *,
     reverse=False,
@@ -46,6 +78,10 @@ def scan(
         is_scanned (BoolAxisSpec): a function that takes a leaf of the tree and returns True if it should be scanned over,
                     False otherwise. Behaves similarly to the `default` argument in filter_jit
     """
+
+    if isinstance(is_scanned, bool):
+        q = is_scanned  # this is to make mypy happy
+        is_scanned = lambda _: q
 
     def is_scanned_with_axis(leaf):
         if is_named_array(leaf):
@@ -94,6 +130,7 @@ def scan(
     return scanned_f
 
 
+@overload
 def fold(
     fn: Callable[[Carry, X], Carry],
     axis: AxisSelector,
@@ -101,7 +138,30 @@ def fold(
     reverse: bool = False,
     unroll: int = 1,
     is_scanned: BoolAxisSpec = is_jax_or_hax_array_like,
-) -> Callable[[Carry, PyTree], Carry]:
+) -> Callable[[Carry, PyTree[X]], Carry]:
+    ...
+
+
+@overload
+def fold(
+    fn: Callable,
+    axis: AxisSelector,
+    *,
+    reverse: bool = False,
+    unroll: int = 1,
+    is_scanned: BoolAxisSpec = is_jax_or_hax_array_like,
+) -> Callable:
+    ...
+
+
+def fold(
+    fn: Callable,
+    axis: AxisSelector,
+    *,
+    reverse: bool = False,
+    unroll: int = 1,
+    is_scanned: BoolAxisSpec = is_jax_or_hax_array_like,
+) -> Callable:
     """
     Slightly simpler implementation of scan that folds over the named axis of the array, not returning intermediates.
 

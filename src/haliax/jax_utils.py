@@ -78,7 +78,7 @@ def is_jax_array_like(x):
 
 
 # adapted from jax but exposed so i can use it
-def broadcast_prefix(prefix_tree: Any, full_tree: Any, is_leaf: Optional[Callable[[Any], bool]] = None) -> List[Any]:
+def broadcast_prefix(prefix_tree: Any, full_tree: Any, is_leaf: Optional[Callable[[Any], bool]] = None):
     """Broadcast a prefix tree to match the structure of a full tree."""
     result = []
     num_leaves = lambda t: jax.tree_util.tree_structure(t).num_leaves  # noqa: E731

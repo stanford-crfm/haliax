@@ -193,10 +193,10 @@ def test_vmap_str_args():
     assert selected.axes == expected_names
 
     # also ensure that this works when we return a non-haliax array
-    def vmap_fun(x):
+    def vmap_fun2(x):
         return x.sum(Width).array
 
-    selected = hax.vmap(vmap_fun, "Batch")(named1)
+    selected = hax.vmap(vmap_fun2, "Batch")(named1)
 
     assert jnp.all(jnp.equal(selected, expected_jax))
 

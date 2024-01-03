@@ -397,7 +397,7 @@ def _convert_padding_spec(Spatial, padding):
         padding = ((padding, padding),) * len(Spatial)
     elif isinstance(padding, tuple):
         padding = _expand_and_check_shape(len(Spatial), padding, "padding")
-        padding_spec = []
+        padding_spec: list = []
         for p in padding:
             if isinstance(p, int):
                 padding_spec.append((p, p))

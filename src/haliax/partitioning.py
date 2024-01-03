@@ -4,7 +4,7 @@ import threading
 import typing
 import warnings
 from math import prod
-from typing import Callable, Mapping, Optional, ParamSpec, Sequence, TypeVar, Union
+from typing import Callable, ContextManager, Mapping, Optional, ParamSpec, Sequence, TypeVar, Union
 
 import equinox as eqx
 import jax
@@ -303,6 +303,7 @@ class _NamedJitWrapper(eqx.Module):
 
         static = (self._static_fun, static_argspec)
 
+        cmanager: ContextManager
         if axis_resources is not None:
             cmanager = axis_mapping(axis_resources)
         else:
@@ -343,6 +344,39 @@ class _NamedJitWrapper(eqx.Module):
                 return out
 
 
+@typing.overload
+def named_jit(
+    fn: Callable[Args, R],
+    axis_resources: Optional[ResourceMapping] = None,
+    *,
+    in_axis_resources: Optional[ResourceMapping] = None,
+    out_axis_resources: Optional[ResourceMapping] = None,
+    donate_args: Optional[PyTree] = None,
+    donate_kwargs: Optional[PyTree] = None,
+    # args from jit
+    keep_unused: bool = False,
+    backend: Optional[str] = None,
+    inline: Optional[bool] = None,
+) -> WrappedCallable[Args, R]:
+    ...
+
+
+@typing.overload
+def named_jit(
+    *,
+    axis_resources: Optional[ResourceMapping] = None,
+    in_axis_resources: Optional[ResourceMapping] = None,
+    out_axis_resources: Optional[ResourceMapping] = None,
+    donate_args: Optional[PyTree] = None,
+    donate_kwargs: Optional[PyTree] = None,
+    # args from jit
+    keep_unused: bool = False,
+    backend: Optional[str] = None,
+    inline: Optional[bool] = None,
+) -> typing.Callable[[Callable[Args, R]], WrappedCallable[Args, R]]:
+    ...
+
+
 def named_jit(
     fn: Optional[Callable[Args, R]] = None,
     axis_resources: Optional[ResourceMapping] = None,
@@ -352,7 +386,7 @@ def named_jit(
     donate_args: Optional[PyTree] = None,
     donate_kwargs: Optional[PyTree] = None,
     **pjit_args,
-) -> WrappedCallable[Args, R]:
+):
     """
     A version of pjit that uses NamedArrays and the provided resource mapping to infer resource partitions for
     sharded computation for.
@@ -495,7 +529,6 @@ def _named_pjit_cache(fun_names, **jitkwargs) -> WrappedCallable:
         # None for the static
         jitkwargs["out_shardings"] = (out_shardings, None)
 
-    # TODO: jit should work here, but there's a weird error. see if it goes away on its own
     return jax.jit(
         fun_wrapped,
         donate_argnums=0,

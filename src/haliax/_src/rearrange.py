@@ -100,7 +100,7 @@ def _parse_group(expression, pos):
         raise ValueError("Expected (")
     pos += 1
     binding = None
-    axes = []
+    axes: list[str] = []
     current_ident = ""
     while pos < len(expression):
         if expression[pos] == ")":

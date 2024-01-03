@@ -107,7 +107,7 @@ def full_like(a: NamedArray, fill_value: T, dtype: Optional[DTypeLike] = None) -
     return NamedArray(jnp.full_like(a.array, fill_value, dtype=dtype), a.axes)
 
 
-def arange(axis: Axis, *, start: int = 0, step: int = 1, dtype: Optional[DTypeLike] = None) -> NamedArray:
+def arange(axis: Axis, *, start=0, step=1, dtype: Optional[DTypeLike] = None) -> NamedArray:
     """Version of jnp.arange that returns a NamedArray"""
     # if start is a tracer, we need to be a bit cleverer since arange doesn't support tracers
     # return NamedArray(jnp.arange(start, stop, step, dtype=dtype), (axis,))

@@ -177,7 +177,7 @@ def generate_sharded(fn, axis: Optional[AxisSelector] = None):
 
             _axis = _axis or shape[0]
         else:
-            biggest_physical = physical_axis_name(axis)
+            biggest_physical = physical_axis_name(_axis)
 
         if _enforce_sharded_generate or biggest_physical:
             with jax.named_scope(f"generate_sharded({_axis})"):
@@ -185,7 +185,7 @@ def generate_sharded(fn, axis: Optional[AxisSelector] = None):
                 # remove axis from shape
                 shape_without_axis = shape[:index_of_axis_to_shard] + shape[index_of_axis_to_shard + 1 :]
 
-                keys = jrandom.split(key, _axis.size)
+                keys = jrandom.split(key, shape[index_of_axis_to_shard].size)
 
                 bound.arguments["shape"] = shape_without_axis
                 bound.arguments["key"] = keys
