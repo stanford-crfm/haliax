@@ -151,9 +151,11 @@ Reductions are similar to JAX, except that they use an axis name instead of an a
 
 ### Matrix Multiplication
 
-| JAX                                                 | Haliax                                      |
-|-----------------------------------------------------|---------------------------------------------|
-| [`jnp.dot(z, x)`][jax.numpy.dot]                    | [`hax.dot(z, x, axis="batch")`][haliax.dot] |
-| [`jnp.matmul(z, x)`][jax.numpy.matmul]              | [`hax.dot(z, x, axis="batch")`][haliax.dot] |
-| [`jnp.dot(w, x.t)`][jax.numpy.dot]                  | [`hax.dot(w, x, axis="embed")`][haliax.dot] |
-| [`jnp.einsum("ij,j -> i", x, w)`][jax.numpy.einsum] | [`hax.dot(x, w, axis="embed")`][haliax.dot]  |
+| JAX                                                            | Haliax                                                             |
+|----------------------------------------------------------------|--------------------------------------------------------------------|
+| [`jnp.dot(z, x)`][jax.numpy.dot]                               | [`hax.dot(z, x, axis="batch")`][haliax.dot]                        |
+| [`jnp.matmul(z, x)`][jax.numpy.matmul]                         | [`hax.dot(z, x, axis="batch")`][haliax.dot]                        |
+| [`jnp.dot(w, x.t)`][jax.numpy.dot]                             | [`hax.dot(w, x, axis="embed")`][haliax.dot]                        |
+| [`jnp.einsum("ij,j -> i", x, w)`][jax.numpy.einsum]            | [`hax.dot(x, w, axis="embed")`][haliax.dot]                        |
+| [`jnp.einsum("i,ij,ij,j -> i", z, x, y, w)`][jax.numpy.einsum] | [`hax.dot(z, x, y, w, axis="embed")`][haliax.dot]                  |
+| [`jnp.einsum("ij,j -> ji", x, w)`][jax.numpy.einsum]           | [`hax.dot(x, w, axis=(), out_axes=("embed", "batch")`][haliax.dot] |

@@ -101,6 +101,42 @@ The only difference is they operate on named arrays instead.
 
 ## Matrix Multiplication
 
+The only matrix multiplication operation is [haliax.dot][]. It functionally equivalent
+to [jax.numpy.einsum][] in that it performs generalized matrix multiplication over an
+arbitrary number of axes and one or more arrays. Syntactically, it is more similar to
+reduction operations like [haliax.sum][] and [haliax.mean][].
+
+The [cheat sheet](cheatsheet.md) has a section on [matrix multiplication](cheat_sheet.md#matrix-multiplication)
+that gives a few examples. Here are several more:
+
+```python
+import haliax as hax
+
+H = hax.Axis("H", 3)
+W = hax.Axis("W", 4)
+D = hax.Axis("D", 5)
+C = hax.Axis("C", 6)
+
+x = hax.arange((H, W, D, C))
+w = hax.arange((D, C))
+c = hax.arange((C,))
+
+y = hax.dot(x, c, axis=C) # shape is (H, W, D), equivalent to jnp.dot(x, c)
+
+y = hax.dot(x, w, axis=(D, C))  # shape is (H, W), equivalent to np.einsum("...dc,dc->...", x, w)
+y = hax.dot(x, w, axis=(D, C), out_axes=(W, H)) # shape is (W, H) instead of (H, W)
+y = hax.dot(x, w, c, axis=(D, C)) # shape is (H, W), equivalent to np.einsum("...dc,dc,c->...", x, w, c)
+y = hax.dot(x, c, axis=(H, D, C)) # shape is (W,), equivalent to np.einsum("hwdc,c->w", x, c)
+s = hax.dot(x, w, axis=None)  # scalar output, equivalent to np.einsum("hwdc,dc->", x, w)
+y = hax.dot(x, w, c, axis=())  # shape is (H, W, D, C), equivalent to np.einsum("hwdc,dc,c->hwdc", x, w, c)
+y = hax.dot(x, w, c, axis=(), out_axes=(D, ..., H))  # shape is (D, W, C, H), equivalent to np.einsum("hwdc,dc,c->dwch", x, w, c)
+```
+
+
+
+
+
+
 ::: haliax.dot
 
 ### Reductions
