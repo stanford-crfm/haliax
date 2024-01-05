@@ -1,5 +1,6 @@
 import typing
 from dataclasses import dataclass
+from types import EllipsisType
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple, Union, overload
 
 import equinox as eqx
@@ -38,6 +39,13 @@ ShapeDict = Mapping[str, int]
 """ShapeDict is a type that can be used to specify the axes of an array, usually for creation or adding a new axis"""
 PartialShapeDict = Mapping[str, Optional[int]]
 """Similar to an AxisSelection, in dict form."""
+
+
+PartialAxisSpec = tuple[EllipsisType | AxisSelector, ...]
+"""Used for rearrange and dot. A tuple of AxisSelectors and Ellipsis. Ellipsis means "any number of axes."
+Some functions may require that the Ellipsis is present at most once, while others may allow it to be present
+multiple times.
+"""
 
 
 def selects_axis(selector: AxisSelection, selected: AxisSelection) -> bool:
@@ -392,11 +400,90 @@ def dblock(idx: int, size: int) -> dslice:
     return dslice(idx * size, size)
 
 
+Ax = typing.TypeVar("Ax", AxisSelector, Axis)
+
+
+def rearrange_to_fit_order(
+    partial_order: tuple[AxisSelector | EllipsisType, ...], axes: tuple[Ax, ...]
+) -> tuple[Ax, ...]:
+    """Rearrange the axes to fit the provided partial order.
+    Uses a greedy algorithm that tries to keep elements in roughly the same order they came in
+     (subject to the partial order), but moves them to the earliest slot that is after all prior axes
+     in the original order.
+     The exact behavior of this function is not guaranteed to be stable, but it should be stable
+     for most reasonable use cases. If you really need a specific order, you should provide a full
+     order instead of a partial order.
+    """
+
+    if partial_order == (Ellipsis,):
+        return axes
+
+    spec = axis_spec_to_shape_dict(axes)
+
+    def as_axis(ax_name: str) -> Ax:
+        if spec[ax_name] is None:
+            return ax_name  # type: ignore
+        else:
+            return Axis(ax_name, spec[ax_name])  # type: ignore
+
+    if Ellipsis not in partial_order:
+        pa: tuple[AxisSelector, ...] = partial_order  # type: ignore
+        if set(axis_name(a) for a in pa) != set(spec.keys()) or len(pa) != len(spec.keys()):
+            raise ValueError("Partial order must be a permutation of the axes if no ellipsis is provided")
+
+        # reorder axes to match partial order
+        return tuple(as_axis(axis_name(name)) for name in pa)
+
+    partial_order_names = [axis_name(s) for s in partial_order if s is not ...]
+
+    uncovered_ordered_elements = set(partial_order_names)
+
+    if len(partial_order_names) != len(uncovered_ordered_elements):
+        raise ValueError("Partial order must not contain duplicate elements")
+
+    # replace ... with [], which is where we'll put the remaining axes
+
+    out_order = [[axis_name(a)] if a is not ... else [] for a in partial_order]
+
+    # now we'll fill in the ordered elements
+    target_pos = index_where(lambda x: x == [], out_order)
+
+    for ax in axes:
+        ax_name = axis_name(ax)
+        if ax_name in uncovered_ordered_elements:
+            uncovered_ordered_elements.remove(ax_name)
+            # already in the right place
+            # update target_pos to come after this if possible
+            try:
+                this_pos = index_where(lambda x: ax_name in x, out_order)
+                # find first empty slot after this_pos. prefer not to go backwards
+                this_pos = max(this_pos + 1, target_pos)
+                target_pos = index_where(lambda x: x == [], out_order, start=this_pos)
+            except ValueError:
+                # leave it where it is
+                pass
+        elif ax_name in partial_order_names:
+            raise ValueError(f"Axis {ax_name} appears multiple times in the partial order")
+        else:
+            # this can appear in any ... slot. our heuristic is to put it in the first
+            # slot that comes after the most recently seen ordered element
+            out_order[target_pos].append(ax_name)
+
+    if len(uncovered_ordered_elements) > 0:
+        raise ValueError(f"The following axes are not present in output: {' '.join(uncovered_ordered_elements)}")
+
+    # now we have a list of lists of axis names. we need to flatten it and convert to axes
+    return tuple(as_axis(name) for name in sum(out_order, []))
+
+
 __all__ = [
     "Axis",
     "AxisSelector",
     "AxisSelection",
     "AxisSpec",
+    "PartialAxisSpec",
+    "PartialShapeDict",
+    "ShapeDict",
     "axis_name",
     "concat_axes",
     "union_axes",
@@ -412,4 +499,5 @@ __all__ = [
     "union_axes",
     "without_axes",
     "unsize_axes",
+    "rearrange_to_fit_order",
 ]
