@@ -1475,18 +1475,17 @@ def broadcast_arrays_and_return_axes(
     """
     Broadcasts a sequence of arrays to a common set of axes.
 
-     Parameters
-    ----------
-    arrays: NamedArray
-        The arrays to broadcast
-    require_subset: bool
-        If True, then one of the arrays must be a subset of the other. This is a bit stricter than numpy's broadcasting
-        rules, but I've been bitten by numpy's rules too many times. False is looser than numpy's rules, and allows
-        broadcasting any pair of arrays (so long as the axes don't overtly conflict with different sizes for the same
-        name.)
-    ensure_order: bool
-        If True, then the returned arrays will have the same axes in the same order as the given axes. Otherwise, the
-        axes may not be moved.
+    Args:
+        arrays: NamedArray
+            The arrays to broadcast
+        require_subset: bool
+            If True, then one of the arrays must be a subset of the other. This is a bit stricter than numpy's broadcasting
+            rules, but I've been bitten by numpy's rules too many times. False is looser than numpy's rules, and allows
+            broadcasting any pair of arrays (so long as the axes don't overtly conflict with different sizes for the same
+            name.)
+        ensure_order: bool
+            If True, then the returned arrays will have the same axes in the same order as the given axes. Otherwise, the
+            axes may not be moved.
     """
     if len(arrays) == 0:
         return ((), ())
