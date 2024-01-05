@@ -7,7 +7,7 @@ from typing import Mapping, NoReturn, Optional, Sequence
 import jax.lax
 import jax.numpy as jnp
 
-from ..axis import Axis, AxisSelector, axis_name
+from ..axis import Axis, AxisSelector, PartialAxisSpec, axis_name, rearrange_to_fit_order
 from ..core import NamedArray
 from ..partitioning import auto_sharded
 
@@ -321,52 +321,31 @@ def rearrange(array: NamedArray, *args, **kwargs) -> NamedArray:
         return axis_spec_rearrange(array, axes)
 
 
-def axis_spec_rearrange(array: NamedArray, axes: Sequence[AxisSelector | EllipsisType]) -> NamedArray:
-    if len(axes) == 0 and len(array.axes) != 0:
+def axis_spec_rearrange(array: NamedArray, axis_spec: PartialAxisSpec) -> NamedArray:
+    if len(axis_spec) == 0 and len(array.axes) != 0:
         raise ValueError("No axes specified")
 
     # various fast paths
-    if len(axes) == 1 and axes[0] is Ellipsis:
+    if len(axis_spec) == 1 and axis_spec[0] is Ellipsis:
         return array
 
-    if axes == array.axes:
+    if axis_spec == array.axes:
         return array
 
-    if axes[-1] is Ellipsis and array.axes[0 : len(axes) - 1] == axes[0 : len(axes) - 1]:
+    if axis_spec[-1] is Ellipsis and array.axes[0 : len(axis_spec) - 1] == axis_spec[0 : len(axis_spec) - 1]:
         return array
 
-    if axes[0] is Ellipsis and array.axes[len(axes) - 1 :] == axes[1:]:
+    if axis_spec[0] is Ellipsis and array.axes[len(axis_spec) - 1 :] == axis_spec[1:]:
         return array
 
-    if axes.count(Ellipsis) > 1:
-        raise ValueError("Only one ellipsis allowed")
+    out_axes = rearrange_to_fit_order(axis_spec, array.axes)
 
-    used_indices = [False] * len(array.axes)
-    permute_spec: list[int | EllipsisType] = []
-    ellipsis_pos = None
-    for ax in axes:
-        if ax is Ellipsis:
-            permute_spec.append(Ellipsis)  # will revisit
-            ellipsis_pos = len(permute_spec) - 1
-        else:
-            assert isinstance(ax, Axis) or isinstance(ax, str)  # please mypy
-            index = array._lookup_indices(ax)
-            if index is None:
-                raise ValueError(f"Axis {ax} not found in {array}")
-            if used_indices[index]:
-                raise ValueError(f"Axis {ax} specified more than once")
-            used_indices[index] = True
-            permute_spec.append(index)
+    # now build a permute_spec
+    permute_spec = []
+    index_of_in = {ax: i for i, ax in enumerate(array.axes)}
 
-    if not all(used_indices):
-        # find the ellipsis position, replace it with all the unused indices
-        if ellipsis_pos is None:
-            missing_axes = [ax for i, ax in enumerate(array.axes) if not used_indices[i]]
-            raise ValueError(f"Axes {missing_axes} not found and no ... specified. Array axes: {array.axes}") from None
-
-        permute_spec[ellipsis_pos : ellipsis_pos + 1] = tuple(i for i in range(len(array.axes)) if not used_indices[i])
-    elif ellipsis_pos is not None:
-        permute_spec.remove(Ellipsis)
+    for ax in out_axes:
+        permute_spec.append(index_of_in[ax])
 
     out_axes = tuple(array.axes[i] for i in typing.cast(list[int], permute_spec))
     return NamedArray(jnp.transpose(array.array, permute_spec), out_axes)

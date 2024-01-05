@@ -41,7 +41,7 @@ PartialShapeDict = Mapping[str, Optional[int]]
 """Similar to an AxisSelection, in dict form."""
 
 
-PartialAxisSpec = tuple[EllipsisType | AxisSelector, ...]
+PartialAxisSpec = Sequence[EllipsisType | AxisSelector]
 """Used for rearrange and dot. A tuple of AxisSelectors and Ellipsis. Ellipsis means "any number of axes."
 Some functions may require that the Ellipsis is present at most once, while others may allow it to be present
 multiple times.
@@ -403,9 +403,7 @@ def dblock(idx: int, size: int) -> dslice:
 Ax = typing.TypeVar("Ax", AxisSelector, Axis)
 
 
-def rearrange_to_fit_order(
-    partial_order: tuple[AxisSelector | EllipsisType, ...], axes: tuple[Ax, ...]
-) -> tuple[Ax, ...]:
+def rearrange_to_fit_order(partial_order: PartialAxisSpec, axes: tuple[Ax, ...]) -> tuple[Ax, ...]:
     """Rearrange the axes to fit the provided partial order.
     Uses a greedy algorithm that tries to keep elements in roughly the same order they came in
      (subject to the partial order), but moves them to the earliest slot that is after all prior axes

@@ -276,9 +276,7 @@ def test_rearrange():
     # test ellipsis
     assert jnp.all(jnp.equal(hax.rearrange(named1, (C, ..., D)).array, jnp.transpose(named1.array, (3, 0, 1, 2))))
 
-    # test errors for double ellipsis
-    with pytest.raises(ValueError):
-        hax.rearrange(named1, (C, ..., ...))
+    # this should be ok now
 
     # test errors for multiply specified axes
     with pytest.raises(ValueError):
@@ -292,6 +290,16 @@ def test_rearrange():
     # test for missing axes
     with pytest.raises(ValueError):
         hax.rearrange(named1, (C, W, D))
+
+    # test double ellipsis
+    assert hax.rearrange(named1, (C, ..., ...)).axes == (C, H, W, D)
+
+    # test ellipses in different places
+    assert hax.rearrange(named1, (..., C, ..., W)).axes == (H, D, C, W)
+
+    assert hax.rearrange(named1, (..., H, ..., D)).axes == (H, W, C, D)
+
+    assert hax.rearrange(named1, (D, ..., H, ...)).axes == (D, H, W, C)
 
 
 def test_rearrange_unused_ellipsis():
