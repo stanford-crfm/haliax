@@ -14,7 +14,7 @@ from haliax.axis import (
     PartialAxisSpec,
     axis_name,
     eliminate_axes,
-    rearrange_to_fit_order,
+    rearrange_for_partial_order,
     union_axes,
 )
 from haliax.core import NamedArray
@@ -131,7 +131,7 @@ def dot(
         output_axes = eliminate_axes(all_axes, axis)
 
     if out_axes is not None:
-        output_axes = rearrange_to_fit_order(out_axes, output_axes)
+        output_axes = rearrange_for_partial_order(out_axes, output_axes)
 
     array_specs = []
 

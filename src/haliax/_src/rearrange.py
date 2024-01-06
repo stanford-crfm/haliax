@@ -7,7 +7,7 @@ from typing import Mapping, NoReturn, Optional, Sequence
 import jax.lax
 import jax.numpy as jnp
 
-from ..axis import Axis, AxisSelector, PartialAxisSpec, axis_name, rearrange_to_fit_order
+from ..axis import Axis, AxisSelector, PartialAxisSpec, axis_name, rearrange_for_partial_order
 from ..core import NamedArray
 from ..partitioning import auto_sharded
 
@@ -338,7 +338,7 @@ def axis_spec_rearrange(array: NamedArray, axis_spec: PartialAxisSpec) -> NamedA
     if axis_spec[0] is Ellipsis and array.axes[len(axis_spec) - 1 :] == axis_spec[1:]:
         return array
 
-    out_axes = rearrange_to_fit_order(axis_spec, array.axes)
+    out_axes = rearrange_for_partial_order(axis_spec, array.axes)
 
     # now build a permute_spec
     permute_spec = []
@@ -440,28 +440,30 @@ def _resolve_bindings(array, bindings: Mapping[str, Axis | str | int]) -> AliasT
 def _determine_final_transpose_and_reshape(
     expression, rhs: Expression, aliases: "AliasTable", intermediate_axes: tuple[Axis, ...]
 ) -> tuple[tuple[int, ...], tuple[Axis, ...]]:
-    # The rhs tells us two things:
+    # The rhs tells us three things:
     # 1. how to reorder the intermediate axes
     # 2. how to merge the intermediate axes into the final axes
+    # 3. where ellipses are in the final axes (where we can put unused intermediate axes)
 
-    transposition_order: list[int | EllipsisType] = []
+    # MUTATES `aliases`
 
-    final_axes: list[Axis | EllipsisType] = []
-    used_axes = set()  # axes must be used exactly once
+    # Our approach is to:
+    # 1. Figure out the partial order of the intermediate axes
+    # 2. Compute the full final axes (using rearrange_for_partial_order)
+    # 3. Figure out the transposition order to get the intermediate axes into the right order
+    # return (2) and (3)
 
-    position_of_ellipsis = None  # If there's an ellipsis, we want to put any remaining axes there
-    position_of_ellipsis_in_transposition = None  # if there's an ellipsis, we want to put any remaining axes there
+    transposed_intermediate_axes_order: list[Axis | EllipsisType] = []
 
-    # each capture, except for ellipsis results in one final axis
+    first_intermediate_for_final: dict[Axis, Axis] = {}  # intermediate -> final
+
+    used_intermediate_axes = set()  # axes must be used exactly once
+    has_ellipsis = False
+
     for cpos, capture in enumerate(rhs.captures):
         if capture == Ellipsis:
-            if position_of_ellipsis is not None:
-                previous_capture = rhs.captures[cpos - 1]
-                _raise_error("Only one ellipsis allowed", expression, previous_capture.char_range)
-            position_of_ellipsis = cpos
-            final_axes.append(Ellipsis)
-            transposition_order.append(Ellipsis)
-            position_of_ellipsis_in_transposition = len(transposition_order) - 1
+            has_ellipsis = True
+            transposed_intermediate_axes_order.append(Ellipsis)
             continue
 
         assert not isinstance(capture, EllipsisType)
@@ -470,25 +472,24 @@ def _determine_final_transpose_and_reshape(
         if binding is None:
             _raise_error("All rhs axes must have a name. Use (name: bindings)", expression, capture.char_range)
 
-        # now look at the captured axes. these are the axes that we're going to merge into one final axis
-        # we're also going to move them around to match the order of the intermediate axes
         sz = 1
+        first_axis = None
         for ax_name in capture.axes:
-            axis = aliases.dealias_binding(ax_name)
-            if not isinstance(axis, Axis):
+            intermed_axis = aliases.dealias_binding(ax_name)
+
+            if not isinstance(intermed_axis, Axis):
                 _raise_error(f"Axis {ax_name} is not bound on the lhs", expression, capture.char_range)
 
-            if axis in used_axes:
-                _raise_error(f"Axis {axis} is used more than once", expression, capture.char_range)
-            used_axes.add(axis)
+            if first_axis is None:
+                first_axis = intermed_axis
 
-            sz *= axis.size
+            if intermed_axis in used_intermediate_axes:
+                _raise_error(f"Axis {intermed_axis} is used more than once", expression, capture.char_range)
+            used_intermediate_axes.add(intermed_axis)
+            transposed_intermediate_axes_order.append(intermed_axis)
+
+            sz *= intermed_axis.size
             # now find the position of this axis in the intermediate axes
-            try:
-                index_in_intermediate = intermediate_axes.index(axis)
-                transposition_order.append(index_in_intermediate)
-            except ValueError:
-                _raise_error(f"Axis {ax_name} is not in the lhs", expression, capture.char_range)
 
         # figure out the name of the final axis
         axis = aliases.dealias_binding(binding)
@@ -497,41 +498,35 @@ def _determine_final_transpose_and_reshape(
         else:
             new_axis = Axis(axis_name(axis), sz)
 
-        # Do not bind here because axis names can be reused
+        # TODO: this isn't ideal for the unusual case where we have an empty set of axes to bind to an axis
+        # we won't accurately get the order for these unitary axes
+        if first_axis is not None:
+            first_intermediate_for_final[first_axis] = new_axis
 
-        final_axes.append(new_axis)
-
-    if position_of_ellipsis is not None:
-        unused_intermediate_axes = [ax for ax in intermediate_axes if ax not in used_axes]
+    if not has_ellipsis:
+        unused_intermediate_axes = set(intermediate_axes) - used_intermediate_axes
         if len(unused_intermediate_axes) > 0:
-            # we need to put the unused axes in the ellipsis
-            final_axes = (
-                final_axes[:position_of_ellipsis] + unused_intermediate_axes + final_axes[position_of_ellipsis + 1 :]
-            )
+            raise ValueError("Not all intermediate axes are used. Use ... to insert unused axes")
 
-            unused_indices = [i for i in range(len(intermediate_axes)) if intermediate_axes[i] not in used_axes]
+    # now we have a partial order of the intermediate axes
+    reordered_intermediate_axes = rearrange_for_partial_order(transposed_intermediate_axes_order, intermediate_axes)
 
-            assert position_of_ellipsis_in_transposition is not None
+    # now we need to figure out the final axes
+    final_axes: list[Axis] = []
+    transposition_order: list[int] = []
 
-            transposition_order = (
-                transposition_order[:position_of_ellipsis_in_transposition]
-                + unused_indices
-                + transposition_order[position_of_ellipsis_in_transposition + 1 :]
-            )
+    for intermediate_axis in reordered_intermediate_axes:
+        if intermediate_axis not in used_intermediate_axes:
+            # this axis is not used, so we keep it from the reordered axes
+            final_axes.append(intermediate_axis)
+            transposition_order.append(intermediate_axes.index(intermediate_axis))
+        else:
+            final_axis = first_intermediate_for_final.get(intermediate_axis, None)
 
-    else:
-        # make sure we used all the axes
-        if len(used_axes) < len(intermediate_axes):
-            # figure out their binding names as possible:
-            inverse_bindings = {v: k for k, v in aliases.bindings.items()}
-            unused_intermediate_axis_names = [
-                inverse_bindings.get(ax, ax.name) for ax in intermediate_axes if ax not in used_axes
-            ]
-            _raise_error(
-                f"Not all intermediate axes are used: {','.join(unused_intermediate_axis_names) }",
-                expression,
-                len(expression) - 1,
-            )
+            if final_axis is not None:
+                final_axes.append(final_axis)
+
+            transposition_order.append(intermediate_axes.index(intermediate_axis))
 
     return tuple(transposition_order), tuple(final_axes)  # type: ignore
 

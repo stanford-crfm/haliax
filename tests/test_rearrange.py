@@ -108,6 +108,7 @@ C = Axis("C", 3)
 D = Axis("D", 2)
 B = Axis("B", 5)
 Q = hax.Axis("Q", B.size * H.size)
+E = Axis("E", H.size * W.size * D.size)
 
 z = hax.random.randint(PRNGKey(0), (B, D, H, W, C), 0, 255)
 zq = hax.random.randint(PRNGKey(0), (Q, D, W, C), 0, 255)
@@ -231,6 +232,27 @@ def test_with_unflatten_flatten_unordered():
     assert (einops_rearrange(zq, "{ W D C (Q: B H)} -> D (Z: B C) W H", H=H).array == z_t).all()
 
 
+def test_rearrange_multiple_ellipses():
+    z_out = einops_rearrange(z, "b d h w c  -> d ... c ... h")
+    assert z_out.axes == (D, B, C, W, H)
+
+    z_out = einops_rearrange(z, "b d h w c -> d ... (Q: b h) ... w")
+    assert z_out.axes == (D, Q, C, W)
+
+    z_out = einops_rearrange(z, "b d h w c -> d ... (BB: b) ... w")
+    assert z_out.axes == (D, B.alias("BB"), H, C, W)
+
+    z_out = einops_rearrange(z, "{H W D} -> ... (E: H W D) ...")
+    assert z_out.axes == (B, E, C)
+
+    z_out = einops_rearrange(z, "{B H} -> ... (Q: B H) ...")
+    assert z_out.axes == (Q, D, W, C)
+
+    z_out = einops_rearrange(z, "{B H W} -> ... (Q: B H) ... W")
+
+    assert z_out.axes == (Q, D, C, W)
+
+
 def test_semantic_errors():
     with pytest.raises(ValueError, match="Too many axes in lhs"):
         einops_rearrange(z, "b d h w c q -> b d h w c q")
@@ -246,9 +268,6 @@ def test_semantic_errors():
 
     with pytest.raises(ValueError, match="Only one ellipsis allowed"):
         einops_rearrange(z, "b d ... h w c ... -> b d h w c ...")
-
-    with pytest.raises(ValueError, match="Only one ellipsis allowed"):
-        einops_rearrange(z, "b d ... h w c  -> ... b d h w c ...")
 
     with pytest.raises(ValueError, match="Capture q is assigned more than once"):
         einops_rearrange(z, "b d c q q -> b d h w c q")

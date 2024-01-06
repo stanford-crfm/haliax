@@ -403,7 +403,7 @@ def dblock(idx: int, size: int) -> dslice:
 Ax = typing.TypeVar("Ax", AxisSelector, Axis)
 
 
-def rearrange_to_fit_order(partial_order: PartialAxisSpec, axes: tuple[Ax, ...]) -> tuple[Ax, ...]:
+def rearrange_for_partial_order(partial_order: PartialAxisSpec, axes: tuple[Ax, ...]) -> tuple[Ax, ...]:
     """Rearrange the axes to fit the provided partial order.
     Uses a greedy algorithm that tries to keep elements in roughly the same order they came in
      (subject to the partial order), but moves them to the earliest slot that is after all prior axes
@@ -427,7 +427,10 @@ def rearrange_to_fit_order(partial_order: PartialAxisSpec, axes: tuple[Ax, ...])
     if Ellipsis not in partial_order:
         pa: tuple[AxisSelector, ...] = partial_order  # type: ignore
         if set(axis_name(a) for a in pa) != set(spec.keys()) or len(pa) != len(spec.keys()):
-            raise ValueError("Partial order must be a permutation of the axes if no ellipsis is provided")
+            raise ValueError(
+                "Partial order must be a permutation of the axes if no ellipsis is provided."
+                f" However {pa} is not a permutation of {axes}"
+            )
 
         # reorder axes to match partial order
         return tuple(as_axis(axis_name(name)) for name in pa)
@@ -497,5 +500,5 @@ __all__ = [
     "union_axes",
     "without_axes",
     "unsize_axes",
-    "rearrange_to_fit_order",
+    "rearrange_for_partial_order",
 ]
