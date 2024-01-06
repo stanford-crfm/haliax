@@ -11,7 +11,6 @@ import jax
 import jax.numpy as jnp
 import numpy
 import numpy as np
-from jax.typing import DTypeLike
 
 import haliax
 import haliax.axis
@@ -30,7 +29,7 @@ from .axis import (
     selects_axis,
     union_axes,
 )
-from .types import IntScalar, PrecisionLike, Scalar
+from .types import DTypeLike, IntScalar, PrecisionLike, Scalar
 
 
 NamedOrNumeric = Union[Scalar, "NamedArray"]
