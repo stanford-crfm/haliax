@@ -5,7 +5,6 @@ from typing import Dict, Optional, Tuple
 
 import jax
 import jax.numpy as jnp
-from jax.typing import DTypeLike
 
 import haliax
 from haliax.axis import (
@@ -18,7 +17,7 @@ from haliax.axis import (
     union_axes,
 )
 from haliax.core import NamedArray
-from haliax.types import PrecisionLike
+from haliax.types import DTypeLike, PrecisionLike
 from haliax.util import ensure_tuple
 
 
