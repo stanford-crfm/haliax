@@ -9,16 +9,12 @@ from typing import Callable, ContextManager, Mapping, Optional, ParamSpec, Seque
 import equinox as eqx
 import jax
 from equinox import module_update_wrapper
-
-# TODO: avoid depending on private Equinox internals.
-from equinox._compile_utils import compile_cache
-
-# from jax._src.sharding_impls import AUTO
 from jax.lax import with_sharding_constraint
 from jax.sharding import Mesh, NamedSharding, PartitionSpec, SingleDeviceSharding
 from jaxtyping import PyTree
 
 import haliax.tree_util as htu
+from haliax._src.compile_utils import compile_cache
 
 from .axis import Axis, AxisSelection, AxisSelector
 from .core import NamedArray
@@ -313,10 +309,6 @@ class _NamedJitWrapper(eqx.Module):
 
         with cmanager:
             output_shape = _cached_filter_eval_shape(self._fn, *args, **kwargs)
-            # TODO: with new jax.Array I shouldn't have to specify shardings, but I do for now
-            #  https://github.com/google/jax/issues/15600
-            # we don't really need in_shardings though
-
             my_pjit_args = dict(**self._pjit_args)
 
             if in_axis_resources is not None or axis_resources is not None:
