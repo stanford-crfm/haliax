@@ -125,9 +125,7 @@ def test_fcm_attention_mask():
     weights = dot_product_attention_weights(Head, KeyPos, query, key, mask=mask)
 
     # check that all masked out values are zero
-    # TODO: think about how to make this work with named arrays
-    weights = weights.rearrange((KeyPos, QueryPos)).array
-    mask = mask.array
+    weights = weights.rearrange((KeyPos, QueryPos))
 
-    assert weights[mask == 0].sum() == 0
-    assert weights[mask == 1].sum() > 0
+    assert (weights * (mask == 0)).sum() == 0
+    assert (weights * (mask == 1)).sum() > 0
