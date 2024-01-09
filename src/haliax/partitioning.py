@@ -95,7 +95,7 @@ def auto_sharded(x: T, mesh: Optional[Mesh] = None) -> T:
     if mapping is None:
         return x
 
-    return shard(x, mapping, mesh)
+    return shard(x, mapping=mapping, mesh=mesh)
 
 
 def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] = None) -> T:
@@ -117,6 +117,17 @@ def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] 
         if not is_in_jit():
             warnings.warn("No resource mapping found. Not sharding.", RuntimeWarning)
 
+        return x
+
+    assert not isinstance(mesh, dict)
+
+    if mesh is None:
+        mesh = _get_mesh()
+
+        if mesh.empty:
+            mesh = None
+
+    if mesh is None:
         return x
 
     def _do_device_put(x):
@@ -185,6 +196,7 @@ def infer_resource_partitions(
         raise ValueError("No resource mapping found")
 
     mesh = mesh or _get_mesh()
+    assert not isinstance(mesh, dict)
 
     def partition_spec(node: typing.Any):
         if isinstance(node, NamedArray):
