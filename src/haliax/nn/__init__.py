@@ -1,8 +1,3 @@
-import functools
-import typing
-import warnings
-from typing import Optional, Tuple, Union
-
 import jax.nn as jnn
 import jax.numpy as jnp
 
@@ -12,10 +7,8 @@ import haliax.nn.activations
 import haliax.nn.attention as attention
 import haliax.nn.normalization
 
-from ..axis import Axis, AxisSelection, AxisSelector
+from ..axis import Axis
 from ..core import NamedArray
-from ..util import UNSPECIFIED, Unspecified
-from ..wrap import ReductionFunction
 from .activations import (
     celu,
     elu,
@@ -41,6 +34,7 @@ from .conv import Conv, ConvTranspose
 from .dropout import Dropout, dropout
 from .embedding import Embedding
 from .linear import Linear
+from .loss import binary_cross_entropy_loss, cross_entropy_loss, cross_entropy_loss_and_log_normalizers
 from .mlp import MLP
 from .normalization import LayerNorm, log_softmax, logsumexp, softmax, standardize
 from .pool import max_pool, mean_pool, min_pool
@@ -77,81 +71,10 @@ def one_hot(x: NamedArray | int, class_axis: Axis, *, dtype=None) -> NamedArray:
         return hax.auto_sharded(haliax.named(array, class_axis))
 
 
-@typing.overload
-def cross_entropy_loss(
-    pred_y: NamedArray,
-    Label: AxisSelector,
-    target_y: NamedArray,
-    reduction: Optional[ReductionFunction] | Unspecified = UNSPECIFIED,
-    where: Optional[NamedArray] = None,
-    reduction_axis: None = None,
-) -> jnp.ndarray | NamedArray:
-    ...
-
-
-@typing.overload
-def cross_entropy_loss(
-    pred_y: NamedArray,
-    Label: AxisSelector,
-    target_y: NamedArray,
-    reduction: Optional[ReductionFunction] | Unspecified = UNSPECIFIED,
-    where: Optional[NamedArray] = None,
-    reduction_axis: AxisSelection = ...,
-) -> NamedArray:
-    ...
-
-
-def cross_entropy_loss(
-    pred_y: NamedArray,
-    Label: AxisSelector,
-    target_y: NamedArray,
-    reduction: Optional[ReductionFunction] | Unspecified = UNSPECIFIED,
-    where: Optional[NamedArray] = None,
-    reduction_axis: Optional[AxisSelection] = None,
-) -> jnp.ndarray | NamedArray:
-    loss, _ = cross_entropy_loss_and_log_normalizers(pred_y, Label, target_y)
-
-    # if target_y isn't some kind of floating point, something is wrong, so warn
-    if not jnp.issubdtype(target_y.dtype, jnp.floating):
-        warnings.warn(
-            f"target_y has dtype {target_y.dtype}, which is not a floating point type. This is probably a mistake."
-        )
-
-    if reduction is not None:
-        if reduction is UNSPECIFIED:
-            reduction = haliax.mean
-        loss = reduction(loss, where=where, axis=reduction_axis)
-    elif where is not None:
-        loss = hax.where(where, loss, 0)
-
-    return loss
-
-
-def cross_entropy_loss_and_log_normalizers(
-    pred_y: NamedArray,
-    Label: AxisSelector,
-    target_y: NamedArray,
-) -> Tuple[NamedArray, NamedArray]:
-    """
-    Compute the cross entropy loss and log normalizers for a batch of predictions and targets.
-
-    :param pred_y: a NamedArray with the Label axis (and possibly others for e.g. batch and seq) containing the logits
-    :param Label: the Label axis
-    :param target_y: a NamedArray with the Label axis (and possibly others) containing the targets
-
-    :return: tuple of two named arrays, with "per position" losses and log normalizers
-    """
-    log_normalizers = haliax.nn.normalization.logsumexp(pred_y, Label)
-    neg_log_normalized = log_normalizers - pred_y
-
-    loss = hax.dot(target_y, neg_log_normalized, axis=Label)
-
-    return loss, log_normalizers
-
-
 __all__ = [
     "attention",
     "one_hot",
+    "binary_cross_entropy_loss",
     "cross_entropy_loss",
     "cross_entropy_loss_and_log_normalizers",
     "Conv",
