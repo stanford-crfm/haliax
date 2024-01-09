@@ -63,8 +63,6 @@ def wrap_reduction_call(
                     result = fn(a.array, axis=indices[0], **kwargs)
                 else:
                     result = fn(a.array, axis=indices, **kwargs)
-                if jnp.isscalar(result):
-                    return result
                 return NamedArray(result, tuple(new_axes))
         else:
             if where is not None:

@@ -109,6 +109,16 @@ class NamedArray:
             raise ValueError(f"Expected scalar, got {self.array.ndim}-dimensional array")
         return self.array
 
+    def __jax_array__(self):
+        if self.ndim == 0:
+            return self.array
+        else:
+            raise ValueError(
+                "Only scalar NamedArrays can be implicitly converted to jax arrays, but "
+                f"got {self.shape} array. This error typically occurs when you pass a "
+                "NamedArray to a plain jax.numpy function. Please use `x.array` instead."
+            )
+
     @ft.cached_property
     def shape(self) -> Dict[str, int]:
         return {axis.name: axis.size for axis in self.axes}
