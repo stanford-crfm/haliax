@@ -4,3 +4,5 @@ exclude_lines =
     pragma: no cover
     @overload
     @typing.overload
+    @abc.abstractmethod
+    raise NotImplementedError
