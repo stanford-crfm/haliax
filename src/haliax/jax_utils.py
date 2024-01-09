@@ -9,6 +9,8 @@ from jax import numpy as jnp
 from jax import random as jrandom
 from jaxtyping import PRNGKeyArray
 
+import haliax
+
 
 F = typing.TypeVar("F", bound=Callable[..., Any])
 
@@ -140,3 +142,10 @@ def is_pallas_dslice(x: object) -> bool:
 
     _PALLAS_DSLICE_TYPE = type(pdslice(0, 1))
     return isinstance(x, _PALLAS_DSLICE_TYPE)
+
+
+def is_scalarish(x):
+    if isinstance(x, haliax.NamedArray):
+        return x.ndim == 0
+    else:
+        return jnp.isscalar(x) or x.shape == ()

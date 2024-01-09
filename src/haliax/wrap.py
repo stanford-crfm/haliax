@@ -5,6 +5,7 @@ import jax
 import jax.numpy as jnp
 
 from haliax.core import NamedArray, _broadcast_order, broadcast_to
+from haliax.jax_utils import is_scalarish
 from haliax.util import ensure_tuple
 
 from .axis import AxisSelection, AxisSelector, selects_axis
@@ -40,13 +41,13 @@ def wrap_reduction_call(
         if isinstance(a, NamedArray):
             if where is not None:
                 if not isinstance(where, NamedArray):
-                    raise TypeError("where must be a NamedArray if a is a NamedArray")
+                    raise TypeError(f"where must be a NamedArray if a is a NamedArray, but is {where}")
                 where = broadcast_to(where, a.axes)
                 kwargs["where"] = where.array
 
             if axis is None:
                 result = fn(a.array, axis=None, **kwargs)
-                if jnp.isscalar(result) or result.shape == ():
+                if is_scalarish(result):
                     return result
                 else:
                     return NamedArray(result, ())
@@ -99,9 +100,9 @@ def wrap_elemwise_binary(op):
             a = broadcast_to(a, axes)
             b = broadcast_to(b, axes)
             return NamedArray(op(a.array, b.array), axes)
-        elif isinstance(a, NamedArray) and jnp.isscalar(b):
+        elif isinstance(a, NamedArray):
             return NamedArray(op(a.array, b), a.axes)
-        elif isinstance(b, NamedArray) and jnp.isscalar(a):
+        elif isinstance(b, NamedArray):
             return NamedArray(op(a, b.array), b.axes)
         else:
             return op(a, b)
