@@ -100,7 +100,7 @@ def maybe_reduce_loss(
     reduction_axis: Optional[AxisSelection],
     where: Optional[NamedArray],
 ):
-    if reduction is not None:
+    if reduction is not None and reduction_axis != ():
         if reduction is UNSPECIFIED:
             reduction = hax.mean
         arr = reduction(arr, where=where, axis=reduction_axis)
