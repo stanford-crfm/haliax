@@ -570,7 +570,7 @@ def test_slice_nd_array_present_dims():
     assert jnp.all(jnp.equal(named1[{"H": index2}].array, named1.array[index2.array, :, :]))
 
 
-def test_full_indexing_returns_scalar():
+def test_full_indexing_returns_named_array():
     H = Axis("H", 10)
     W = Axis("W", 20)
     D = Axis("D", 30)
@@ -578,8 +578,8 @@ def test_full_indexing_returns_scalar():
     named1 = hax.random.uniform(PRNGKey(0), (H, W, D))
     sliced = named1[{"H": 0, "W": 0, "D": 0}]
 
-    assert isinstance(sliced, jnp.ndarray)
-    assert sliced.shape == ()
+    assert isinstance(sliced, NamedArray)
+    assert sliced.shape == {}
 
 
 def test_indexing_bug_from_docs():
