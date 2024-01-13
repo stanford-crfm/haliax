@@ -208,13 +208,13 @@ def test_mean_respects_where():
     )
 
 
-def test_reductions_produce_scalars_when_None_axis():
+def test_reductions_produce_scalar_named_arrays_when_None_axis():
     Height = Axis("Height", 10)
     Width = Axis("Width", 3)
 
     named1 = hax.random.uniform(PRNGKey(0), (Height, Width))
 
-    assert isinstance(hax.mean(named1, axis=None), jnp.ndarray)
+    assert isinstance(hax.mean(named1, axis=None), NamedArray)
 
     # But if we specify axes, we always get a NamedArray, even if it's a scalar
     assert isinstance(hax.mean(named1, axis=("Height", "Width")), NamedArray)

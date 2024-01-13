@@ -160,7 +160,7 @@ def test_pool_backprop():
         pooled = max_pool(
             (hax.Axis("H", 2), hax.Axis("W", 2), hax.Axis("D", 2)), x, stride=1, padding=((0, 1), (0, 1), (0, 1))
         )
-        return hax.mean(pooled)
+        return hax.mean(pooled).scalar()
 
     _x = jnp.arange(64, dtype=jnp.float32).reshape(1, 4, 4, 4)
     x = hax.named(_x, ("B", "H", "W", "D"))

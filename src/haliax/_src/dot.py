@@ -24,19 +24,7 @@ from haliax.util import ensure_tuple
 # deprecated overload
 @typing.overload
 def dot(
-    axis: None,
-    *arrays: NamedArray,
-    precision: PrecisionLike = None,
-    preferred_element_type: Optional[DTypeLike] = None,
-    out_axes: Optional[PartialAxisSpec] = ...,
-) -> jnp.ndarray:
-    ...
-
-
-# deprecated overload
-@typing.overload
-def dot(
-    axis: AxisSelection,
+    axis: Optional[AxisSelection],
     *arrays: NamedArray,
     precision: PrecisionLike = None,
     preferred_element_type: Optional[DTypeLike] = None,
@@ -48,22 +36,11 @@ def dot(
 @typing.overload
 def dot(
     *arrays: NamedArray,
-    axis: AxisSelection,
+    axis: Optional[AxisSelection],
     precision: PrecisionLike = None,
     preferred_element_type: Optional[DTypeLike] = None,
     out_axes: Optional[PartialAxisSpec] = ...,
 ) -> NamedArray:
-    ...
-
-
-@typing.overload
-def dot(
-    *arrays: NamedArray,
-    axis: None,
-    precision: PrecisionLike = None,
-    preferred_element_type: Optional[DTypeLike] = None,
-    out_axes: Optional[PartialAxisSpec] = ...,
-) -> jnp.ndarray:
     ...
 
 
@@ -73,7 +50,7 @@ def dot(
     preferred_element_type: Optional[DTypeLike] = None,
     out_axes: Optional[PartialAxisSpec] = None,
     **kwargs,
-) -> jnp.ndarray | NamedArray:
+) -> NamedArray:
     """Returns the tensor product of two NamedArrays. The axes `axis` are contracted over,
     and any other axes that are shared between the arrays are batched over. Non-contracted Axes in one
     that are not in the other are preserved.
@@ -167,12 +144,8 @@ def dot(
             preferred_element_type=preferred_element_type,
         )
 
-    if axis is None:
-        assert output.ndim == 0
-        return output
-    else:
-        out = NamedArray(output, output_axes)
-        return haliax.auto_sharded(out)
+    out = NamedArray(output, output_axes)
+    return haliax.auto_sharded(out)
 
 
 def _ensure_no_mismatched_axes(*arrays: NamedArray):

@@ -154,6 +154,10 @@ be a single axis (or axis name), a tuple of axes, or `None` to reduce all axes. 
 that specifies which elements to include in the reduction. It must be broadcastable to the input array, using
 Haliax's [broadcasting rules](broadcasting.md).
 
+The result of a reduction operation is always [haliax.NamedArray][] with the reduced axes removed.
+If you reduce all axes, the result is a NamedArray with 0 axes, i.e. a scalar.
+You can convert it to a [jax.numpy.ndarray][] with [NamedArray.scalar][], or just [NamedArray.array][].
+
 ::: haliax.all
 ::: haliax.amax
 ::: haliax.any

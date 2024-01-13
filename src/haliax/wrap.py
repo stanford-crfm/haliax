@@ -47,10 +47,7 @@ def wrap_reduction_call(
 
             if axis is None:
                 result = fn(a.array, axis=None, **kwargs)
-                if is_scalarish(result):
-                    return result
-                else:
-                    return NamedArray(result, ())
+                return NamedArray(result, ())
             else:
                 axis = ensure_tuple(axis)
                 if single_axis_only and len(axis) > 1:
@@ -113,26 +110,6 @@ def unwrap_namedarrays(*a):
 
 
 class ReductionFunction(Protocol):
-    @typing.overload
-    def __call__(
-        self,
-        array: NamedArray,
-        axis: None = None,
-        where: Optional[NamedArray] = None,
-        **kwargs,
-    ) -> jnp.ndarray:
-        ...
-
-    @typing.overload
-    def __call__(
-        self,
-        array: NamedArray,
-        axis: AxisSelection,
-        where: Optional[NamedArray] = None,
-        **kwargs,
-    ) -> NamedArray:
-        ...
-
     def __call__(
         self,
         array: NamedArray,
