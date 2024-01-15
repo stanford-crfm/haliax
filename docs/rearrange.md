@@ -97,6 +97,9 @@ x = hax.rearrange(y, "step microbatch ... -> (N: step microbatch) ...")
 y = hax.rearrange(x, "{H W} -> ... (F: H W) ...")
 y = hax.rearrange(x, "{H W C} -> ... (F: H W) ... C")  # ensures C is the last dimension
 
+# you can use a single '.' instead of ..., which is more compact
+y = hax.rearrange(x, "{H W} -> . (F: H W) .")
+
 
 # some fancier examples
 
@@ -109,6 +112,7 @@ y = hax.rearrange(x, "{(H: patch_h H) (W: patch_w W) C } -> ... (P: patch_h patc
 y = hax.rearrange(x, "N C (patch_h H) (patch_w W) -> N (P: patch_h patch_w) (C: C H W)", H=4, W=4)
 # unordered version
 y = hax.rearrange(x, "{(H: patch_h H) (W: patch_w W) C } -> ... (P: patch_h patch_w) (C: C H W)", H=4, W=4)
+
 ```
 
 ### Bindings: Aliasing and Sizing
@@ -140,6 +144,7 @@ As you may have noticed, there are some differences from einops:
 * Merged axes must have a name: `(C: C H W)` instead of `(C H W)`.
 * The unordered syntax with `{  }` is new: you select dimensions by name instead of by position.
 * As discussed immediately above, you can use bindings to specify axis objects for names as well as sizes.
+* You can use more than one ellipsis on the rhs, which allows you to partially specify the order of axes.
 
 ### Syntax
 
@@ -170,6 +175,11 @@ Identifiers in the `rhs` must be "bound" by an identifier in the `lhs`, that is,
 As in einops: split and merged axes are processed in "C-order": the first dimension is the most significant, and the
 last dimension is the least significant.
 
+### Misc. Syntax
+
+#### Ellipsis
+
+An Ellipsis (`...`) can be any number of '`.`' characters, or the unicode ellipsis character (`…`).
 
 ## Error Handling
 

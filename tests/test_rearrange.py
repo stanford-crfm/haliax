@@ -412,3 +412,9 @@ def test_examples():
 
     q = hax.rearrange(z, "{ B (H: h1 H) (W: w1 W) D} -> (B: B h1 w1) (E: H W D)...", H=2, W=2)
     assert q.axes == (Axis("B", B.size * sH.size * sW.size), Axis("E", 2 * 2 * D.size), C)
+
+
+def test_flexible_ellipsis():
+    # tests that ellipses can be 1 or more characters
+    assert einops_rearrange(z, "b d . w c -> b d . w c").axes == (B, D, H, W, C)
+    assert einops_rearrange(z, "b d .. w c -> b d .. w c").axes == (B, D, H, W, C)

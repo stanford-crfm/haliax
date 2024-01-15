@@ -156,6 +156,19 @@ def _parse_group(expression, pos):
     return _AxisCapture(binding, tuple(axes), char_range), pos
 
 
+def _get_ellipsis_end(expression: str, pos: int):
+    # returns the len of an ellipsis, which can be 1 or more dots or the unicode ellipsis character
+    if expression[pos] == ".":
+        pos += 1
+        while pos < len(expression) and expression[pos] == ".":
+            pos += 1
+        return pos
+    elif expression[pos] == "…":
+        return pos + 1
+    else:
+        return -1
+
+
 def _parse_expression(expression: str, pos) -> tuple[Expression, int]:
     """Parse one side of an einops-style haliax rearrangement string."""
     captures = []
@@ -187,12 +200,12 @@ def _parse_expression(expression: str, pos) -> tuple[Expression, int]:
         elif str.isspace(expression[pos]) or expression[pos] == ",":
             pos += 1
             continue
-        elif expression[pos : pos + 3] == "...":
+        elif (ellipsis_end := _get_ellipsis_end(expression, pos)) > 0:
             seen_char = True
             if finished:
-                _raise_error("Unexpected ... after }", expression, pos)
+                _raise_error("Unexpected ellipsis after }", expression, pos)
             captures.append(Ellipsis)
-            pos += 3
+            pos = ellipsis_end
             continue
         elif expression[pos] == "-":
             if not seen_char:
