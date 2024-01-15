@@ -3,7 +3,7 @@ from typing import Optional, Sequence
 
 import jax
 import jax.numpy as jnp
-from jax._src.typing import DTypeLike
+from jax.typing import DTypeLike
 
 import haliax.debug as debug
 import haliax.nn as nn
