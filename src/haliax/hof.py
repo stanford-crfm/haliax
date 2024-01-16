@@ -25,6 +25,10 @@ Y = TypeVar("Y", covariant=True)
 Args = ParamSpec("Args")
 
 
+def is_named_or_shaped_array_like(x):
+    return (is_jax_array_like(x) and x.ndim >= 1) or is_named_array(x)
+
+
 class ScanFn(Protocol[Carry, Args, Y]):
     """ """
 
@@ -39,7 +43,7 @@ def scan(
     *,
     reverse: bool = False,
     unroll: int = 1,
-    is_scanned: BoolAxisSpec = is_jax_or_hax_array_like,
+    is_scanned: BoolAxisSpec = is_named_or_shaped_array_like,
 ) -> Callable[[Carry, PyTree[X]], Tuple[Carry, PyTree[Y]]]:
     ...
 
@@ -51,7 +55,7 @@ def scan(
     *,
     reverse: bool = False,
     unroll: int = 1,
-    is_scanned: BoolAxisSpec = is_jax_or_hax_array_like,
+    is_scanned: BoolAxisSpec = is_named_or_shaped_array_like,
 ) -> Callable:
     ...
 
@@ -62,10 +66,10 @@ def scan(
     *,
     reverse=False,
     unroll=1,
-    is_scanned: BoolAxisSpec = is_jax_or_hax_array_like,
+    is_scanned: BoolAxisSpec = is_named_or_shaped_array_like,
 ):
     """
-    Scan over a named axis. Arrays that are not part of a NamedArray will have their 0th dim scanned over
+    Scan over a named axis. Non-scalar unnamed arrays will have their first axis scanned over.
 
     Unlike [jax.lax.scan][], this function is curried: it takes the function, axis, and configuration arguments first, and
     then the initial carry and then any arguments to scan over as a separate curried function call.
@@ -164,13 +168,16 @@ def fold(
     *,
     reverse: bool = False,
     unroll: int = 1,
-    is_scanned: BoolAxisSpec = is_jax_or_hax_array_like,
+    is_scanned: BoolAxisSpec = is_named_or_shaped_array_like,
 ) -> Callable:
     """
     Slightly simpler implementation of scan that folds over the named axis of the array, not returning intermediates.
 
     As with scan, this function is curried: it takes the function, axis, and configuration arguments first, and
     then the initial carry and then any arguments to scan over as a separate curried function call.
+
+    Unnamed arrays will have their first axis scanned over, unless they are scalars, in which case they will be passed
+    through unchanged.
 
     Args:
         fn: function to reduce over
