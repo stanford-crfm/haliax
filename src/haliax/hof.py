@@ -8,6 +8,7 @@ import jax
 import jax.lax as lax
 from jaxtyping import PyTree
 
+import haliax
 import haliax.tree_util as htu
 
 from ._src.util import index_where
@@ -129,7 +130,8 @@ def scan(
 
         # as above, we don't want to use htu.tree_leaves here because we want to eliminate the leading axis
         leaves = jax.tree_util.tree_leaves(axis_first_xs)
-        carry, ys = lax.scan(wrapped_fn, init, leaves, reverse=reverse, unroll=unroll)
+        with jax.named_scope(f"scan[{haliax.axis_name(axis)}]"):
+            carry, ys = lax.scan(wrapped_fn, init, leaves, reverse=reverse, unroll=unroll)
         true_axis = _infer_axis_size_from_result(ys, axis)
         ys = jax.tree_util.tree_map(_prepend_named_batch_axis(true_axis), ys, is_leaf=_is_passive_array)
 
