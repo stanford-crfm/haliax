@@ -70,7 +70,7 @@ class Stacked(eqx.Module, Generic[M]):
 
     @staticmethod
     def init(
-        Block: Axis, module: Type[M], *, gradient_checkpointing: bool = False, prevent_cse: bool = True
+        Block: Axis, module: Type[M], *, gradient_checkpointing: bool = False, prevent_cse: bool = False
     ) -> ModuleInit["Stacked[M]"]:
         """
         Initialize a Stacked module. This method is curried: you can pass in the Block and module, and it will return
@@ -98,7 +98,7 @@ class Stacked(eqx.Module, Generic[M]):
 
     def fold(self, init, *args, **kwargs):
         if self.gradient_checkpointing:
-            do_block = filter_checkpoint(self._do_block)
+            do_block = filter_checkpoint(self._do_block, prevent_cse=self.prevent_cse)
         else:
             do_block = self._do_block
 
