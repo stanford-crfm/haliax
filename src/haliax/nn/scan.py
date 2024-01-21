@@ -7,7 +7,7 @@ import jax
 
 import haliax
 import haliax.util
-from haliax.jax_utils import filter_checkpoint
+from haliax.jax_utils import filter_checkpoint, named_call
 
 from ..axis import Axis
 
@@ -90,6 +90,7 @@ class Stacked(eqx.Module, Generic[M]):
 
         return fn
 
+    @named_call(name="Stacked.scan")
     def scan(self, init, *args, **kwargs):
         if self.gradient_checkpointing:
             do_block = filter_checkpoint(self._do_block, prevent_cse=self.prevent_cse)
@@ -105,6 +106,7 @@ class Stacked(eqx.Module, Generic[M]):
         else:
             return haliax.scan(self._do_block, self.Block)(init, self.stacked, *args, **kwargs)
 
+    @named_call(name="Stacked.fold")
     def fold(self, init, *args, **kwargs):
         if self.gradient_checkpointing:
             do_block = filter_checkpoint(self._do_block, prevent_cse=self.prevent_cse)
