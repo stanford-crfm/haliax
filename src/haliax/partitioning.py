@@ -18,6 +18,8 @@ from jax.lax import with_sharding_constraint
 from jax.sharding import Mesh, NamedSharding, PartitionSpec, SingleDeviceSharding
 from jaxtyping import PyTree
 
+import haliax.tree_util as htu
+
 from .axis import Axis, AxisSelection, AxisSelector
 from .core import NamedArray
 from .jax_utils import Static, is_in_jit, is_jax_array_like
@@ -152,7 +154,7 @@ def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] 
                 raw_x = jax.make_array_from_callback(shape, desired_sharding, lambda index: raw_x[index])
                 return NamedArray(raw_x, x.axes)
 
-    return jax.tree_util.tree_map(_do_device_put, x, is_leaf=is_named_array)
+    return htu.tree_map(_do_device_put, x)
 
 
 @functools.wraps(shard)
@@ -225,7 +227,7 @@ def infer_resource_partitions(
         else:
             return None
 
-    return jax.tree_util.tree_map(partition_spec, tree, is_leaf=is_named_array)
+    return htu.tree_map(partition_spec, tree)
 
 
 class WrappedCallable(typing.Protocol[Args, R]):
