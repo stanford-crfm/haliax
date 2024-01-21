@@ -267,7 +267,7 @@ def test_scan_works_with_string_arg_and_one_arg():
     named1 = hax.random.uniform(PRNGKey(0), (Height,))
 
     def scan_fun(acc, x):
-        return acc + x, x
+        return acc + x.scalar(), x
 
     total, named2 = hax.scan(scan_fun, "Height")(0.0, named1)
 
