@@ -248,3 +248,41 @@ def test_vmap_error_for_incorrectly_specified_args():
     Width = Axis("Width", 3)
 
     hax.vmap(lambda a: Module(a), Batch)(Width)
+
+
+def test_scan_raises_with_string_arg_and_no_args():
+    def scan_fun(acc):
+        return acc, acc
+
+    try:
+        hax.scan(scan_fun, "Height")(0.0)
+    except ValueError as e:
+        assert "scan requires either an actual Axis or at least one NamedArray or array" in str(e)
+    else:
+        assert False, "should have raised"
+
+
+def test_scan_works_with_string_arg_and_one_arg():
+    Height = Axis("Height", 10)
+    named1 = hax.random.uniform(PRNGKey(0), (Height,))
+
+    def scan_fun(acc, x):
+        return acc + x, x
+
+    total, named2 = hax.scan(scan_fun, "Height")(0.0, named1)
+
+    assert jnp.all(jnp.isclose(total, jnp.sum(named1.array)))
+    assert jnp.all(jnp.equal(named1.array, named2.array))
+
+
+def test_scan_works_with_string_and_unnamed_args():
+    Height = Axis("Height", 10)
+    named1 = hax.random.uniform(PRNGKey(0), (Height,))
+
+    def scan_fun(acc, x):
+        return acc + x, x
+
+    total, named2 = hax.scan(scan_fun, "Height")(0.0, named1.array)
+
+    assert jnp.all(jnp.isclose(total, jnp.sum(named1.array)))
+    assert jnp.all(jnp.equal(named1.array, named2))
