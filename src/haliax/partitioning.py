@@ -4,19 +4,17 @@ import threading
 import typing
 import warnings
 from math import prod
-from typing import Callable, Mapping, Optional, ParamSpec, Sequence, TypeVar, Union
+from typing import Callable, ContextManager, Mapping, Optional, ParamSpec, Sequence, TypeVar, Union
 
 import equinox as eqx
 import jax
 from equinox import module_update_wrapper
-
-# TODO: avoid depending on private Equinox internals.
-from equinox._compile_utils import compile_cache
-
-# from jax._src.sharding_impls import AUTO
 from jax.lax import with_sharding_constraint
 from jax.sharding import Mesh, NamedSharding, PartitionSpec, SingleDeviceSharding
 from jaxtyping import PyTree
+
+import haliax.tree_util as htu
+from haliax._src.compile_utils import compile_cache
 
 from .axis import Axis, AxisSelection, AxisSelector
 from .core import NamedArray
@@ -97,7 +95,7 @@ def auto_sharded(x: T, mesh: Optional[Mesh] = None) -> T:
     if mapping is None:
         return x
 
-    return shard(x, mapping, mesh)
+    return shard(x, mapping=mapping, mesh=mesh)
 
 
 def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] = None) -> T:
@@ -119,6 +117,17 @@ def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] 
         if not is_in_jit():
             warnings.warn("No resource mapping found. Not sharding.", RuntimeWarning)
 
+        return x
+
+    assert not isinstance(mesh, dict)
+
+    if mesh is None:
+        mesh = _get_mesh()
+
+        if mesh.empty:
+            mesh = None
+
+    if mesh is None:
         return x
 
     def _do_device_put(x):
@@ -152,7 +161,7 @@ def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] 
                 raw_x = jax.make_array_from_callback(shape, desired_sharding, lambda index: raw_x[index])
                 return NamedArray(raw_x, x.axes)
 
-    return jax.tree_util.tree_map(_do_device_put, x, is_leaf=is_named_array)
+    return htu.tree_map(_do_device_put, x)
 
 
 @functools.wraps(shard)
@@ -187,6 +196,7 @@ def infer_resource_partitions(
         raise ValueError("No resource mapping found")
 
     mesh = mesh or _get_mesh()
+    assert not isinstance(mesh, dict)
 
     def partition_spec(node: typing.Any):
         if isinstance(node, NamedArray):
@@ -225,7 +235,7 @@ def infer_resource_partitions(
         else:
             return None
 
-    return jax.tree_util.tree_map(partition_spec, tree, is_leaf=is_named_array)
+    return htu.tree_map(partition_spec, tree)
 
 
 class WrappedCallable(typing.Protocol[Args, R]):
@@ -303,6 +313,7 @@ class _NamedJitWrapper(eqx.Module):
 
         static = (self._static_fun, static_argspec)
 
+        cmanager: ContextManager
         if axis_resources is not None:
             cmanager = axis_mapping(axis_resources)
         else:
@@ -310,10 +321,6 @@ class _NamedJitWrapper(eqx.Module):
 
         with cmanager:
             output_shape = _cached_filter_eval_shape(self._fn, *args, **kwargs)
-            # TODO: with new jax.Array I shouldn't have to specify shardings, but I do for now
-            #  https://github.com/google/jax/issues/15600
-            # we don't really need in_shardings though
-
             my_pjit_args = dict(**self._pjit_args)
 
             if in_axis_resources is not None or axis_resources is not None:
@@ -343,6 +350,39 @@ class _NamedJitWrapper(eqx.Module):
                 return out
 
 
+@typing.overload
+def named_jit(
+    fn: Callable[Args, R],
+    axis_resources: Optional[ResourceMapping] = None,
+    *,
+    in_axis_resources: Optional[ResourceMapping] = None,
+    out_axis_resources: Optional[ResourceMapping] = None,
+    donate_args: Optional[PyTree] = None,
+    donate_kwargs: Optional[PyTree] = None,
+    # args from jit
+    keep_unused: bool = False,
+    backend: Optional[str] = None,
+    inline: Optional[bool] = None,
+) -> WrappedCallable[Args, R]:
+    ...
+
+
+@typing.overload
+def named_jit(
+    *,
+    axis_resources: Optional[ResourceMapping] = None,
+    in_axis_resources: Optional[ResourceMapping] = None,
+    out_axis_resources: Optional[ResourceMapping] = None,
+    donate_args: Optional[PyTree] = None,
+    donate_kwargs: Optional[PyTree] = None,
+    # args from jit
+    keep_unused: bool = False,
+    backend: Optional[str] = None,
+    inline: Optional[bool] = None,
+) -> typing.Callable[[Callable[Args, R]], WrappedCallable[Args, R]]:
+    ...
+
+
 def named_jit(
     fn: Optional[Callable[Args, R]] = None,
     axis_resources: Optional[ResourceMapping] = None,
@@ -352,7 +392,7 @@ def named_jit(
     donate_args: Optional[PyTree] = None,
     donate_kwargs: Optional[PyTree] = None,
     **pjit_args,
-) -> WrappedCallable[Args, R]:
+):
     """
     A version of pjit that uses NamedArrays and the provided resource mapping to infer resource partitions for
     sharded computation for.
@@ -495,7 +535,6 @@ def _named_pjit_cache(fun_names, **jitkwargs) -> WrappedCallable:
         # None for the static
         jitkwargs["out_shardings"] = (out_shardings, None)
 
-    # TODO: jit should work here, but there's a weird error. see if it goes away on its own
     return jax.jit(
         fun_wrapped,
         donate_argnums=0,
