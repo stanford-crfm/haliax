@@ -108,12 +108,12 @@ class Stacked(eqx.Module, Generic[M]):
 
     @named_call(name="Stacked.fold")
     def fold(self, init, *args, **kwargs):
+        print(f"FOLD! {self.gradient_checkpointing} {self.prevent_cse}", flush=True)
         if self.gradient_checkpointing:
             do_block = filter_checkpoint(self._do_block, prevent_cse=self.prevent_cse)
             # determine a checkpoint block size, should be roughly sqrt(self.Block.size)
             size = int(math.sqrt(self.Block.size))
             num_blocks = int(math.ceil(self.Block.size / size))
-            print(f"FOLD! ${num_blocks}")
 
             return haliax.fold(
                 do_block, self.Block, grad_checkpointing=self.gradient_checkpointing, checkpoint_blocks=[num_blocks]
