@@ -83,6 +83,14 @@ def current_thread_local_mapping():
     return _mapping_holder.thread_data.resource_mapping
 
 
+def current_mapping():
+    """
+    Get the current resource mapping, or None if there is no resource mapping set.
+    :return:
+    """
+    return current_thread_local_mapping()
+
+
 def auto_sharded(x: T, mesh: Optional[Mesh] = None) -> T:
     """
     Shard a PyTree using the global axis mapping. NamedArrays in the PyTree are sharded using the axis mapping
@@ -639,4 +647,5 @@ __all__ = [
     "pspec_for_axis",
     "round_axis_for_partitioning",
     "current_thread_local_mapping",
+    "current_mapping",
 ]
