@@ -15,17 +15,15 @@ from jaxtyping import PyTree
 
 import haliax.tree_util as htu
 from haliax._src.compile_utils import compile_cache
+from ._src.compute_context import _get_mesh, ComputeEnv, compute_env, current_compute_env
 
 from .axis import Axis, AxisSelection, AxisSelector
 from .core import NamedArray
 from .jax_utils import Static, is_in_jit, is_jax_array_like
 from .tree_util import hashable_combine, hashable_partition
+from .types import ResourceMapping, PhysicalAxisSpec
 from .util import StringHolderEnum, ensure_tuple, is_named_array
 
-
-PhysicalAxisSpec = Union[(str), Sequence[str]]
-ResourceMapping = Mapping[(str), PhysicalAxisSpec]
-"""Mapping from logical axis names to physical axis names"""
 
 F = typing.TypeVar("F", bound=typing.Callable)
 Args = ParamSpec("Args")
@@ -40,50 +38,33 @@ class ResourceAxis(StringHolderEnum):
     DATA = "data"
 
 
-class _ResourceMappingHolder:
-    """Global resource mapping, used with a context manager to give dynamic scoping to resource mappings"""
-
-    def __init__(self):
-        self.thread_data = threading.local()
-        self.thread_data.resource_mapping = None
-
-
-_mapping_holder = _ResourceMappingHolder()
-
-
 @contextlib.contextmanager
 def axis_mapping(mapping: ResourceMapping, *, merge: bool = False, **kwargs):
     """Context manager for setting the global resource mapping"""
     mapping = dict(mapping)
 
-    old_mapping = current_thread_local_mapping()
+    old_mapping = current_mapping()
     if merge:
         mapping.update(old_mapping or {})
 
     if len(kwargs):
         mapping.update(kwargs)
 
-    _mapping_holder.thread_data.resource_mapping = mapping
-    try:
+    with compute_env(axis_mapping=mapping):
         yield
-    finally:
-        _mapping_holder.thread_data.resource_mapping = old_mapping
 
 
-def current_thread_local_mapping():
+def current_thread_local_mapping() -> Optional[ResourceMapping]:
     """
     Get the current thread-local resource mapping, or None if there is no resource mapping set.
     :return:
     """
-    if _mapping_holder.thread_data is None:
-        return None
-    if not hasattr(_mapping_holder.thread_data, "resource_mapping"):
-        return None
+    from ._src.compute_context import current_compute_env
 
-    return _mapping_holder.thread_data.resource_mapping
+    return current_compute_env().axis_mapping
 
 
-def current_mapping():
+def current_mapping() -> Optional[ResourceMapping]:
     """
     Get the current resource mapping, or None if there is no resource mapping set.
     :return:
@@ -91,22 +72,33 @@ def current_mapping():
     return current_thread_local_mapping()
 
 
-def auto_sharded(x: T, mesh: Optional[Mesh] = None) -> T:
+def auto_sharded(x: T, env: Optional[ComputeEnv|Mesh] = None, *, mesh: Optional[Mesh] = None) -> T:
     """
     Shard a PyTree using the global axis mapping. NamedArrays in the PyTree are sharded using the axis mapping
      and the names in the tree.
 
     If there is no axis mapping, the global axis mapping, this function is a no-op.
     """
-    mapping = current_thread_local_mapping()
+    if mesh is not None:
+        warnings.warn("The `mesh` argument to `auto_sharded` is deprecated. Use `env` instead.", DeprecationWarning)
+    elif isinstance(env, Mesh):
+        warnings.warn("The `mesh` argument to `auto_sharded` is deprecated. Use `env` instead.", DeprecationWarning)
+        mesh = env
+    elif isinstance(env, ComputeEnv):
+        mesh = env.mesh
+    else:
+        mesh = _get_mesh()
 
-    if mapping is None:
+    if env is None:
+        env = current_compute_env()
+
+    if env.axis_mapping is None:
         return x
 
-    return shard(x, mapping=mapping, mesh=mesh)
+    return shard(x, env, mesh=mesh)
 
 
-def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] = None) -> T:
+def shard(x: T, mapping: Optional[ComputeEnv|ResourceMapping] = None, *, mesh: Optional[Mesh] = None) -> T:
     """
     Shard a PyTree using the provided axis mapping. NamedArrays in the PyTree are sharded using the axis mapping.
     Other arrays are not sharded (unless they're already sharded).
@@ -118,8 +110,25 @@ def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] 
     Outside of jit, this method will warn if there is no resource mapping found.
     """
 
+    if mesh is not None:
+        warnings.warn("The `mesh` argument to `shard` is deprecated. Pass a ComputeEnv instead.", DeprecationWarning)
+
+    if mesh is None and isinstance(mapping, ComputeEnv):
+        mesh = env.mesh
+
+    if mesh is not None and mesh.empty:
+        mesh = None
+
+    if mesh is None:
+        if not is_in_jit():
+            warnings.warn("No mesh found. Not sharding.", RuntimeWarning)
+        return x
+
     if mapping is None:
         mapping = current_thread_local_mapping()
+    elif isinstance(mapping, ComputeEnv):
+        mapping = env.axis_mapping
+
 
     if mapping is None:
         if not is_in_jit():
@@ -127,16 +136,7 @@ def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] 
 
         return x
 
-    assert not isinstance(mesh, dict)
-
-    if mesh is None:
-        mesh = _get_mesh()
-
-        if mesh.empty:
-            mesh = None
-
-    if mesh is None:
-        return x
+    assert isinstance(mapping, Mapping)
 
     def _do_device_put(x):
         if not is_named_array(x):
@@ -174,8 +174,7 @@ def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] 
 
 @functools.wraps(shard)
 def shard_with_axis_mapping(x: T, mapping: ResourceMapping, mesh: Optional[Mesh] = None) -> T:
-    # warnings.warn("`shard_with_axis_mapping` is deprecated. Use `shard` instead", DeprecationWarning)
-    return shard(x, mapping, mesh)
+    return shard(x, mapping=mapping, mesh=mesh)
 
 
 def infer_resource_partitions(
@@ -618,12 +617,6 @@ def round_axis_for_partitioning(axis: Axis, mapping: Optional[ResourceMapping] =
     else:
         new_size = (axis.size + size - 1) // size * size
         return Axis(axis.name, new_size)
-
-
-def _get_mesh():
-    from jax.experimental.maps import thread_resources
-
-    return thread_resources.env.physical_mesh
 
 
 def _is_jit_tracer(x) -> bool:
