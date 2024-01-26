@@ -10,10 +10,10 @@ from haliax.types import ResourceMapping
 
 
 def current_mp_policy() -> jmp.Policy:
-    return current_compute_env().mp
+    return current_resource_env().mp
 
 
-def current_compute_env() -> "ComputeEnv":
+def current_resource_env() -> "ResourceEnv":
     cur = _context_holder.thread_data.ctxt
 
     # the mesh can change in JAX without us knowing, so we need to check
@@ -55,14 +55,17 @@ def compute_env(
     if mp is None:
         mp = DEFAULT_MP_POLICY
 
-    ctxt = ComputeEnv(mesh, axis_mapping, mp)
+    ctxt = ResourceEnv(mesh, axis_mapping, mp)
     return ctxt
 
 
-class ComputeEnv(AbstractContextManager):
+class ResourceEnv(AbstractContextManager):
     """
-    A ComputeEnv is a context manager that can be used to specify the mesh, axis mapping, and mixed-precison policy to
+    A ResourceEnv is a context manager that can be used to specify the mesh, axis mapping, and mixed-precision policy to
     use for computation. It can be used as a context manager or just passed to a function as an argument.
+
+    It should be noted that JAX internals has a ResoureEnv that sort of does a similar thing (minus the mixed-precision
+    policy). However, it is not exposed to the user, and its semantic axes are kind of deprecated.
     """
 
     def __init__(self, mesh: Optional[Mesh], axis_mapping: Optional[ResourceMapping], mp: jmp.Policy):
@@ -70,14 +73,14 @@ class ComputeEnv(AbstractContextManager):
         self.axis_mapping = axis_mapping
         self.mp = mp
 
-    def with_policy(self, mp: jmp.Policy) -> "ComputeEnv":
-        return ComputeEnv(self.mesh, self.axis_mapping, mp)
+    def with_policy(self, mp: jmp.Policy) -> "ResourceEnv":
+        return ResourceEnv(self.mesh, self.axis_mapping, mp)
 
-    def with_mesh(self, mesh: Mesh) -> "ComputeEnv":
-        return ComputeEnv(mesh, self.axis_mapping, self.mp)
+    def with_mesh(self, mesh: Mesh) -> "ResourceEnv":
+        return ResourceEnv(mesh, self.axis_mapping, self.mp)
 
-    def with_axis_mapping(self, axis_mapping: ResourceMapping) -> "ComputeEnv":
-        return ComputeEnv(self.mesh, axis_mapping, self.mp)
+    def with_axis_mapping(self, axis_mapping: ResourceMapping) -> "ResourceEnv":
+        return ResourceEnv(self.mesh, axis_mapping, self.mp)
 
     def __enter__(self):
         _context_holder.thread_data.ctxt = self
@@ -101,7 +104,7 @@ class _ComputeContextManagerHolder:
 
     def __init__(self):
         self.thread_data = threading.local()
-        self.thread_data.ctxt = ComputeEnv(None, None, DEFAULT_MP_POLICY)
+        self.thread_data.ctxt = ResourceEnv(None, None, DEFAULT_MP_POLICY)
         self.thread_data.stack = []
         self.thread_data.stack.append(self.thread_data.ctxt)
 

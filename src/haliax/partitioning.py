@@ -15,13 +15,13 @@ from jaxtyping import PyTree
 
 import haliax.tree_util as htu
 from haliax._src.compile_utils import compile_cache
-from ._src.compute_context import _get_mesh, ComputeEnv, compute_env, current_compute_env
 
+from ._src.compute_context import ResourceEnv, _get_mesh, compute_env, current_resource_env
 from .axis import Axis, AxisSelection, AxisSelector
 from .core import NamedArray
 from .jax_utils import Static, is_in_jit, is_jax_array_like
 from .tree_util import hashable_combine, hashable_partition
-from .types import ResourceMapping, PhysicalAxisSpec
+from .types import PhysicalAxisSpec, ResourceMapping
 from .util import StringHolderEnum, ensure_tuple, is_named_array
 
 
@@ -59,9 +59,9 @@ def current_thread_local_mapping() -> Optional[ResourceMapping]:
     Get the current thread-local resource mapping, or None if there is no resource mapping set.
     :return:
     """
-    from ._src.compute_context import current_compute_env
+    from ._src.compute_context import current_resource_env
 
-    return current_compute_env().axis_mapping
+    return current_resource_env().axis_mapping
 
 
 def current_mapping() -> Optional[ResourceMapping]:
@@ -72,7 +72,7 @@ def current_mapping() -> Optional[ResourceMapping]:
     return current_thread_local_mapping()
 
 
-def auto_sharded(x: T, env: Optional[ComputeEnv|Mesh] = None, *, mesh: Optional[Mesh] = None) -> T:
+def auto_sharded(x: T, env: Optional[ResourceEnv | Mesh] = None, *, mesh: Optional[Mesh] = None) -> T:
     """
     Shard a PyTree using the global axis mapping. NamedArrays in the PyTree are sharded using the axis mapping
      and the names in the tree.
@@ -84,13 +84,13 @@ def auto_sharded(x: T, env: Optional[ComputeEnv|Mesh] = None, *, mesh: Optional[
     elif isinstance(env, Mesh):
         warnings.warn("The `mesh` argument to `auto_sharded` is deprecated. Use `env` instead.", DeprecationWarning)
         mesh = env
-    elif isinstance(env, ComputeEnv):
+    elif isinstance(env, ResourceEnv):
         mesh = env.mesh
     else:
         mesh = _get_mesh()
 
     if env is None:
-        env = current_compute_env()
+        env = current_resource_env()
 
     if env.axis_mapping is None:
         return x
@@ -98,7 +98,7 @@ def auto_sharded(x: T, env: Optional[ComputeEnv|Mesh] = None, *, mesh: Optional[
     return shard(x, env, mesh=mesh)
 
 
-def shard(x: T, mapping: Optional[ComputeEnv|ResourceMapping] = None, *, mesh: Optional[Mesh] = None) -> T:
+def shard(x: T, mapping: Optional[ResourceEnv | ResourceMapping] = None, *, mesh: Optional[Mesh] = None) -> T:
     """
     Shard a PyTree using the provided axis mapping. NamedArrays in the PyTree are sharded using the axis mapping.
     Other arrays are not sharded (unless they're already sharded).
@@ -113,8 +113,8 @@ def shard(x: T, mapping: Optional[ComputeEnv|ResourceMapping] = None, *, mesh: O
     if mesh is not None:
         warnings.warn("The `mesh` argument to `shard` is deprecated. Pass a ComputeEnv instead.", DeprecationWarning)
 
-    if mesh is None and isinstance(mapping, ComputeEnv):
-        mesh = env.mesh
+    if mesh is None and isinstance(mapping, ResourceEnv):
+        mesh = mapping.mesh
 
     if mesh is not None and mesh.empty:
         mesh = None
@@ -126,9 +126,8 @@ def shard(x: T, mapping: Optional[ComputeEnv|ResourceMapping] = None, *, mesh: O
 
     if mapping is None:
         mapping = current_thread_local_mapping()
-    elif isinstance(mapping, ComputeEnv):
-        mapping = env.axis_mapping
-
+    elif isinstance(mapping, ResourceEnv):
+        mapping = mapping.axis_mapping
 
     if mapping is None:
         if not is_in_jit():
