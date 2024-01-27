@@ -40,7 +40,7 @@ class SemanticDType(LowercaseStrEnum):
 DTypeish: TypeAlias = DTypeLike | SemanticDType | Literal["compute", "parameter", "output"]
 
 
-def maybe_cast(x: T, dtype: Optional[DTypeish]) -> T:
+def maybe_cast_floating(x: T, dtype: Optional[DTypeish]) -> T:
     """
     Cast x to dtype if dtype is not None. If dtype is a SemanticDType, use the current mixed-precision policy to
     determine the dtype to cast to.
@@ -48,6 +48,12 @@ def maybe_cast(x: T, dtype: Optional[DTypeish]) -> T:
     if dtype is None:
         return x
 
+    dtype = resolve_dtype(dtype)
+
+    return _cast_floating_to(x, dtype)
+
+
+def resolve_dtype(dtype: DTypeish) -> DTypeLike:
     if isinstance(dtype, str):
         # see if it's a semantic dtype
         try:
@@ -55,8 +61,7 @@ def maybe_cast(x: T, dtype: Optional[DTypeish]) -> T:
             dtype = semantic_dtype.to_dtype()
         except KeyError:
             pass
-
-    return _cast_floating_to(x, dtype)
+    return dtype
 
 
 def _cast_floating_to(tree: T, dtype: jnp.dtype) -> T:

@@ -6,9 +6,11 @@ from jaxtyping import PRNGKeyArray
 
 import haliax as hax
 
+from .._src.mixed_precision import DTypeish, maybe_cast_floating
 from ..axis import AxisSpec
 from ..core import NamedArray
 from ..jax_utils import named_call
+from ..types import PrecisionLike
 
 
 class Linear(eqx.Module):
@@ -20,13 +22,15 @@ class Linear(eqx.Module):
 
     In: AxisSpec = eqx.static_field()
     Out: AxisSpec = eqx.static_field()
-    compute_dtype: Optional[DTypeLike] = eqx.static_field()
+    compute_dtype: Optional[DTypeish] = eqx.static_field()
+    precision: PrecisionLike = eqx.static_field()
 
     @staticmethod
     def init(
         In: AxisSpec,
         Out: AxisSpec,
-        compute_dtype: Optional[DTypeLike] = None,
+        compute_dtype: Optional[DTypeish] = "compute",
+        precision: PrecisionLike = "default",
         *,
         key,
         use_bias=True,
@@ -45,7 +49,7 @@ class Linear(eqx.Module):
         joint_spec = hax.concat_axis_specs(Out, In) if out_first else hax.concat_axis_specs(In, Out)
         weight = hax.random.normal(key, joint_spec) * 0.02
         bias = hax.zeros(Out) if use_bias else None
-        return Linear(weight, bias, In, Out, compute_dtype)
+        return Linear(weight, bias, In, Out, compute_dtype, precision)
 
     @named_call
     def __call__(self, inputs, *, key: Optional[PRNGKeyArray] = None):
@@ -56,21 +60,15 @@ class Linear(eqx.Module):
         """
         del key
 
-        weight = self.weight
+        weight = maybe_cast_floating(self.weight, self.compute_dtype)
 
-        compute_dtype = self.compute_dtype
-        if compute_dtype is None:
-            compute_dtype = hax.current_mp_policy().compute_dtype
-        if compute_dtype is not None:
-            weight = weight.astype(compute_dtype)
-
-        q = inputs.dot(weight, axis=self.In)
+        # TODO: use preferred_element_type?
+        q = hax.dot(inputs, weight, axis=self.In, precision=self.precision)
         q = hax.auto_sharded(q)
 
         bias = self.bias
         if bias is not None:
-            if compute_dtype is not None:
-                bias = bias.astype(compute_dtype)
+            bias = maybe_cast_floating(bias, self.compute_dtype)
             q = q + bias
             q = hax.auto_sharded(q)
 
