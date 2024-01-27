@@ -6,7 +6,7 @@ from jaxtyping import PRNGKeyArray
 
 import haliax as hax
 
-from .._src.mixed_precision import DTypeish, maybe_cast_floating
+from .._src.mixed_precision import DTypeish, cast_floating
 from ..axis import AxisSpec
 from ..core import NamedArray
 from ..jax_utils import named_call
@@ -37,14 +37,14 @@ class Linear(eqx.Module):
         out_first: bool = False,
     ) -> "Linear":
         """
-
-        :param In: Input axes
-        :param Out: Output axes
-        :param compute_dtype: dtype to use for computation, or None to use the context default
-        :param key: rng key for initialization
-        :param use_bias: whether to include bias term
-        :param out_first: whether to put output axes first in the weight matrix. out_first is how PyTorch does it.
-        :return:
+        Args:
+            In (AxisSpec): Input axes.
+            Out (AxisSpec): Output axes.
+            compute_dtype (Optional[DTypeish]): dtype to use for computation, or None to use jax default rules.
+            precision (PrecisionLike): Precision of the computation.
+            key: rng key for initialization.
+            use_bias (bool): Whether to include bias term. Defaults to True.
+            out_first (bool): Whether to put output axes first in the weight matrix. out_first is how PyTorch does it. Defaults to False.
         """
         joint_spec = hax.concat_axis_specs(Out, In) if out_first else hax.concat_axis_specs(In, Out)
         weight = hax.random.normal(key, joint_spec) * 0.02
@@ -60,7 +60,7 @@ class Linear(eqx.Module):
         """
         del key
 
-        weight = maybe_cast_floating(self.weight, self.compute_dtype)
+        weight = cast_floating(self.weight, self.compute_dtype)
 
         # TODO: use preferred_element_type?
         q = hax.dot(inputs, weight, axis=self.In, precision=self.precision)
@@ -68,7 +68,7 @@ class Linear(eqx.Module):
 
         bias = self.bias
         if bias is not None:
-            bias = maybe_cast_floating(bias, self.compute_dtype)
+            bias = cast_floating(bias, self.compute_dtype)
             q = q + bias
             q = hax.auto_sharded(q)
 

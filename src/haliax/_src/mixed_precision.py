@@ -40,7 +40,7 @@ class SemanticDType(LowercaseStrEnum):
 DTypeish: TypeAlias = DTypeLike | SemanticDType | Literal["compute", "parameter", "output"]
 
 
-def maybe_cast_floating(x: T, dtype: Optional[DTypeish]) -> T:
+def cast_floating(x: T, dtype: Optional[DTypeish]) -> T:
     """
     Cast x to dtype if dtype is not None. If dtype is a SemanticDType, use the current mixed-precision policy to
     determine the dtype to cast to.

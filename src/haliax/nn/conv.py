@@ -9,6 +9,7 @@ from jaxtyping import PRNGKeyArray
 
 import haliax.partitioning
 
+from .._src.mixed_precision import DTypeish, cast_floating
 from ..axis import Axis, AxisSelection, axis_name, replace_axis, selects_axis, without_axes
 from ..core import NamedArray, named
 from ..jax_utils import named_call
@@ -29,6 +30,8 @@ class _ConvBase(eqx.Module):
     Out: Axis = eqx.field(static=True)
     weight: NamedArray = eqx.field()
     bias: Optional[NamedArray] = eqx.field()
+
+    compute_dtype: Optional[DTypeish] = eqx.static_field()
 
     def _lhs_dim_spec(self, batch_index, inputs):
         # the dim spec are single letters, for things like NCHW
@@ -104,6 +107,7 @@ class Conv(_ConvBase):
         In: Axis,
         Out: Axis,
         kernel_size: int | Sequence[int],
+        compute_dtype: Optional[DTypeish] = "compute",
         *,
         stride: int | Sequence[int] = 1,
         padding: int | Sequence[int] | Sequence[tuple[int, int]] = 0,
@@ -117,6 +121,7 @@ class Conv(_ConvBase):
             Spatial: names of spatial dimensions
             In: Axis of input channels
             Out: Axis of output channels
+            compute_dtype: dtype to use for computation, or None to use jax default rules
             kernel_size: The size of the convolutional kernel.
             stride: The stride of the convolution. Can be a single number or a tuple
             padding: The amount of padding to apply before and after each spatial
@@ -149,7 +154,7 @@ class Conv(_ConvBase):
         else:
             bias = None
 
-        return Conv(Spatial, In, Out, weight, bias, kernel_size, stride, padding, dilation, groups)
+        return Conv(Spatial, In, Out, weight, bias, compute_dtype, kernel_size, stride, padding, dilation, groups)
 
     @named_call
     def __call__(self, inputs, *, key: Optional[PRNGKeyArray] = None):
@@ -186,7 +191,7 @@ class Conv(_ConvBase):
         # Constraints:
         # * at most 1 batch dimension (we'll vmap as necessary)
         # * at most 1 channel dimension (which we enforce for this module)
-        # Spatial dimensions are reduced via the usual convolution formula, so we have to drop to names
+        # Spatial dimensions are reduced via the usual convolution formula, so we have to resize them
 
         # identify batch dims, which get special treatment
         # jax's conv_general_dilated only supports exactly one batch dimension (not 0), so we vmap over any others.
@@ -195,7 +200,7 @@ class Conv(_ConvBase):
         x = _vmap_all_but_one_batch_dim(self._do_conv, batch_dims)(inputs)
 
         if self.bias is not None:
-            x = x + self.bias
+            x = x + cast_floating(self.bias, self.compute_dtype)
 
         output_axes = _compute_output_axes(inputs, batch_dims, self.In, self.Out)
         x = x.rearrange(output_axes)
@@ -214,12 +219,14 @@ class Conv(_ConvBase):
             inputs = inputs.broadcast_axis(Axis("__batch__", 1))
             batch_index = 0
 
+        weights = cast_floating(self.weight, self.compute_dtype)
+
         lhs_dim_spec = self._lhs_dim_spec(batch_index, inputs)
         rhs_dim_spec = self._weight_dim_spec
         output_dim_spec = lhs_dim_spec
         x = jax.lax.conv_general_dilated(
             lhs=inputs.array,
-            rhs=self.weight.array,
+            rhs=weights.array,
             window_strides=self.stride,
             padding=self.padding,
             rhs_dilation=self.dilation,
@@ -253,6 +260,7 @@ class ConvTranspose(_ConvBase):
         In: Axis,
         Out: Axis,
         kernel_size: int | Sequence[int],
+        compute_dtype: Optional[DTypeish] = "compute",
         *,
         stride: int | Sequence[int] = 1,
         padding: int | Sequence[int] | Sequence[tuple[int, int]] = 0,
@@ -263,11 +271,11 @@ class ConvTranspose(_ConvBase):
         key: PRNGKeyArray,
     ):
         """
-
         Args:
             Spatial: Spatial dimensions
             In:  Input channels
             Out:  Output channels
+            compute_dtype: dtype to use for computation, or None to use jax default rules
             kernel_size: Kernel size, can be a single number or a tuple
             stride: Stride, can be a single number or a tuple
             padding: Padding, can be a single number or a tuple
@@ -307,6 +315,7 @@ class ConvTranspose(_ConvBase):
             Out,
             weight,
             bias,
+            compute_dtype,
             kernel_size,
             stride,
             padding,
@@ -337,7 +346,7 @@ class ConvTranspose(_ConvBase):
         x = _vmap_all_but_one_batch_dim(self._do_conv, batch_dims)(inputs)
 
         if self.bias is not None:
-            x = x + self.bias
+            x = x + cast_floating(self.bias, self.compute_dtype)
 
         output_axes = _compute_output_axes(inputs, batch_dims, self.In, self.Out)
 
@@ -365,9 +374,11 @@ class ConvTranspose(_ConvBase):
         rhs_dim_spec = self._weight_dim_spec
         output_dim_spec = lhs_dim_spec
 
+        weights = cast_floating(self.weight, self.compute_dtype)
+
         x = jax.lax.conv_general_dilated(
             lhs=inputs.array,
-            rhs=self.weight.array,
+            rhs=weights.array,
             window_strides=(1,) * len(self.Spatial),
             padding=padding,
             lhs_dilation=self.stride,

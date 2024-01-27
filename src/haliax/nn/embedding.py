@@ -6,6 +6,7 @@ from jaxtyping import PRNGKeyArray
 
 import haliax as hax
 
+from .._src.mixed_precision import DTypeish, cast_floating
 from ..axis import Axis, AxisSpec
 from ..core import NamedArray
 from ..jax_utils import named_call
@@ -19,12 +20,20 @@ class Embedding(eqx.Module):
     # axes
     Vocab: Axis = eqx.static_field()
     Embed: AxisSpec = eqx.static_field()
+    compute_dtype: Optional[DTypeish] = eqx.static_field()
 
     @staticmethod
-    def init(Vocab: Axis, Embed: AxisSpec, initializer_range: float = 0.02, *, key):
+    def init(
+        Vocab: Axis,
+        Embed: AxisSpec,
+        initializer_range: float = 0.02,
+        compute_dtype: Optional[DTypeish] = "compute",
+        *,
+        key: PRNGKeyArray,
+    ):
         all_axes = (Vocab,) + ensure_tuple(Embed)
         weight = hax.random.normal(key, all_axes) * initializer_range
-        return Embedding(weight=weight, Vocab=Vocab, Embed=Embed)
+        return Embedding(weight=weight, Vocab=Vocab, Embed=Embed, compute_dtype=compute_dtype)
 
     def __call__(self, input_ids, *, key: Optional[PRNGKeyArray] = None):
         return self.embed(input_ids)
@@ -32,6 +41,7 @@ class Embedding(eqx.Module):
     @named_call
     def embed(self, input_ids):
         input_embeds = self.weight.take(self.Vocab, input_ids)
+        input_embeds = cast_floating(input_embeds, self.compute_dtype)
         return input_embeds
 
     def unembed(self, input_embeds):
