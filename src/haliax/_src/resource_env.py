@@ -28,9 +28,7 @@ DEFAULT_MP_POLICY = jmp.get_policy("f32")
 
 
 def resource_env(
-    mesh: Optional[Mesh] = None,
-    axis_mapping: Optional[ResourceMapping] = None,
-    mp: Optional[jmp.Policy] = None,
+    axis_mapping: Optional[ResourceMapping] = None, mp: Optional[jmp.Policy] = None, mesh: Optional[Mesh] = None
 ) -> "ResourceEnv":
     """
     When called with arguments, returns a compute context env that can be used in a `with` statement.
