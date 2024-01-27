@@ -31,7 +31,7 @@ def resource_env(
     mesh: Optional[Mesh] = None,
     axis_mapping: Optional[ResourceMapping] = None,
     mp: Optional[jmp.Policy] = None,
-):
+) -> "ResourceEnv":
     """
     When called with arguments, returns a compute context env that can be used in a `with` statement.
     Args:
@@ -40,7 +40,7 @@ def resource_env(
         mp: mixed-precision policy to use in the context
 
     Returns:
-        A compute context manager
+        A ResourceEnv object that can be used as a context manager.
     """
 
     if mesh is None:
@@ -55,7 +55,7 @@ def resource_env(
     if mp is None:
         mp = DEFAULT_MP_POLICY
 
-    ctxt = ResourceEnv(mesh, axis_mapping, mp)
+    ctxt = ResourceEnv(axis_mapping, mp, mesh)
     return ctxt
 
 
@@ -68,19 +68,19 @@ class ResourceEnv(AbstractContextManager):
     policy). However, it is not exposed to the user, and its semantic axes are kind of deprecated.
     """
 
-    def __init__(self, mesh: Optional[Mesh], axis_mapping: Optional[ResourceMapping], mp: jmp.Policy):
+    def __init__(self, axis_mapping: Optional[ResourceMapping], mp: jmp.Policy, mesh: Optional[Mesh]):
         self.mesh = mesh
         self.axis_mapping = axis_mapping
         self.mp = mp
 
     def with_policy(self, mp: jmp.Policy) -> "ResourceEnv":
-        return ResourceEnv(self.mesh, self.axis_mapping, mp)
+        return ResourceEnv(self.axis_mapping, mp, self.mesh)
 
     def with_mesh(self, mesh: Mesh) -> "ResourceEnv":
-        return ResourceEnv(mesh, self.axis_mapping, self.mp)
+        return ResourceEnv(self.axis_mapping, self.mp, mesh)
 
     def with_axis_mapping(self, axis_mapping: ResourceMapping) -> "ResourceEnv":
-        return ResourceEnv(self.mesh, axis_mapping, self.mp)
+        return ResourceEnv(axis_mapping, self.mp, self.mesh)
 
     def __enter__(self):
         _context_holder.thread_data.ctxt = self
@@ -104,7 +104,7 @@ class _ComputeContextManagerHolder:
 
     def __init__(self):
         self.thread_data = threading.local()
-        self.thread_data.ctxt = ResourceEnv(None, None, DEFAULT_MP_POLICY)
+        self.thread_data.ctxt = ResourceEnv(None, DEFAULT_MP_POLICY, None)
         self.thread_data.stack = []
         self.thread_data.stack.append(self.thread_data.ctxt)
 

@@ -16,7 +16,7 @@ from jaxtyping import PyTree
 import haliax.tree_util as htu
 from haliax._src.compile_utils import compile_cache
 
-from ._src.compute_context import ResourceEnv, _get_mesh, current_resource_env, resource_env
+from ._src.resource_env import ResourceEnv, _get_mesh, current_resource_env, resource_env
 from .axis import Axis, AxisSelection, AxisSelector
 from .core import NamedArray
 from .jax_utils import Static, is_in_jit, is_jax_array_like
@@ -59,7 +59,7 @@ def current_thread_local_mapping() -> Optional[ResourceMapping]:
     Get the current thread-local resource mapping, or None if there is no resource mapping set.
     :return:
     """
-    from ._src.compute_context import current_resource_env
+    from ._src.resource_env import current_resource_env
 
     return current_resource_env().axis_mapping
 
