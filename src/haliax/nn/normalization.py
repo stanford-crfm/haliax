@@ -4,11 +4,11 @@ import equinox as eqx
 from jax import nn as jnn
 from jax import numpy as jnp
 
-import haliax
 import haliax as hax
 
 from ..axis import AxisSelection, AxisSpec
 from ..core import NamedArray
+from ..mixed_precision import DTypeish, cast_floating
 from ..types import Scalar
 from ..wrap import unwrap_namedarrays, wrap_axiswise_call, wrap_reduction_call
 
@@ -26,7 +26,7 @@ class LayerNorm(eqx.Module):
     bias: Optional[NamedArray]
 
     eps: float = eqx.static_field(default=1e-5)
-    compute_dtype: Optional[hax.DTypeish] = eqx.static_field(default="compute")
+    compute_dtype: Optional[DTypeish] = eqx.static_field(default="compute")
 
     @staticmethod
     def init(
@@ -34,7 +34,7 @@ class LayerNorm(eqx.Module):
         eps: float = 1e-5,
         use_weight: bool = True,
         use_bias: bool = True,
-        compute_dtype: Optional[hax.DTypeish] = "compute",
+        compute_dtype: Optional[DTypeish] = "compute",
     ):
         if use_weight:
             weight = hax.ones(axis)
@@ -73,7 +73,7 @@ class RMSNorm(eqx.Module):
     bias: Optional[NamedArray]
 
     eps: float = eqx.static_field(default=1e-5)
-    compute_dtype: Optional[hax.DTypeish] = eqx.static_field(default="compute")
+    compute_dtype: Optional[DTypeish] = eqx.static_field(default="compute")
 
     @staticmethod
     def init(
@@ -81,7 +81,7 @@ class RMSNorm(eqx.Module):
         eps: float = 1e-5,
         use_weight: bool = True,
         use_bias: bool = False,
-        compute_dtype: Optional[hax.DTypeish] = "compute",
+        compute_dtype: Optional[DTypeish] = "compute",
     ):
         if use_weight:
             weight = hax.ones(axis)
@@ -102,9 +102,9 @@ class RMSNorm(eqx.Module):
         out = x * inv
 
         if self.weight is not None:
-            out *= hax.mixed_precision.cast_floating(self.weight, self.compute_dtype)
+            out *= cast_floating(self.weight, self.compute_dtype)
         if self.bias is not None:
-            out += hax.mixed_precision.cast_floating(self.bias, self.compute_dtype)
+            out += cast_floating(self.bias, self.compute_dtype)
         return out
 
 
@@ -131,7 +131,7 @@ def standardize(
     where: Optional[NamedArray] = None,
 ) -> NamedArray:
     """Analogous to [jax.nn.standardize][], but with support for NamedArrays."""
-    x, mean, variance, where = haliax.broadcast_arrays(x, mean, variance, where)  # type: ignore
+    x, mean, variance, where = hax.broadcast_arrays(x, mean, variance, where)  # type: ignore
     raw_x, mean, variance, where = unwrap_namedarrays(x, mean, variance, where)
     axis_indices = x._lookup_indices(axis)
 
