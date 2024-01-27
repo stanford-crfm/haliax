@@ -64,7 +64,7 @@ class ResourceEnv(AbstractContextManager):
     A ResourceEnv is a context manager that can be used to specify the mesh, axis mapping, and mixed-precision policy to
     use for computation. It can be used as a context manager or just passed to a function as an argument.
 
-    It should be noted that JAX internals has a ResoureEnv that sort of does a similar thing (minus the mixed-precision
+    It should be noted that JAX internals has a ResourceEnv that sort of does a similar thing (minus the mixed-precision
     policy). However, it is not exposed to the user, and its semantic axes are kind of deprecated.
     """
 
