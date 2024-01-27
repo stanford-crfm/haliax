@@ -16,6 +16,7 @@ import haliax.random as random
 import haliax.tree_util as tree_util
 import haliax.util as util
 
+from ._src.compute_context import current_mp_policy, current_resource_env, resource_env
 from ._src.dot import dot
 from ._src.rearrange import rearrange
 from .axis import (

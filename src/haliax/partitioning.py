@@ -16,7 +16,7 @@ from jaxtyping import PyTree
 import haliax.tree_util as htu
 from haliax._src.compile_utils import compile_cache
 
-from ._src.compute_context import ResourceEnv, _get_mesh, compute_env, current_resource_env
+from ._src.compute_context import ResourceEnv, _get_mesh, current_resource_env, resource_env
 from .axis import Axis, AxisSelection, AxisSelector
 from .core import NamedArray
 from .jax_utils import Static, is_in_jit, is_jax_array_like
@@ -50,7 +50,7 @@ def axis_mapping(mapping: ResourceMapping, *, merge: bool = False, **kwargs):
     if len(kwargs):
         mapping.update(kwargs)
 
-    with compute_env(axis_mapping=mapping):
+    with resource_env(axis_mapping=mapping):
         yield
 
 

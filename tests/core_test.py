@@ -5,6 +5,7 @@ import pytest
 from jax.random import PRNGKey
 
 import haliax as hax
+import haliax._src.mixed_precision
 from haliax import Axis, NamedArray
 
 
@@ -719,7 +720,7 @@ def test_order_of_transpose_add():
     named2 = hax.random.randint(PRNGKey(0), (W, H), minval=10, maxval=30)
 
     assert (named1 + named2).axes == (H, W)
-    assert jnp.all((named1 + named2).array == named1.array + named2.array.T)
+    assert jnp.all((named1 + named2).array == named1.array + haliax._src.mixed_precision.T)
 
 
 def test_nice_short_string_in_named_array():

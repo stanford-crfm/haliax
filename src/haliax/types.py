@@ -1,4 +1,4 @@
-from typing import Any, Mapping, Protocol, Sequence, Tuple, TypeAlias, Union
+from typing import Mapping, Optional, Protocol, Sequence, TypeAlias, Union
 
 import jax.numpy as jnp
 import numpy as np
@@ -27,9 +27,9 @@ except ImportError:
 Scalar = Union[float, int, jnp.ndarray]  # ndarray b/c array(1) is a scalar
 IntScalar = Union[int, jnp.ndarray]
 
-PrecisionLike = Union[None, str, Precision, Tuple[str, str], Tuple[Precision, Precision]]
+PrecisionLike = Optional[str | Precision | tuple[str, str] | tuple[Precision, Precision]]
 
 
-PhysicalAxisSpec = Union[(str), Sequence[str]]
-ResourceMapping = Mapping[(str), PhysicalAxisSpec]
+PhysicalAxisSpec = str | Sequence[str]
+ResourceMapping = Mapping[str, PhysicalAxisSpec]
 """Mapping from logical axis names to physical axis names"""

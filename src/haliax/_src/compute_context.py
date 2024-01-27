@@ -27,7 +27,7 @@ def current_resource_env() -> "ResourceEnv":
 DEFAULT_MP_POLICY = jmp.get_policy("f32")
 
 
-def compute_env(
+def resource_env(
     mesh: Optional[Mesh] = None,
     axis_mapping: Optional[ResourceMapping] = None,
     mp: Optional[jmp.Policy] = None,
