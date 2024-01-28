@@ -9,10 +9,6 @@ import haliax
 from haliax.types import ResourceMapping
 
 
-def current_mp_policy() -> jmp.Policy:
-    return current_resource_env().mp
-
-
 def current_resource_env() -> "ResourceEnv":
     cur = _context_holder.thread_data.ctxt
 
@@ -28,7 +24,7 @@ DEFAULT_MP_POLICY = jmp.get_policy("f32")
 
 
 def resource_env(
-    axis_mapping: Optional[ResourceMapping] = None, mp: Optional[jmp.Policy] = None, mesh: Optional[Mesh] = None
+    axis_mapping: Optional[ResourceMapping] = None, mp: Optional[jmp.Policy | str] = None, mesh: Optional[Mesh] = None
 ) -> "ResourceEnv":
     """
     When called with arguments, returns a compute context env that can be used in a `with` statement.
@@ -66,9 +62,11 @@ class ResourceEnv(AbstractContextManager):
     policy). However, it is not exposed to the user, and its semantic axes are kind of deprecated.
     """
 
-    def __init__(self, axis_mapping: Optional[ResourceMapping], mp: jmp.Policy, mesh: Optional[Mesh]):
+    def __init__(self, axis_mapping: Optional[ResourceMapping], mp: jmp.Policy | str, mesh: Optional[Mesh]):
         self.mesh = mesh
         self.axis_mapping = axis_mapping
+        if isinstance(mp, str):
+            mp = jmp.get_policy(mp)
         self.mp = mp
 
     def with_policy(self, mp: jmp.Policy) -> "ResourceEnv":

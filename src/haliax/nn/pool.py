@@ -154,10 +154,10 @@ def max_pool(
         Window: the size of the window to pool over
         inputs: input data with dimensions (batch, window dims..., features).
         stride: a sequence of `n` integers, representing the inter-window
-          stride (default: `(1, ..., 1)`).
+              stride (default: `(1, ..., 1)`).
         padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
-          of `n` `(low, high)` integer pairs that give the padding to apply before
-          and after each spatial dimension.
+              of `n` `(low, high)` integer pairs that give the padding to apply before
+              and after each spatial dimension.
     Returns:
       The maximum value in each window slice.
     """
@@ -184,7 +184,7 @@ def min_pool(
             and after each spatial dimension.
         use_ceil: if True, will use ceil instead of floor to compute the output shape
     Returns:
-    The minimum value in each window slice.
+        The minimum value in each window slice.
     """
     return pool(Window, inputs, float("inf"), jax.lax.min, stride, padding, use_ceil=use_ceil)
 
@@ -205,10 +205,10 @@ def mean_pool(
         Window: the size of the window to pool over
         inputs: input data with dimensions (batch, window dims..., features).
         stride: a sequence of `n` integers, representing the inter-window
-          stride (default: `(1, ..., 1)`).
+              stride (default: `(1, ..., 1)`).
         padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
-          of `n` `(low, high)` integer pairs that give the padding to apply before
-          and after each spatial dimension.
+              of `n` `(low, high)` integer pairs that give the padding to apply before
+              and after each spatial dimension.
     Returns:
       The mean value in each window slice.
     """

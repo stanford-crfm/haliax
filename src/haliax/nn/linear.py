@@ -60,15 +60,13 @@ class Linear(eqx.Module):
         """
         del key
 
-        weight = cast_floating(self.weight, self.compute_dtype)
+        weight, bias = cast_floating((self.weight, self.bias), self.compute_dtype)
 
         # TODO: use preferred_element_type?
         q = hax.dot(inputs, weight, axis=self.In, precision=self.precision)
         q = hax.auto_sharded(q)
 
-        bias = self.bias
         if bias is not None:
-            bias = cast_floating(bias, self.compute_dtype)
             q = q + bias
             q = hax.auto_sharded(q)
 

@@ -1,4 +1,4 @@
-from ._src.mixed_precision import DTypeish, SemanticDType, cast_floating, resolve_dtype
+from ._src.mixed_precision import DTypeish, SemanticDType, cast_floating, current_mp_policy, resolve_dtype
 
 
 __all__ = [
@@ -6,4 +6,5 @@ __all__ = [
     "cast_floating",
     "resolve_dtype",
     "SemanticDType",
+    "current_mp_policy",
 ]

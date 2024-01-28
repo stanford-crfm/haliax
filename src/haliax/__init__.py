@@ -11,6 +11,7 @@ except ImportError:
     from jax._src.typing import DTypeLike
 
 import haliax.debug as debug
+import haliax.mixed_precision as mixed_precision
 import haliax.nn as nn
 import haliax.random as random
 import haliax.tree_util as tree_util
@@ -18,7 +19,7 @@ import haliax.util as util
 
 from ._src.dot import dot
 from ._src.rearrange import rearrange
-from ._src.resource_env import current_mp_policy, current_resource_env, resource_env
+from ._src.resource_env import ResourceEnv, current_resource_env, resource_env
 from .axis import (
     Axis,
     AxisSelection,
@@ -55,7 +56,7 @@ from .core import (
     updated_slice,
 )
 from .hof import fold, map, scan, vmap
-from .mixed_precision import DTypeish, SemanticDType
+from .mixed_precision import DTypeish, SemanticDType, current_mp_policy
 from .ops import clip, isclose, pad_left, trace, tril, triu, where
 from .partitioning import auto_sharded, axis_mapping, fsdp, named_jit, shard, shard_with_axis_mapping
 from .specialized_fns import top_k
@@ -846,6 +847,7 @@ __all__ = [
     "random",
     "tree_util",
     "nn",
+    "mixed_precision",
     "Axis",
     "AxisSpec",
     "AxisSelection",
@@ -958,6 +960,13 @@ __all__ = [
     "fold",
     "map",
     "vmap",
+    "current_resource_env",
+    "ResourceEnv",
+    "resource_env",
+    "current_mp_policy",
+    "SemanticDType",
+    "DTypeish",
+    "DTypeLike",
     "trace",
     "where",
     "clip",

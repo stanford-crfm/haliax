@@ -18,7 +18,7 @@ from haliax.axis import (
 )
 from haliax.core import NamedArray
 from haliax.types import DTypeLike, PrecisionLike
-from haliax.util import ensure_tuple
+from haliax.util import UNSPECIFIED, Unspecified, ensure_tuple
 
 
 # deprecated overload
@@ -49,6 +49,7 @@ def dot(
     precision: PrecisionLike = None,
     preferred_element_type: Optional[DTypeLike] = None,
     out_axes: Optional[PartialAxisSpec] = None,
+    axis: Optional[AxisSelection] | Unspecified = UNSPECIFIED,
     **kwargs,
 ) -> NamedArray:
     """Returns the tensor product of two NamedArrays. The axes `axis` are contracted over,
@@ -71,7 +72,7 @@ def dot(
 
     Args:
         *arrays (NamedArray): The arrays to contract.
-        axis (AxisSelection): The axes to contract over.
+        axis (Optional[AxisSelection]): The axes to contract over.
         precision (PrecisionLike, optional): The precision to use. Defaults to None. This argument is passed to `jax.numpy.einsum`,
             which in turn passes it to jax.lax.dot_general.
         preferred_element_type (DTypeLike, optional): The preferred element type of the result. Defaults to None.
@@ -86,9 +87,7 @@ def dot(
     if len(arrays) == 0:
         raise ValueError("Must provide at least one array to dot")
 
-    if "axis" in kwargs:
-        axis = kwargs["axis"]
-    else:
+    if axis is UNSPECIFIED:
         axis = arrays[0]
         arrays = arrays[1:]
         if isinstance(axis, NamedArray):

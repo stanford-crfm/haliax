@@ -106,7 +106,7 @@ to [jax.numpy.einsum][] in that it performs generalized matrix multiplication ov
 arbitrary number of axes and one or more arrays. Syntactically, it is more similar to
 reduction operations like [haliax.sum][] and [haliax.mean][].
 
-The [cheat sheet](cheatsheet.md) has a section on [matrix multiplication](cheat_sheet.md#matrix-multiplication)
+The [cheat sheet](cheatsheet.md) has a section on [matrix multiplication](cheatsheet.md#matrix-multiplication)
 that gives a few examples. Here are several more:
 
 ```python
@@ -156,7 +156,7 @@ Haliax's [broadcasting rules](broadcasting.md).
 
 The result of a reduction operation is always [haliax.NamedArray][] with the reduced axes removed.
 If you reduce all axes, the result is a NamedArray with 0 axes, i.e. a scalar.
-You can convert it to a [jax.numpy.ndarray][] with [NamedArray.scalar][], or just [NamedArray.array][].
+You can convert it to a [jax.numpy.ndarray][] with [haliax.NamedArray.scalar][], or just `haliax.NamedArray.array`.
 
 ::: haliax.all
 ::: haliax.amax
