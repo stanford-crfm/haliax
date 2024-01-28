@@ -4,7 +4,7 @@ import threading
 import typing
 import warnings
 from math import prod
-from typing import Callable, ContextManager, Mapping, Optional, ParamSpec, Sequence, TypeVar, Union
+from typing import Callable, ContextManager, Mapping, Optional, ParamSpec, Sequence, TypeVar
 
 import equinox as eqx
 import jax
@@ -385,7 +385,7 @@ def named_jit(
     keep_unused: bool = False,
     backend: Optional[str] = None,
     inline: Optional[bool] = None,
-) -> typing.Callable[[Callable[Args, R]], WrappedCallable[Args, R]]:
+) -> Callable[[Callable[Args, R]], WrappedCallable[Args, R]]:
     ...
 
 
@@ -398,7 +398,7 @@ def named_jit(
     donate_args: Optional[PyTree] = None,
     donate_kwargs: Optional[PyTree] = None,
     **pjit_args,
-):
+) -> WrappedCallable[Args, R] | Callable[[Callable[Args, R]], WrappedCallable[Args, R]]:
     """
     A version of pjit that uses NamedArrays and the provided resource mapping to infer resource partitions for
     sharded computation for.
@@ -441,7 +441,7 @@ def named_jit(
 
     if fn is None:
         return functools.partial(  # type: ignore
-            named_jit,
+            named_jit,  # type: ignore
             axis_resources=axis_resources,
             in_axis_resources=in_axis_resources,
             out_axis_resources=out_axis_resources,
@@ -586,7 +586,7 @@ def physical_axis_size(axis: AxisSelector, mapping: Optional[ResourceMapping] = 
 
     mesh_shape = mesh.shape
 
-    name: Union[None, str, Sequence[str]] = physical_axis_name(axis, mapping)
+    name: Optional[str | Sequence[str]] = physical_axis_name(axis, mapping)
     if name is None:
         return None
     elif isinstance(name, str):

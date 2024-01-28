@@ -1,7 +1,6 @@
 from typing import Optional
 
 import equinox as eqx
-from jax.typing import DTypeLike
 from jaxtyping import PRNGKeyArray
 
 import haliax as hax
@@ -32,7 +31,7 @@ class Linear(eqx.Module):
         compute_dtype: Optional[DTypeish] = "compute",
         precision: PrecisionLike = "default",
         *,
-        key,
+        key: PRNGKeyArray,
         use_bias=True,
         out_first: bool = False,
     ) -> "Linear":
@@ -42,7 +41,7 @@ class Linear(eqx.Module):
             Out (AxisSpec): Output axes.
             compute_dtype (Optional[DTypeish]): dtype to use for computation, or None to use jax default rules.
             precision (PrecisionLike): Precision of the computation.
-            key: rng key for initialization.
+            key (PRNGKeyArray): rng key for initialization.
             use_bias (bool): Whether to include bias term. Defaults to True.
             out_first (bool): Whether to put output axes first in the weight matrix. out_first is how PyTorch does it. Defaults to False.
         """
