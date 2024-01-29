@@ -10,7 +10,7 @@ from haliax.types import ResourceMapping
 
 
 def current_resource_env() -> "ResourceEnv":
-    cur = _context_holder.thread_data.ctxt
+    cur = _context_holder.get_env()
 
     # the mesh can change in JAX without us knowing, so we need to check
     mesh = _get_mesh()
@@ -44,13 +44,12 @@ def resource_env(
         axis_mapping = haliax.partitioning.current_mapping()
 
     if mp is None:
-        mp = _context_holder.thread_data.ctxt.mp
+        mp = haliax.current_mp_policy()
 
     if mp is None:
         mp = DEFAULT_MP_POLICY
 
-    ctxt = ResourceEnv(axis_mapping, mp, mesh)
-    return ctxt
+    return ResourceEnv(axis_mapping, mp, mesh)
 
 
 class ResourceEnv(AbstractContextManager):
@@ -79,8 +78,7 @@ class ResourceEnv(AbstractContextManager):
         return ResourceEnv(axis_mapping, self.mp, self.mesh)
 
     def __enter__(self):
-        _context_holder.thread_data.ctxt = self
-        _context_holder.thread_data.stack.append(self)
+        _context_holder.push_env(self)
 
         if self.mesh:
             self.mesh.__enter__()
@@ -88,8 +86,7 @@ class ResourceEnv(AbstractContextManager):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        _context_holder.thread_data.stack.pop()
-        _context_holder.thread_data.ctxt = _context_holder.thread_data.stack[-1]
+        _context_holder.pop_env()
 
         if self.mesh:
             self.mesh.__exit__(exc_type, exc_value, traceback)
@@ -100,11 +97,27 @@ class _ComputeContextManagerHolder:
 
     def __init__(self):
         self.thread_data = threading.local()
-        self.thread_data.ctxt = ResourceEnv(None, DEFAULT_MP_POLICY, None)
-        self.thread_data.stack = []
-        self.thread_data.stack.append(self.thread_data.ctxt)
+        self.thread_data.stack = [DEFAULT_RESOURCE_ENV]
+
+    def push_env(self, ctxt: ResourceEnv):
+        if not hasattr(self.thread_data, "stack"):
+            self.thread_data.stack = [DEFAULT_RESOURCE_ENV]
+        self.thread_data.stack.append(ctxt)
+
+    def get_env(self) -> ResourceEnv:
+        if not hasattr(self.thread_data, "stack"):
+            return DEFAULT_RESOURCE_ENV
+        return self.thread_data.stack[-1]
+
+    def pop_env(self):
+        if not hasattr(self.thread_data, "stack"):
+            raise ValueError("No context to pop.")
+        self.thread_data.stack.pop()
+
+        return self.get_env()
 
 
+DEFAULT_RESOURCE_ENV = ResourceEnv(None, DEFAULT_MP_POLICY, None)
 _context_holder = _ComputeContextManagerHolder()
 
 
