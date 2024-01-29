@@ -105,6 +105,65 @@ with hax.resource_env(mp="p=f32,c=bf16,o=f32"):
 
 ```
 
+## Loss Functions
+
+XXX TODO
+
+## Future: Quantization and FP8
+
+This is not at all implemented yet, but the plan is to add support for quantization and FP8 in the future.
+
+This section is not going to talk about how specific quantization schemes work, but rather how
+structurally they are implemented in the JAX ecosystem.
+
+For purposes of this discussion, I'm going to treat quantization and FP8 as the same thing, since they
+end up requiring basically the same infrastructure.
+
+### Quantized Training Overview
+
+Most of this section is put together by my digging through [this blog post on AQT from Google](https://cloud.google.com/blog/products/compute/accurate-quantized-training-aqt-for-tpu-v5e/)
+as well as the library itself. There's no paper yet, but I'm sure there will be one soon.
+I don't pretend to understand all of it, particularly not the math parts, which aren't really
+described in the blog post.
+
+Let's talk just a bit about how quantization works. The basic idea is that you have
+an array of floating point values, and you want to convert them to some low-precision
+integer representation. The most common example is converting from FP32 to INT8, but there's also
+FP8, INT4, etc.
+
+Typically, you don't just project to the nearest representable value, at least not when doing training. Instead,
+you want to scale the entire array so that you get as much high-resolution coverage as possible. For example,
+
+
+### Quantization in JAX
+
+There are two relevant libraries I'm basing my understanding of quantization on:
+
+* [TransformerEngine](https://github.com/NVIDIA/TransformerEngine), which is NVIDIA's library for
+  accelerated training of Transformers, including FP8 support.
+* [AQT](https://github.com/google/aqt/), which is Google's library for quantization-aware training that
+focuses on integer-based quantization (like int8 and int4).
+
+
+The way quantization is shaping up to work in JAX is a combination of two mechanisms: "dot injection" and
+what I'm going to call "grad hijacking."
+
+#### Dot Injection
+
+The first piece is dot injection, which is a mechanism for injecting alternative versions
+of the  [jax.lax.dot_general][] primitive into higher level calls like [jax.numpy.einsum][].
+(`einsum` is actually the only function in JAX that takes this argument, but it's seen in
+[libraries like FLAX](https://github.com/google/flax/blob/61ece402d1b805e5ce797caf74b69ed8a7ae21ce/flax/linen/linear.py#L116-L117).)
+
+This part is fairly intuitive: you are likely going to want custom logic for how to do
+matrix multiplication in a quantized setting, and dot injection lets you do that.
+
+#### Grad Hijacking
+
+TODO: I am shocked but it seems like AQT doesn't need to do this? they just do the dumb thing, maybe
+with stochastic rounding?
+
+By itself,
 
 
 
@@ -114,7 +173,10 @@ with hax.resource_env(mp="p=f32,c=bf16,o=f32"):
 
 
 
-### Reference
+
+
+
+### API Reference
 
 ::: haliax.DTypeish
 ::: haliax.SemanticDType
