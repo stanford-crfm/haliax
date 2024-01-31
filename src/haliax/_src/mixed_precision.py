@@ -4,11 +4,11 @@ from typing import Literal, Optional, TypeAlias, TypeVar
 
 import jmp
 from jax import numpy as jnp
-from jax.typing import DTypeLike
 from strenum import LowercaseStrEnum
 
 import haliax
 from haliax._src.resource_env import current_resource_env
+from haliax.types import DTypeLike
 from haliax.util import is_jax_or_hax_array_like
 
 
