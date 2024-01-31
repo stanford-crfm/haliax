@@ -342,9 +342,12 @@ class _NamedJitWrapper(eqx.Module):
             output_shape = _cached_filter_eval_shape(self._fn, *args, **kwargs)
             my_pjit_args = dict(**self._pjit_args)
 
-            if (in_axis_resources is not None or env is not None):
+            if env.mesh is not None and (in_axis_resources is not None or env is not None):
                 if in_axis_resources is None:
                     in_axis_resources = env
+                elif isinstance(in_axis_resources, Mapping):
+                    in_axis_resources = env.with_axis_mapping(in_axis_resources)
+
                 in_resources = infer_resource_partitions(
                     (dynamic_donated, dynamic_reserved),
                     in_axis_resources,
@@ -352,7 +355,7 @@ class _NamedJitWrapper(eqx.Module):
                 )
                 my_pjit_args["in_shardings"] = in_resources
 
-            if out_axis_resources is not None:
+            if env.mesh is not None and out_axis_resources is not None:
                 # TODO: when AUTO is fixed (or eval_shape can give shardings), use it here
                 out_resources = infer_resource_partitions(
                     output_shape, out_axis_resources, preserve_existing_shardings=False, use_auto_sharding=False
@@ -608,7 +611,7 @@ def physical_axis_size(axis: AxisSelector, env: Optional[ResourceMapping | Resou
         mesh = _get_mesh()
 
     if mesh is None:
-        raise ValueError("No mesh found")
+        return None
 
     mesh_shape = mesh.shape
 

@@ -280,3 +280,8 @@ def test_jit_lower_doesnt_blow_up():
             assert lowered
             lowered.cost_analysis()
             lowered.as_text()
+
+
+def test_physical_axis_size_noop_without_mesh():
+    with axis_mapping(resource_map):
+        assert hax.partitioning.physical_axis_size(Dim2) is None
