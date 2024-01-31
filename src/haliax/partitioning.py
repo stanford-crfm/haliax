@@ -13,6 +13,7 @@ from jax.lax import with_sharding_constraint
 from jax.sharding import Mesh, NamedSharding, PartitionSpec, SingleDeviceSharding
 from jaxtyping import PyTree
 
+import haliax
 import haliax.tree_util as htu
 from haliax._src.compile_utils import compile_cache
 
@@ -202,17 +203,13 @@ def infer_resource_partitions(
     """
     if resource_env is None:
         resource_env = current_resource_env()
+    elif isinstance(resource_env, Mapping):
+        resource_env = haliax.current_resource_env().with_axis_mapping(resource_env)
 
-    if isinstance(resource_env, Mapping):
-        mesh = _get_mesh()
-    else:
-        mesh = resource_env.mesh or _get_mesh()
+    mesh = resource_env.mesh or _get_mesh()
 
     if mesh is None:
         raise ValueError("No mesh found")
-
-    if resource_env is None:
-        raise ValueError("No resource mapping found")
 
     def partition_spec(node: typing.Any):
         if isinstance(node, NamedArray):
@@ -357,6 +354,8 @@ class _NamedJitWrapper(eqx.Module):
 
             if env.mesh is not None and out_axis_resources is not None:
                 # TODO: when AUTO is fixed (or eval_shape can give shardings), use it here
+                if isinstance(out_axis_resources, Mapping):
+                    out_axis_resources = env.with_axis_mapping(out_axis_resources)
                 out_resources = infer_resource_partitions(
                     output_shape, out_axis_resources, preserve_existing_shardings=False, use_auto_sharding=False
                 )

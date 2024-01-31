@@ -119,6 +119,9 @@ _context_holder = _ComputeContextManagerHolder()
 
 
 def _get_mesh() -> Optional[Mesh]:
+    """
+    Doesn't return the default mesh which doesn't have any devices.
+    """
     from jax.experimental.maps import thread_resources
 
     mesh = thread_resources.env.physical_mesh
