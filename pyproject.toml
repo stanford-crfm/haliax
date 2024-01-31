@@ -25,7 +25,8 @@ dependencies = [
     "equinox>=0.10.6",
     "jaxtyping>=0.2.20",
     "safetensors[numpy]",
-    "jmp"
+    "jmp",
+    "strenum"
 ]
 
 [project.optional-dependencies]
