@@ -1,4 +1,5 @@
 import enum
+import typing
 from typing import Literal, Optional, TypeAlias, TypeVar
 
 import jmp
@@ -23,9 +24,20 @@ class SemanticDType(LowercaseStrEnum):
     PARAM = enum.auto()
     OUTPUT = enum.auto()
 
-    def to_dtype(self, mp: Optional[jmp.Policy] = None) -> jnp.dtype:
+    @typing.overload
+    def to_dtype(self, mp: jmp.Policy) -> jnp.dtype:
+        ...
+
+    @typing.overload
+    def to_dtype(self, mp: None = ...) -> Optional[jnp.dtype]:
+        ...
+
+    def to_dtype(self, mp: Optional[jmp.Policy] = None) -> Optional[jnp.dtype]:
         if mp is None:
             mp = current_mp_policy()
+
+        if mp is None:
+            return None
 
         match self:
             case SemanticDType.COMPUTE:
@@ -55,10 +67,23 @@ def cast_floating(x: T, dtype: Optional[DTypeish], mp: Optional[jmp.Policy] = No
 
     dtype = resolve_dtype(dtype, mp)
 
+    if dtype is None:
+        return x
+
     return _cast_floating_to(x, dtype)
 
 
-def resolve_dtype(dtype: DTypeish, mp: Optional[jmp.Policy] = None) -> DTypeLike:
+@typing.overload
+def resolve_dtype(dtype: DTypeish, mp: jmp.Policy) -> DTypeLike:
+    ...
+
+
+@typing.overload
+def resolve_dtype(dtype: DTypeish, mp: None = ...) -> Optional[DTypeLike]:
+    ...
+
+
+def resolve_dtype(dtype: DTypeish, mp: Optional[jmp.Policy] = None) -> Optional[DTypeLike]:
     """
     Resolve a dtypeish to a dtype. If dtype is a SemanticDType, use the current mixed-precision policy to determine
     the dtype to cast to. Otherwise, returns dtype.
@@ -84,5 +109,5 @@ def _cast_floating_to(tree: T, dtype: jnp.dtype) -> T:
     return haliax.tree_util.tree_map(conditional_cast, tree)
 
 
-def current_mp_policy() -> jmp.Policy:
+def current_mp_policy() -> Optional[jmp.Policy]:
     return current_resource_env().mp

@@ -20,9 +20,6 @@ def current_resource_env() -> "ResourceEnv":
     return cur
 
 
-DEFAULT_MP_POLICY = jmp.get_policy("f32")
-
-
 def resource_env(
     axis_mapping: Optional[ResourceMapping] = None, mp: Optional[jmp.Policy | str] = None, mesh: Optional[Mesh] = None
 ) -> "ResourceEnv":
@@ -46,9 +43,6 @@ def resource_env(
     if mp is None:
         mp = haliax.current_mp_policy()
 
-    if mp is None:
-        mp = DEFAULT_MP_POLICY
-
     return ResourceEnv(axis_mapping, mp, mesh)
 
 
@@ -61,14 +55,14 @@ class ResourceEnv(AbstractContextManager):
     policy). However, it is not exposed to the user, and its semantic axes are kind of deprecated.
     """
 
-    def __init__(self, axis_mapping: Optional[ResourceMapping], mp: jmp.Policy | str, mesh: Optional[Mesh]):
+    def __init__(self, axis_mapping: Optional[ResourceMapping], mp: Optional[jmp.Policy | str], mesh: Optional[Mesh]):
         self.mesh = mesh
         self.axis_mapping = axis_mapping
         if isinstance(mp, str):
             mp = jmp.get_policy(mp)
         self.mp = mp
 
-    def with_policy(self, mp: jmp.Policy) -> "ResourceEnv":
+    def with_policy(self, mp: Optional[jmp.Policy | str]) -> "ResourceEnv":
         return ResourceEnv(self.axis_mapping, mp, self.mesh)
 
     def with_mesh(self, mesh: Mesh) -> "ResourceEnv":
@@ -117,7 +111,7 @@ class _ComputeContextManagerHolder:
         return self.get_env()
 
 
-DEFAULT_RESOURCE_ENV = ResourceEnv(None, DEFAULT_MP_POLICY, None)
+DEFAULT_RESOURCE_ENV = ResourceEnv(None, None, None)
 _context_holder = _ComputeContextManagerHolder()
 
 
