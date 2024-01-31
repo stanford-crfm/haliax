@@ -37,6 +37,9 @@ def resource_env(
     if mesh is None:
         mesh = _get_mesh()
 
+        if not mesh:
+            mesh = None
+
     if axis_mapping is None:
         axis_mapping = haliax.partitioning.current_mapping()
 
@@ -115,7 +118,10 @@ DEFAULT_RESOURCE_ENV = ResourceEnv(None, None, None)
 _context_holder = _ComputeContextManagerHolder()
 
 
-def _get_mesh():
+def _get_mesh() -> Optional[Mesh]:
     from jax.experimental.maps import thread_resources
 
-    return thread_resources.env.physical_mesh
+    mesh = thread_resources.env.physical_mesh
+    if not mesh or mesh.empty:
+        return None
+    return mesh

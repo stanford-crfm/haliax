@@ -208,6 +208,9 @@ def infer_resource_partitions(
     else:
         mesh = resource_env.mesh or _get_mesh()
 
+    if mesh is None:
+        raise ValueError("No mesh found")
+
     if resource_env is None:
         raise ValueError("No resource mapping found")
 
@@ -339,7 +342,7 @@ class _NamedJitWrapper(eqx.Module):
             output_shape = _cached_filter_eval_shape(self._fn, *args, **kwargs)
             my_pjit_args = dict(**self._pjit_args)
 
-            if in_axis_resources is not None or env is not None:
+            if (in_axis_resources is not None or env is not None):
                 if in_axis_resources is None:
                     in_axis_resources = env
                 in_resources = infer_resource_partitions(
