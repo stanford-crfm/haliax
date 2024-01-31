@@ -65,6 +65,12 @@ class ResourceEnv(AbstractContextManager):
             mp = jmp.get_policy(mp)
         self.mp = mp
 
+    def __str__(self):
+        return f"ResourceEnv(axis_mapping={str(self.axis_mapping)}, mp={str(self.mp)}, mesh={str(self.mesh)})"
+
+    def __repr__(self):
+        return f"ResourceEnv(axis_mapping={repr(self.axis_mapping)}, mp={repr(self.mp)}, mesh={repr(self.mesh)})"
+
     def with_policy(self, mp: Optional[jmp.Policy | str]) -> "ResourceEnv":
         return ResourceEnv(self.axis_mapping, mp, self.mesh)
 
