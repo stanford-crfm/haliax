@@ -98,7 +98,7 @@ def auto_sharded(x: T, env: Optional[ResourceEnv | Mesh] = None, *, mesh: Option
     return shard(x, env, mesh=mesh)
 
 
-def shard(x: T, mapping: Optional[ResourceEnv | ResourceMapping] = None, *, mesh: Optional[Mesh] = None) -> T:
+def shard(x: T, env: Optional[ResourceEnv | ResourceMapping] = None, *, mesh: Optional[Mesh] = None) -> T:
     """
     Shard a PyTree using the provided axis mapping. NamedArrays in the PyTree are sharded using the axis mapping.
     Other arrays are not sharded (unless they're already sharded).
@@ -108,13 +108,21 @@ def shard(x: T, mapping: Optional[ResourceEnv | ResourceMapping] = None, *, mesh
     resulting sharding spans more than one host.
 
     Outside of jit, this method will warn if there is no resource mapping found.
+
+    Args:
+        x: the PyTree to shard
+        env: the resource mapping to use for sharding
+        mesh: the mesh to use for sharding
+
+    Returns:
+        The sharded PyTree
     """
 
     if mesh is not None:
-        warnings.warn("The `mesh` argument to `shard` is deprecated. Pass a ComputeEnv instead.", DeprecationWarning)
+        warnings.warn("The `mesh` argument to `shard` is deprecated. Pass a ResourceEnv instead.", DeprecationWarning)
 
-    if mesh is None and isinstance(mapping, ResourceEnv):
-        mesh = mapping.mesh
+    if mesh is None and isinstance(env, ResourceEnv):
+        mesh = env.mesh
 
     if mesh is not None and mesh.empty:
         mesh = None
@@ -124,25 +132,25 @@ def shard(x: T, mapping: Optional[ResourceEnv | ResourceMapping] = None, *, mesh
             warnings.warn("No mesh found. Not sharding.", RuntimeWarning)
         return x
 
-    if mapping is None:
-        mapping = current_thread_local_mapping()
-    elif isinstance(mapping, ResourceEnv):
-        mapping = mapping.axis_mapping
+    if env is None:
+        env = current_thread_local_mapping()
+    elif isinstance(env, ResourceEnv):
+        env = env.axis_mapping
 
-    if mapping is None:
+    if env is None:
         if not is_in_jit():
             warnings.warn("No resource mapping found. Not sharding.", RuntimeWarning)
 
         return x
 
-    assert isinstance(mapping, Mapping)
+    assert isinstance(env, Mapping)
 
     def _do_device_put(x):
         if not is_named_array(x):
             return x
 
         if _is_jit_tracer(x.array):
-            pspec = pspec_for_axis(x.axes, mapping)
+            pspec = pspec_for_axis(x.axes, env)
             return with_sharding_constraint(x, pspec)
         elif not is_jax_array_like(x.array):
             # this happens when we filter out params for things like lora
@@ -151,9 +159,7 @@ def shard(x: T, mapping: Optional[ResourceEnv | ResourceMapping] = None, *, mesh
             raw_x = x.array
             current_sharding = raw_x.sharding
 
-            desired_sharding = infer_resource_partitions(
-                x, mapping, mesh=mesh, preserve_existing_shardings=False
-            ).array
+            desired_sharding = infer_resource_partitions(x, env, preserve_existing_shardings=False).array
 
             if current_sharding.is_equivalent_to(desired_sharding, ndim=raw_x.ndim):
                 return x
@@ -173,36 +179,37 @@ def shard(x: T, mapping: Optional[ResourceEnv | ResourceMapping] = None, *, mesh
 
 @functools.wraps(shard)
 def shard_with_axis_mapping(x: T, mapping: ResourceMapping, mesh: Optional[Mesh] = None) -> T:
-    return shard(x, mapping=mapping, mesh=mesh)
+    return shard(x, mesh=mesh)
 
 
 def infer_resource_partitions(
     tree: PyTree,
-    resource_mapping: Optional[ResourceMapping] = None,
+    resource_env: Optional[ResourceEnv | ResourceMapping] = None,
     preserve_existing_shardings: bool = True,
     use_auto_sharding: bool = True,
-    mesh: Optional[Mesh] = None,
 ) -> PyTree:
     """
     Infer the sharding for a module, to be used with named_jit.
     The basic idea is to tree all NamedArrays as leaves for the purposes of this function,
-    and to create NamedShardings from those names plus the resource_mapping.
+    and to create NamedShardings from those names plus the resource env.
     If preserve_existing_shardings is True, then NamedArrays that are already sharded are left alone.
 
-    If resource_mapping is not provided, this function attempts to use the global resource mapping.
+    If resource_env is not provided, this function attempts to use the global env
 
     If use_auto_sharding is True, then we use the new experimental AUTO-sharding feature, which is not yet
     fully supported by JAX. If it is False, then we will guess fully replicated for any unnamed arrays that
     don't have a sharding.
     """
-    if resource_mapping is None:
-        resource_mapping = current_thread_local_mapping()
+    if resource_env is None:
+        resource_env = current_resource_env()
 
-    if resource_mapping is None:
+    if isinstance(resource_env, Mapping):
+        mesh = _get_mesh()
+    else:
+        mesh = resource_env.mesh or _get_mesh()
+
+    if resource_env is None:
         raise ValueError("No resource mapping found")
-
-    mesh = mesh or _get_mesh()
-    assert not isinstance(mesh, dict)
 
     def partition_spec(node: typing.Any):
         if isinstance(node, NamedArray):
@@ -219,7 +226,7 @@ def infer_resource_partitions(
             if current_sharding is not None:
                 return NamedArray(current_sharding, node.axes)  # type: ignore
             else:
-                sharding = NamedSharding(mesh, pspec_for_axis(node.axes, resource_mapping))
+                sharding = sharding_for_axis(node.axes, resource_env)
                 return NamedArray(sharding, node.axes)  # type: ignore
         elif is_jax_array_like(node):
             sharding = getattr(node, "sharding", None)
@@ -260,9 +267,9 @@ class _NamedJitWrapper(eqx.Module):
     _fn: Callable  # [Args, R]
     _dynamic_fun: PyTree
     _static_fun: typing.Any
-    _axis_resources: Optional[ResourceMapping]
-    _in_axis_resources: Optional[ResourceMapping]
-    _out_axis_resources: Optional[ResourceMapping]
+    _resource_env: Optional[ResourceEnv | ResourceMapping]
+    _in_env: Optional[ResourceEnv | ResourceMapping]
+    _out_env: Optional[ResourceEnv | ResourceMapping]
     _donate_args: Optional[PyTree]
     _donate_kwargs: Optional[PyTree]
     _pjit_args: Mapping[str, typing.Any]
@@ -278,15 +285,18 @@ class _NamedJitWrapper(eqx.Module):
         return self._call(True, *args, **kwargs)
 
     def _call(self, is_lower, *args, **kwargs):
-        axis_resources = self._axis_resources
-        if axis_resources is None:
-            axis_resources = current_thread_local_mapping()
+        if isinstance(self._resource_env, ResourceEnv):
+            env = self._resource_env
+        elif isinstance(self._resource_env, Mapping):
+            env = resource_env(axis_mapping=self._resource_env)
+        else:
+            env = current_resource_env()
 
-        in_axis_resources = self._in_axis_resources
-        out_axis_resources = self._out_axis_resources
+        in_axis_resources = self._in_env
+        out_axis_resources = self._out_env
 
         if out_axis_resources is None:
-            out_axis_resources = axis_resources
+            out_axis_resources = env
 
         dynamic_argspec, static_argspec = hashable_partition((args, kwargs), is_jax_array_like)
         dynamic = (self._dynamic_fun, dynamic_argspec)
@@ -320,8 +330,8 @@ class _NamedJitWrapper(eqx.Module):
         static = (self._static_fun, static_argspec)
 
         cmanager: ContextManager
-        if axis_resources is not None:
-            cmanager = axis_mapping(axis_resources)
+        if env is not None:
+            cmanager = env
         else:
             cmanager = contextlib.nullcontext()
 
@@ -329,9 +339,9 @@ class _NamedJitWrapper(eqx.Module):
             output_shape = _cached_filter_eval_shape(self._fn, *args, **kwargs)
             my_pjit_args = dict(**self._pjit_args)
 
-            if in_axis_resources is not None or axis_resources is not None:
+            if in_axis_resources is not None or env is not None:
                 if in_axis_resources is None:
-                    in_axis_resources = axis_resources
+                    in_axis_resources = env
                 in_resources = infer_resource_partitions(
                     (dynamic_donated, dynamic_reserved),
                     in_axis_resources,
@@ -359,10 +369,10 @@ class _NamedJitWrapper(eqx.Module):
 @typing.overload
 def named_jit(
     fn: Callable[Args, R],
-    axis_resources: Optional[ResourceMapping] = None,
+    axis_resources: Optional[ResourceMapping | ResourceEnv] = None,
     *,
-    in_axis_resources: Optional[ResourceMapping] = None,
-    out_axis_resources: Optional[ResourceMapping] = None,
+    in_axis_resources: Optional[ResourceMapping | ResourceEnv] = None,
+    out_axis_resources: Optional[ResourceMapping | ResourceEnv] = None,
     donate_args: Optional[PyTree] = None,
     donate_kwargs: Optional[PyTree] = None,
     # args from jit
@@ -376,9 +386,9 @@ def named_jit(
 @typing.overload
 def named_jit(
     *,
-    axis_resources: Optional[ResourceMapping] = None,
-    in_axis_resources: Optional[ResourceMapping] = None,
-    out_axis_resources: Optional[ResourceMapping] = None,
+    axis_resources: Optional[ResourceEnv | ResourceMapping] = None,
+    in_axis_resources: Optional[ResourceMapping | ResourceEnv] = None,
+    out_axis_resources: Optional[ResourceMapping | ResourceEnv] = None,
     donate_args: Optional[PyTree] = None,
     donate_kwargs: Optional[PyTree] = None,
     # args from jit
@@ -391,10 +401,10 @@ def named_jit(
 
 def named_jit(
     fn: Optional[Callable[Args, R]] = None,
-    axis_resources: Optional[ResourceMapping] = None,
+    axis_resources: Optional[ResourceMapping | ResourceEnv] = None,
     *,
-    in_axis_resources: Optional[ResourceMapping] = None,
-    out_axis_resources: Optional[ResourceMapping] = None,
+    in_axis_resources: Optional[ResourceMapping | ResourceEnv] = None,
+    out_axis_resources: Optional[ResourceMapping | ResourceEnv] = None,
     donate_args: Optional[PyTree] = None,
     donate_kwargs: Optional[PyTree] = None,
     **pjit_args,
@@ -564,29 +574,42 @@ def _cached_filter_eval_shape(fun, *args, **kwargs):
     return _eval_shape_cache[static]
 
 
-def physical_axis_name(axis: AxisSelector, mapping: Optional[ResourceMapping] = None) -> Optional[PhysicalAxisSpec]:
+def physical_axis_name(
+    axis: AxisSelector, mapping: Optional[ResourceMapping | ResourceEnv] = None
+) -> Optional[PhysicalAxisSpec]:
     """Get the physical axis name for a logical axis from the mapping. Returns none if the axis is not mapped."""
     if mapping is None:
         mapping = current_thread_local_mapping()
+    elif isinstance(mapping, ResourceEnv):
+        mapping = mapping.axis_mapping
+
     if mapping is None:
         return None
-    elif isinstance(axis, str):
+
+    if isinstance(axis, str):
         return mapping.get(axis, None)
     else:
         return mapping.get(axis.name, None)
 
 
-def physical_axis_size(axis: AxisSelector, mapping: Optional[ResourceMapping] = None) -> Optional[int]:
+def physical_axis_size(axis: AxisSelector, env: Optional[ResourceMapping | ResourceEnv] = None) -> Optional[int]:
     """Get the physical axis size for a logical axis. This is the product of the size of all physical axes
     that this logical axis is mapped to."""
-    mesh = _get_mesh()
+    if env is None:
+        env = current_resource_env()
+
+    if isinstance(env, ResourceEnv):
+        mesh = env.mesh
+        env = env.axis_mapping
+    else:
+        mesh = _get_mesh()
 
     if mesh is None:
         raise ValueError("No mesh found")
 
     mesh_shape = mesh.shape
 
-    name: Optional[str | Sequence[str]] = physical_axis_name(axis, mapping)
+    name: Optional[str | Sequence[str]] = physical_axis_name(axis, env)
     if name is None:
         return None
     elif isinstance(name, str):
@@ -596,13 +619,19 @@ def physical_axis_size(axis: AxisSelector, mapping: Optional[ResourceMapping] = 
 
 
 def sharding_for_axis(
-    axis: AxisSelection, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] = None
+    axis: AxisSelection, mapping: Optional[ResourceMapping | ResourceEnv] = None, mesh: Optional[Mesh] = None
 ) -> NamedSharding:
     """Get the sharding for a single axis"""
-    return NamedSharding(mesh or _get_mesh(), pspec_for_axis(axis, mapping))
+    if mesh is None and isinstance(mapping, ResourceEnv):
+        mesh = mapping.mesh
+
+    if mesh is None:
+        raise ValueError("No mesh found")
+
+    return NamedSharding(mesh, pspec_for_axis(axis, mapping))
 
 
-def pspec_for_axis(axis: AxisSelection, mapping: Optional[ResourceMapping] = None) -> PartitionSpec:
+def pspec_for_axis(axis: AxisSelection, mapping: Optional[ResourceMapping | ResourceEnv] = None) -> PartitionSpec:
     """Get the PartitionSpec for a single axis"""
     axis = ensure_tuple(axis)
     return PartitionSpec(*(physical_axis_name(a, mapping) for a in axis))

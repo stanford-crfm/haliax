@@ -260,7 +260,7 @@ def test_named_jit_with_donation_nested_pytrees():
 
 
 def test_jit_lower_doesnt_blow_up():
-    with ((axis_mapping(resource_map))):
+    with axis_mapping(resource_map):
 
         class MyModule(eqx.Module):
             array: jnp.ndarray
