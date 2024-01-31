@@ -75,7 +75,6 @@ assert hmp.cast_floating(x, "param").dtype == jnp.float32
 ```
 
 
-
 ## NN Modules
 
 Many Haliax modules, including [haliax.nn.Linear][], [haliax.nn.LayerNorm][], and [haliax.nn.Conv][] accept
@@ -109,7 +108,33 @@ with hax.resource_env(mp="p=f32,c=bf16,o=f32"):
 
 XXX TODO
 
+
+
+
+
+
+
+
+
+
+### API Reference
+
+::: haliax.DTypeish
+::: haliax.SemanticDType
+::: haliax.current_mp_policy
+
+::: haliax.mixed_precision.cast_floating
+
+
+::: haliax.ResourceEnv
+::: haliax.resource_env
+::: haliax.current_resource_env
+
+
+
 ## Future: Quantization and FP8
+
+WIP
 
 This is not at all implemented yet, but the plan is to add support for quantization and FP8 in the future.
 
@@ -121,18 +146,19 @@ end up requiring basically the same infrastructure.
 
 ### Quantized Training Overview
 
-Most of this section is put together by my digging through [this blog post on AQT from Google](https://cloud.google.com/blog/products/compute/accurate-quantized-training-aqt-for-tpu-v5e/)
-as well as the library itself. There's no paper yet, but I'm sure there will be one soon.
-I don't pretend to understand all of it, particularly not the math parts, which aren't really
-described in the blog post.
+Most of this section is put together by my digging through [this blog post on AQT from Google](https://cloud.google.com/blog/products/compute/accurate-quantized-training-aqt-for-tpu-v5e/),
+[the docs for NVIDIA's Transformer Engine](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/examples/fp8_primer.html),
+as well as the libraries themselves. There's no paper for AQT, but I'm sure there will be one soon.
+I don't pretend to understand all of this, but I think I have a decent grasp on the basics.
 
 Let's talk just a bit about how quantization works. The basic idea is that you have
 an array of floating point values, and you want to convert them to some low-precision
-integer representation. The most common example is converting from FP32 to INT8, but there's also
-FP8, INT4, etc.
+representation, such as INT8 or FP8.
 
 Typically, you don't just project to the nearest representable value, at least not when doing training. Instead,
-you want to scale the entire array so that you get as much high-resolution coverage as possible. For example,
+you want to scale the entire array so that you get as much high-resolution coverage as possible.
+
+So
 
 
 ### Quantization in JAX
@@ -160,31 +186,15 @@ matrix multiplication in a quantized setting, and dot injection lets you do that
 
 #### Grad Hijacking
 
-TODO: I am shocked but it seems like AQT doesn't need to do this? they just do the dumb thing, maybe
-with stochastic rounding?
-
-By itself,
+By itself, XXX storing scale in model, update in forward and backward
 
 
 
 
+### Quantization in Haliax
 
+Again, this is not implemented.
 
-
-
-
-
-
-
-### API Reference
-
-::: haliax.DTypeish
-::: haliax.SemanticDType
-::: haliax.current_mp_policy
-
-::: haliax.mixed_precision.cast_floating
-
-
-::: haliax.ResourceEnv
-::: haliax.resource_env
-::: haliax.current_resource_env
+My current thinking is to support dot injection similar to what you see in FLAX for FP8 and INT8,
+but to extend the ResourceEnv to also support an automatic dot injection policy. Not entirely
+sure how this looks yet.
