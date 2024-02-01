@@ -57,7 +57,9 @@ determine the current policy. See the next section for more details.
 
 ## haliax.ResourceEnv
 
-Haliax uses a global (technically, thread-local) context manager called [haliax.ResourceEnv][] to manage
+See also [ResourceEnvs](resource-env.md).
+
+Haliax uses a (technically, thread-local) context manager called [haliax.ResourceEnv][] to manage
 both [partitioning](partitioning.md) and mixed precision. For mixed precision, the `ResourceEnv` holds a
 `jmp.Policy` that can be accessed via the `policy` attribute or via the [haliax.current_mp_policy][] function:
 
@@ -74,12 +76,17 @@ assert hmp.cast_floating(x, "compute").dtype == jnp.float32
 assert hmp.cast_floating(x, "param").dtype == jnp.float32
 ```
 
+There is no "default" policy. If you don't set one, casting to a `SemanticDType` will be a no-op,
+meaning that mixed precision is entirely opt-in.
 
 ## NN Modules
 
 Many Haliax modules, including [haliax.nn.Linear][], [haliax.nn.LayerNorm][], and [haliax.nn.Conv][] accept
-an optional `compute_dtype` argument. This argument defaults to `"compute"`, but can be set to `"param"` or
-`"output"` or a specific dtype to override the global policy.
+an optional `compute_dtype` argument in their `init` and their `__init__` methods.
+This argument defaults to `"compute"`, but can be set to `"param"` or
+`"output"` or a specific dtype to override the global policy. (And again, if there is no global policy, a
+semantic dtype will be a no-op.)
+
 
 ```python
 import haliax as hax
@@ -93,6 +100,7 @@ linear = hax.nn.Linear.init(In, Out, key=jrandom.PRNGKey(0))
 assert linear.weight.dtype == jnp.float32
 assert linear.bias.dtype == jnp.float32
 input = hax.arange(In, dtype=jnp.bfloat16)
+
 out = linear(input)
 assert out.dtype == jnp.float32
 

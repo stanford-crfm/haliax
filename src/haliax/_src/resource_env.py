@@ -7,6 +7,7 @@ from jax.sharding import Mesh
 
 import haliax
 from haliax.types import ResourceMapping
+from haliax.util import UNSPECIFIED, Unspecified
 
 
 def current_resource_env() -> "ResourceEnv":
@@ -21,10 +22,19 @@ def current_resource_env() -> "ResourceEnv":
 
 
 def resource_env(
-    axis_mapping: Optional[ResourceMapping] = None, mp: Optional[jmp.Policy | str] = None, mesh: Optional[Mesh] = None
+    axis_mapping: Optional[ResourceMapping | Unspecified] = UNSPECIFIED,
+    mp: Optional[jmp.Policy | str | Unspecified] = UNSPECIFIED,
+    mesh: Optional[Mesh | Unspecified] = UNSPECIFIED,
 ) -> "ResourceEnv":
     """
     When called with arguments, returns a compute context env that can be used in a `with` statement.
+
+    This method will inherit the mesh, axis mapping, and mixed-precision policy from the current context if not
+    specified. If no context is active, the default mesh will be used.
+
+    `None` here means that there will be no mesh, axis mapping, or mixed-precision policy. This is different from
+    `UNSPECIFIED` which means to inherit from the current context.
+
     Args:
         mesh: mesh to use in the context
         axis_mapping: axis mapping to use in the context
@@ -34,16 +44,16 @@ def resource_env(
         A ResourceEnv object that can be used as a context manager.
     """
 
-    if mesh is None:
+    if mesh is UNSPECIFIED:
         mesh = _get_mesh()
 
         if not mesh:
             mesh = None
 
-    if axis_mapping is None:
+    if axis_mapping is UNSPECIFIED:
         axis_mapping = haliax.partitioning.current_mapping()
 
-    if mp is None:
+    if mp is UNSPECIFIED:
         mp = haliax.current_mp_policy()
 
     return ResourceEnv(axis_mapping, mp, mesh)

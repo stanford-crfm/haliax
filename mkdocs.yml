@@ -85,7 +85,9 @@ nav:
     - Rearrange: 'rearrange.md'
   - Neural Networks: 'nn.md'
   - Partitioning: 'partitioning.md'
-  - Mixed Precision: 'mixed_precision.md'
+  - Advanced Topics:
+    - Mixed Precision: 'mixed-precision.md'
+    - "`ResourceEnv`" : 'resource-env.md'
   - Higher Order Functions: 'hof.md'
   - API Reference: 'api.md'
   - FAQ: 'faq.md'
