@@ -179,8 +179,8 @@ def shard(x: T, env: Optional[ResourceEnv | ResourceMapping] = None, *, mesh: Op
 
 
 @functools.wraps(shard)
-def shard_with_axis_mapping(x: T, mapping: ResourceMapping, mesh: Optional[Mesh] = None) -> T:
-    return shard(x, mesh=mesh)
+def shard_with_axis_mapping(x: T, mapping: ResourceMapping | ResourceEnv, mesh: Optional[Mesh] = None) -> T:
+    return shard(x, mapping, mesh=mesh)
 
 
 def infer_resource_partitions(
@@ -642,7 +642,7 @@ def pspec_for_axis(axis: AxisSelection, mapping: Optional[ResourceMapping | Reso
     return PartitionSpec(*(physical_axis_name(a, mapping) for a in axis))
 
 
-def round_axis_for_partitioning(axis: Axis, mapping: Optional[ResourceMapping] = None) -> Axis:
+def round_axis_for_partitioning(axis: Axis, mapping: Optional[ResourceMapping | ResourceEnv] = None) -> Axis:
     """Round an axis so that it's divisible by the size of the partition it's on"""
     size = physical_axis_size(axis, mapping)
     if size is None:
