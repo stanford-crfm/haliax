@@ -10,7 +10,7 @@ import equinox as eqx
 import jax
 from equinox import module_update_wrapper
 from jax.lax import with_sharding_constraint
-from jax.sharding import Mesh, NamedSharding, PartitionSpec, SingleDeviceSharding
+from jax.sharding import Mesh, NamedSharding, PartitionSpec, SingleDeviceSharding, XLACompatibleSharding
 from jaxtyping import PyTree
 
 import haliax
@@ -85,18 +85,13 @@ def auto_sharded(x: T, env: Optional[ResourceEnv | Mesh] = None, *, mesh: Option
     elif isinstance(env, Mesh):
         warnings.warn("The `mesh` argument to `auto_sharded` is deprecated. Use `env` instead.", DeprecationWarning)
         mesh = env
-    elif isinstance(env, ResourceEnv):
-        mesh = env.mesh
-    else:
-        mesh = _get_mesh()
 
-    if env is None:
-        env = current_resource_env()
+    env = _coerce_to_env(env, mesh)
 
     if env.axis_mapping is None:
         return x
 
-    return shard(x, env, mesh=mesh)
+    return shard(x, env)
 
 
 def shard(x: T, env: Optional[ResourceEnv | ResourceMapping] = None, *, mesh: Optional[Mesh] = None) -> T:
@@ -122,29 +117,15 @@ def shard(x: T, env: Optional[ResourceEnv | ResourceMapping] = None, *, mesh: Op
     if mesh is not None:
         warnings.warn("The `mesh` argument to `shard` is deprecated. Pass a ResourceEnv instead.", DeprecationWarning)
 
-    if mesh is None and isinstance(env, ResourceEnv):
-        mesh = env.mesh
+    env = _coerce_to_env(env, mesh)
+    mesh = env.mesh
 
     if mesh is not None and mesh.empty:
         mesh = None
 
-    if mesh is None:
-        if not is_in_jit():
-            warnings.warn("No mesh found. Not sharding.", RuntimeWarning)
+    if mesh is None and not is_in_jit():
+        warnings.warn("No mesh found. Not sharding.", RuntimeWarning)
         return x
-
-    if env is None:
-        env = current_thread_local_mapping()
-    elif isinstance(env, ResourceEnv):
-        env = env.axis_mapping
-
-    if env is None:
-        if not is_in_jit():
-            warnings.warn("No resource mapping found. Not sharding.", RuntimeWarning)
-
-        return x
-
-    assert isinstance(env, Mapping)
 
     def _do_device_put(x):
         if not is_named_array(x):
@@ -160,7 +141,7 @@ def shard(x: T, env: Optional[ResourceEnv | ResourceMapping] = None, *, mesh: Op
             raw_x = x.array
             current_sharding = raw_x.sharding
 
-            desired_sharding = infer_resource_partitions(x, env, preserve_existing_shardings=False).array
+            desired_sharding = infer_resource_partitions(x, env, preserve_existing_shardings=False)
 
             if current_sharding.is_equivalent_to(desired_sharding, ndim=raw_x.ndim):
                 return x
@@ -191,25 +172,27 @@ def infer_resource_partitions(
 ) -> PyTree:
     """
     Infer the sharding for a module, to be used with named_jit.
-    The basic idea is to tree all NamedArrays as leaves for the purposes of this function,
+    The basic idea is to treat all NamedArrays as leaves for the purposes of this function,
     and to create NamedShardings from those names plus the resource env.
-    If preserve_existing_shardings is True, then NamedArrays that are already sharded are left alone.
 
-    If resource_env is not provided, this function attempts to use the global env
-
-    If use_auto_sharding is True, then we use the new experimental AUTO-sharding feature, which is not yet
-    fully supported by JAX. If it is False, then we will guess fully replicated for any unnamed arrays that
-    don't have a sharding.
+    Args:
+        tree: the PyTree to infer sharding for
+        resource_env: the resource mapping to use for sharding. If not provided, the global resource mapping is used.
+        preserve_existing_shardings: if True, then we will not change the sharding of NamedArrays that are already
+            sharded if the shardings are compatible with the resource env's device set.
+        use_auto_sharding: if True, then we will use the new experimental AUTO-sharding feature, which is not yet
+            fully supported by JAX. If it is False, then we will guess fully replicated for any unnamed arrays that
+            don't have a sharding.
     """
-    if resource_env is None:
-        resource_env = current_resource_env()
-    elif isinstance(resource_env, Mapping):
-        resource_env = haliax.current_resource_env().with_axis_mapping(resource_env)
 
-    mesh = resource_env.mesh or _get_mesh()
+    resource_env = _coerce_to_env(resource_env, None)
+    mesh = resource_env.mesh
 
     if mesh is None:
         raise ValueError("No mesh found")
+
+    # we can't preserve existing shardings if the mesh changes
+    mesh_devices = set(mesh.devices.ravel())
 
     def partition_spec(node: typing.Any):
         if isinstance(node, NamedArray):
@@ -218,16 +201,16 @@ def infer_resource_partitions(
             if not is_jax_array_like(node.array):
                 return None
 
+            current_sharding: Optional[XLACompatibleSharding]
             if preserve_existing_shardings:
                 current_sharding = getattr(node.array, "sharding", None)
             else:
                 current_sharding = None
 
-            if current_sharding is not None:
-                return NamedArray(current_sharding, node.axes)  # type: ignore
+            if current_sharding is not None and current_sharding.device_set == mesh_devices:
+                return current_sharding
             else:
-                sharding = sharding_for_axis(node.axes, resource_env)
-                return NamedArray(sharding, node.axes)  # type: ignore
+                return sharding_for_axis(node.axes, resource_env)
         elif is_jax_array_like(node):
             sharding = getattr(node, "sharding", None)
             # TODO: these are usually replicated. Is there a better way to tell?
@@ -235,11 +218,11 @@ def infer_resource_partitions(
                 return NamedSharding(mesh, PartitionSpec())
             elif isinstance(sharding, SingleDeviceSharding):
                 return NamedSharding(mesh, PartitionSpec(None))
-            elif sharding is not None:
+            elif sharding is not None and sharding.device_set == mesh_devices:
                 return sharding
             # elif use_auto_sharding:
-            # TODO: auto doesn't seem to really work reliably yet
-            #     compat between 0.4.10 and 0.4.11
+            # # TODO: auto doesn't seem to really work reliably yet
+            # #     compat between 0.4.10 and 0.4.11
             # if isinstance(AUTO, typing.Callable):  # type: ignore
             #     return AUTO(mesh)
             # else:
@@ -285,25 +268,66 @@ class _NamedJitWrapper(eqx.Module):
         return self._call(True, *args, **kwargs)
 
     def _call(self, is_lower, *args, **kwargs):
-        if isinstance(self._resource_env, ResourceEnv):
-            env = self._resource_env
-        elif isinstance(self._resource_env, Mapping):
-            env = resource_env(axis_mapping=self._resource_env)
+        env = _coerce_to_env(self._resource_env, None)
+
+        with env:
+            if self._in_env is not None:
+                in_axis_resources = _coerce_to_env(self._in_env, None)
+            else:
+                in_axis_resources = None
+
+            out_axis_resources = _coerce_to_env(self._out_env, None)
+
+            if out_axis_resources is None:
+                out_axis_resources = env
+
+        dynamic_donated, dynamic_reserved, static_argspec = self._partition_args(args, kwargs)
+        static = (self._static_fun, static_argspec)
+
+        cmanager: ContextManager
+        if env is not None:
+            cmanager = env
         else:
-            env = current_resource_env()
+            cmanager = contextlib.nullcontext()
 
-        in_axis_resources = self._in_env
-        out_axis_resources = self._out_env
+        with cmanager:
+            output_shape = _cached_filter_eval_shape(self._fn, *args, **kwargs)
+            my_pjit_args = dict(**self._pjit_args)
 
-        if out_axis_resources is None:
-            out_axis_resources = env
+            if env.mesh is not None and (in_axis_resources is not None or env is not None):
+                # if in_axis_resources is None:
+                #     in_axis_resources = env
 
+                in_resources = infer_resource_partitions(
+                    (dynamic_donated, dynamic_reserved),
+                    in_axis_resources if in_axis_resources is not None else env,
+                    preserve_existing_shardings=in_axis_resources is None,
+                )
+                my_pjit_args["in_shardings"] = in_resources
+
+            if env.mesh is not None and out_axis_resources.axis_mapping is not None:
+                # TODO: when AUTO is fixed (or eval_shape can give shardings), use it here
+                if isinstance(out_axis_resources, Mapping):
+                    out_axis_resources = env.with_axis_mapping(out_axis_resources)
+                out_resources = infer_resource_partitions(
+                    output_shape, out_axis_resources, preserve_existing_shardings=False, use_auto_sharding=False
+                )
+                my_pjit_args["out_shardings"] = out_resources
+
+            cached_pjitted_fun = _named_pjit_cache(self._fn, **my_pjit_args)
+            if is_lower:
+                return cached_pjitted_fun.lower(dynamic_donated, dynamic_reserved, static)
+            else:
+                out, out_static = cached_pjitted_fun(dynamic_donated, dynamic_reserved, static)
+                out = hashable_combine(out, out_static.value)
+
+                return out
+
+    def _partition_args(self, args, kwargs):
         dynamic_argspec, static_argspec = hashable_partition((args, kwargs), is_jax_array_like)
         dynamic = (self._dynamic_fun, dynamic_argspec)
-
         donate_args = self._donate_args
         donate_kwargs = self._donate_kwargs
-
         if donate_args is not None or donate_kwargs is not None:
             if donate_args is None:
                 dargs = (False,) * len(args)
@@ -326,49 +350,7 @@ class _NamedJitWrapper(eqx.Module):
         else:
             dynamic_donated = jax.tree_util.tree_map(lambda _: None, dynamic)
             dynamic_reserved = dynamic
-
-        static = (self._static_fun, static_argspec)
-
-        cmanager: ContextManager
-        if env is not None:
-            cmanager = env
-        else:
-            cmanager = contextlib.nullcontext()
-
-        with cmanager:
-            output_shape = _cached_filter_eval_shape(self._fn, *args, **kwargs)
-            my_pjit_args = dict(**self._pjit_args)
-
-            if env.mesh is not None and (in_axis_resources is not None or env is not None):
-                if in_axis_resources is None:
-                    in_axis_resources = env
-                elif isinstance(in_axis_resources, Mapping):
-                    in_axis_resources = env.with_axis_mapping(in_axis_resources)
-
-                in_resources = infer_resource_partitions(
-                    (dynamic_donated, dynamic_reserved),
-                    in_axis_resources,
-                    preserve_existing_shardings=in_axis_resources is None,
-                )
-                my_pjit_args["in_shardings"] = in_resources
-
-            if env.mesh is not None and out_axis_resources is not None:
-                # TODO: when AUTO is fixed (or eval_shape can give shardings), use it here
-                if isinstance(out_axis_resources, Mapping):
-                    out_axis_resources = env.with_axis_mapping(out_axis_resources)
-                out_resources = infer_resource_partitions(
-                    output_shape, out_axis_resources, preserve_existing_shardings=False, use_auto_sharding=False
-                )
-                my_pjit_args["out_shardings"] = out_resources
-
-            cached_pjitted_fun = _named_pjit_cache(self._fn, **my_pjit_args)
-            if is_lower:
-                return cached_pjitted_fun.lower(dynamic_donated, dynamic_reserved, static)
-            else:
-                out, out_static = cached_pjitted_fun(dynamic_donated, dynamic_reserved, static)
-                out = hashable_combine(out, out_static.value)
-
-                return out
+        return dynamic_donated, dynamic_reserved, static_argspec
 
 
 @typing.overload
@@ -600,19 +582,12 @@ def physical_axis_name(
 def physical_axis_size(axis: AxisSelector, env: Optional[ResourceMapping | ResourceEnv] = None) -> Optional[int]:
     """Get the physical axis size for a logical axis. This is the product of the size of all physical axes
     that this logical axis is mapped to."""
-    if env is None:
-        env = current_resource_env()
+    env = _coerce_to_env(env, None)
 
-    if isinstance(env, ResourceEnv):
-        mesh = env.mesh
-        env = env.axis_mapping
-    else:
-        mesh = _get_mesh()
-
-    if mesh is None:
+    if env.mesh is None:
         return None
 
-    mesh_shape = mesh.shape
+    mesh_shape = env.mesh.shape
 
     name: Optional[str | Sequence[str]] = physical_axis_name(axis, env)
     if name is None:
@@ -656,6 +631,20 @@ def _is_jit_tracer(x) -> bool:
     if isinstance(x, NamedArray):
         x = x.array
     return isinstance(x, jax.core.Tracer)
+
+
+def _coerce_to_env(env: Optional[ResourceEnv | ResourceMapping], mesh: Optional[Mesh]) -> ResourceEnv:
+    """Helper function to coerce an env or mapping to an env.
+    If the env is None, it uses the current resource env."""
+    if isinstance(env, Mapping):
+        env = resource_env(axis_mapping=env)
+    elif env is None:
+        env = current_resource_env()
+
+    if mesh is not None:
+        env = env.with_mesh(mesh)
+
+    return env
 
 
 __all__ = [

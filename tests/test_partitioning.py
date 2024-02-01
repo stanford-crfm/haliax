@@ -36,7 +36,7 @@ def test_infer_named_axes():
 
         spec = PartitionSpec(None, ResourceAxis.DATA, ResourceAxis.MODEL)
 
-        assert axes.named.array == NamedSharding(mesh, spec)
+        assert axes.named == NamedSharding(mesh, spec)
         assert axes.unnamed1.is_fully_replicated
 
 
@@ -138,7 +138,9 @@ def test_shard_with_axis_mapping_outside_pjit():
         y = hax.ones((Dim2, Dim3))
 
         x = hax.shard(x, resource_map)
-        assert x.array.sharding == NamedSharding(mesh, PartitionSpec(None, ResourceAxis.DATA))
+        assert x.array.sharding.is_equivalent_to(
+            NamedSharding(mesh, PartitionSpec(None, ResourceAxis.DATA)), x.array.ndim
+        )
 
         y = hax.shard(y, resource_map)
         assert y.array.sharding == NamedSharding(mesh, PartitionSpec(ResourceAxis.DATA, ResourceAxis.MODEL))
@@ -162,7 +164,9 @@ def test_named_jit_works_without_axis_resources():
         pjit_foo2 = named_jit(foo2)
         r2 = pjit_foo2(hax.ones((Dim1, Dim2)))
 
-        assert r2.array.sharding.is_equivalent_to(NamedSharding(mesh, PartitionSpec(None, ResourceAxis.DATA)), ndim=2)
+        assert r2.array.sharding.is_equivalent_to(
+            NamedSharding(mesh, PartitionSpec(None, ResourceAxis.DATA)), ndim=2
+        ), r2.array.sharding
 
 
 @skip_if_not_enough_devices(4)
