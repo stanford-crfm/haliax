@@ -133,7 +133,11 @@ def shard(x: T, env: Optional[ResourceEnv | ResourceMapping] = None, *, mesh: Op
 
         if _is_jit_tracer(x.array):
             pspec = pspec_for_axis(x.axes, env)
-            return with_sharding_constraint(x, pspec)
+            if mesh is not None:
+                sharding = NamedSharding(mesh, pspec)
+            else:
+                sharding = pspec
+            return with_sharding_constraint(x, sharding)
         elif not is_jax_array_like(x.array):
             # this happens when we filter out params for things like lora
             return x
