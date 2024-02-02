@@ -1,4 +1,5 @@
 import functools
+import math
 from typing import Dict, Generic, Optional, Protocol, Sequence, Type, TypeVar
 
 import equinox as eqx
@@ -6,7 +7,7 @@ import jax
 
 import haliax
 import haliax.util
-from haliax.jax_utils import filter_checkpoint
+from haliax.jax_utils import filter_checkpoint, named_call
 
 from ..axis import Axis
 
@@ -70,7 +71,7 @@ class Stacked(eqx.Module, Generic[M]):
 
     @staticmethod
     def init(
-        Block: Axis, module: Type[M], *, gradient_checkpointing: bool = False, prevent_cse: bool = True
+        Block: Axis, module: Type[M], *, gradient_checkpointing: bool = False, prevent_cse: bool = False
     ) -> ModuleInit["Stacked[M]"]:
         """
         Initialize a Stacked module. This method is curried: you can pass in the Block and module, and it will return
@@ -89,16 +90,34 @@ class Stacked(eqx.Module, Generic[M]):
 
         return fn
 
-    def scan(self, init, *extra_args, **extra_kwargs):
+    @named_call(name="Stacked.scan")
+    def scan(self, init, *args, **kwargs):
         if self.gradient_checkpointing:
             do_block = filter_checkpoint(self._do_block, prevent_cse=self.prevent_cse)
-        else:
-            do_block = self._do_block
-        return haliax.scan(do_block, self.Block)(init, self.stacked, *extra_args, **extra_kwargs)
+            # determine a checkpoint block size, should be roughly sqrt(self.Block.size)
+            size = int(math.sqrt(self.Block.size))
+            num_blocks = int(math.ceil(self.Block.size / size))
+            rest = self.Block.size // size
+            block_spec = [num_blocks, rest]
 
+            return haliax.scan(
+                do_block, self.Block, grad_checkpointing=self.gradient_checkpointing, checkpoint_blocks=block_spec
+            )(init, self.stacked, *args, **kwargs)
+        else:
+            return haliax.scan(self._do_block, self.Block)(init, self.stacked, *args, **kwargs)
+
+    @named_call(name="Stacked.fold")
     def fold(self, init, *args, **kwargs):
+        print(f"FOLD! {self.gradient_checkpointing} {self.prevent_cse}", flush=True)
         if self.gradient_checkpointing:
-            do_block = filter_checkpoint(self._do_block)
+            do_block = filter_checkpoint(self._do_block, prevent_cse=self.prevent_cse)
+            # determine a checkpoint block size, should be roughly sqrt(self.Block.size)
+            size = int(math.sqrt(self.Block.size))
+            num_blocks = int(math.ceil(self.Block.size / size))
+
+            return haliax.fold(
+                do_block, self.Block, grad_checkpointing=self.gradient_checkpointing, checkpoint_blocks=[num_blocks]
+            )(init, self.stacked, *args, **kwargs)
         else:
             do_block = self._do_block
 

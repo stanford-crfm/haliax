@@ -1,11 +1,13 @@
 import dataclasses
+import functools
 import inspect
 from functools import wraps
-from typing import Any, Callable, ParamSpec, Protocol, Tuple, TypeVar, Union, overload
+from typing import Any, Callable, Optional, ParamSpec, Protocol, Sequence, Tuple, TypeVar, Union, overload
 
 import equinox as eqx
 import jax
 import jax.lax as lax
+import numpy as np
 from jaxtyping import PyTree
 
 import haliax
@@ -14,7 +16,7 @@ import haliax.tree_util as htu
 from ._src.util import index_where
 from .axis import Axis, AxisSelector, selects_axis
 from .core import NamedArray
-from .jax_utils import Static, broadcast_prefix, is_jax_array_like
+from .jax_utils import Static, broadcast_prefix, checkpointed_scan, is_jax_array_like
 from .partitioning import physical_axis_name
 from .util import is_jax_or_hax_array_like, is_named_array
 
@@ -45,6 +47,8 @@ def scan(
     reverse: bool = False,
     unroll: int = 1,
     is_scanned: BoolAxisSpec = is_named_or_shaped_array_like,
+    grad_checkpointing: bool = False,
+    checkpoint_blocks: Optional[Sequence[int]] = None,
 ) -> Callable[[Carry, PyTree[X]], Tuple[Carry, PyTree[Y]]]:
     ...
 
@@ -57,6 +61,8 @@ def scan(
     reverse: bool = False,
     unroll: int = 1,
     is_scanned: BoolAxisSpec = is_named_or_shaped_array_like,
+    grad_checkpointing: bool = False,
+    checkpoint_blocks: Optional[Sequence[int]] = None,
 ) -> Callable:
     ...
 
@@ -68,6 +74,8 @@ def scan(
     reverse=False,
     unroll=1,
     is_scanned: BoolAxisSpec = is_named_or_shaped_array_like,
+    grad_checkpointing: bool = False,
+    checkpoint_blocks: Optional[Sequence[int]] = None,
 ):
     """
     Scan over a named axis. Non-scalar unnamed arrays will have their first axis scanned over.
@@ -112,6 +120,16 @@ def scan(
         # invariants until we're ready to create the result.
         axis_first_xs = htu.tree_map(_ensure_first(axis), scanned_xs)
 
+        # if we were passed in a string arg, we need to get its axis size out from some arg
+        if isinstance(axis, str):
+            true_axis = _infer_axis_size_from_tree(axis_first_xs, axis)
+            if true_axis is not None:
+                true_axis
+            else:
+                raise ValueError("scan requires either an actual Axis or at least one NamedArray or array arg")
+        else:
+            true_axis = axis
+
         # now get a template of an element of "X"
         x_elem = htu.tree_map(_select_0th(axis), axis_first_xs)
         # NB: we don't want to use htu.tree_structure here because we want to eliminate the leading axis
@@ -130,14 +148,37 @@ def scan(
 
         # as above, we don't want to use htu.tree_leaves here because we want to eliminate the leading axis
         leaves = jax.tree_util.tree_leaves(axis_first_xs)
-        with jax.named_scope(f"scan({haliax.axis_name(axis)})"):
-            carry, ys = lax.scan(wrapped_fn, init, leaves, reverse=reverse, unroll=unroll)
-        true_axis = _infer_axis_size_from_result(ys, axis)
+        if grad_checkpointing:
+            if unroll != 1:
+                # TODO: support for case when it's a suffix of block size?
+                raise ValueError("Can't use grad_checkpointing with unroll != 1")
+            with jax.named_scope(f"ckpt_scan({haliax.axis_name(axis)})"):
+                blocks = _rectify_scan_lengths(true_axis, checkpoint_blocks)
+
+                scan_fn = functools.partial(checkpointed_scan, lengths=blocks, prevent_cse=False, reverse=reverse)
+                carry, ys = scan_fn(wrapped_fn, init, leaves)
+        else:
+            with jax.named_scope(f"scan({haliax.axis_name(axis)})"):
+                carry, ys = lax.scan(wrapped_fn, init, leaves, reverse=reverse, unroll=unroll)
+
+        true_axis = _infer_axis_size_from_tree(ys, axis)
         ys = jax.tree_util.tree_map(_prepend_named_batch_axis(true_axis), ys, is_leaf=_is_passive_array)
 
         return carry, ys
 
     return scanned_f
+
+
+def _rectify_scan_lengths(axis: Axis, checkpoint_blocks: Optional[Sequence[int]]) -> list[int]:
+    blocks = checkpoint_blocks or [axis.size]
+    cur_size = np.prod(blocks)
+    if cur_size != axis.size:
+        left = axis.size // cur_size
+        if left * cur_size != axis.size:
+            raise ValueError(f"Can't partition {axis.size} into blocks of size {blocks}")
+        return list(blocks) + [left]
+    else:
+        return list(blocks)
 
 
 @overload
@@ -148,6 +189,8 @@ def fold(
     reverse: bool = False,
     unroll: int = 1,
     is_scanned: BoolAxisSpec = is_jax_or_hax_array_like,
+    grad_checkpointing: bool = False,
+    checkpoint_blocks: Optional[Sequence[int]] = None,
 ) -> Callable[[Carry, PyTree[X]], Carry]:
     ...
 
@@ -160,6 +203,8 @@ def fold(
     reverse: bool = False,
     unroll: int = 1,
     is_scanned: BoolAxisSpec = is_jax_or_hax_array_like,
+    grad_checkpointing: bool = False,
+    checkpoint_blocks: Optional[Sequence[int]] = None,
 ) -> Callable:
     ...
 
@@ -171,6 +216,8 @@ def fold(
     reverse: bool = False,
     unroll: int = 1,
     is_scanned: BoolAxisSpec = is_named_or_shaped_array_like,
+    grad_checkpointing: bool = False,
+    checkpoint_blocks: Optional[Sequence[int]] = None,
 ) -> Callable:
     """
     Slightly simpler implementation of scan that folds over the named axis of the array, not returning intermediates.
@@ -196,7 +243,15 @@ def fold(
     def scan_compatible_fn(carry, *args, **kwargs):
         return fn(carry, *args, **kwargs), None
 
-    scan_preconfig = scan(scan_compatible_fn, axis, reverse=reverse, unroll=unroll, is_scanned=is_scanned)
+    scan_preconfig = scan(
+        scan_compatible_fn,
+        axis,
+        reverse=reverse,
+        unroll=unroll,
+        is_scanned=is_scanned,
+        grad_checkpointing=grad_checkpointing,
+        checkpoint_blocks=checkpoint_blocks,
+    )
 
     def scanned_f(init, *args, **kwargs):
         return scan_preconfig(init, *args, **kwargs)[0]
@@ -359,7 +414,7 @@ def vmap(
         result = eqx.combine(result_dynamic, result_static.value)
 
         # if we were passed in a string arg, we need to get its axis size out from some result
-        true_axis = _infer_axis_size_from_result(result, axis)
+        true_axis = _infer_axis_size_from_tree(result, axis)
         if true_axis is None:
             raise ValueError("vmap failed to infer axis size from result")
 
@@ -369,17 +424,19 @@ def vmap(
     return wrapped_vmap_fn
 
 
-def _infer_axis_size_from_result(result, axis):
+def _infer_axis_size_from_tree(result, axis):
     if isinstance(axis, str):
         result_leaves = jax.tree_util.tree_leaves(result, is_leaf=_is_passive_array)
         if len(result_leaves) == 0:
-            # this really shouldn't happen
             return None
-        if isinstance(result_leaves[0], _PassiveNamedArray):
-            true_axis_size = result_leaves[0].array.shape[0]  # batch axis is defined to be 0 above
+        leaf = result_leaves[0]
+        if isinstance(leaf, _PassiveNamedArray):
+            true_axis_size = leaf.array.shape[0]  # batch axis is defined to be 0 above
             true_axis = Axis(axis, true_axis_size)
-        else:
-            true_axis_size = result_leaves[0].shape[0]  # batch axis is defined to be 0 above
+        elif isinstance(leaf, NamedArray):
+            true_axis = leaf.resolve_axis(axis)
+        elif isinstance(leaf, jax.numpy.ndarray) and leaf.ndim > 0:
+            true_axis_size = leaf.shape[0]  # batch axis is defined to be 0 above
             true_axis = Axis(axis, true_axis_size)
     else:
         true_axis = axis
@@ -424,7 +481,7 @@ class _PassiveNamedArray:
 
 
 def _is_passive_array(arr):
-    return isinstance(arr, _PassiveNamedArray)
+    return isinstance(arr, _PassiveNamedArray) or isinstance(arr, NamedArray)
 
 
 def _prepend_named_batch_axis(leading_axis: Axis):

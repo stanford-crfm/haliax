@@ -1,3 +1,4 @@
+import functools
 import functools as ft
 import typing
 from typing import Any, Callable, List, Optional, Sequence, Union
@@ -8,6 +9,8 @@ import numpy as np
 from jax import numpy as jnp
 from jax import random as jrandom
 from jaxtyping import PRNGKeyArray
+
+import haliax
 
 
 F = typing.TypeVar("F", bound=Callable[..., Any])
@@ -140,3 +143,80 @@ def is_pallas_dslice(x: object) -> bool:
 
     _PALLAS_DSLICE_TYPE = type(pdslice(0, 1))
     return isinstance(x, _PALLAS_DSLICE_TYPE)
+
+
+def is_scalarish(x):
+    if isinstance(x, haliax.NamedArray):
+        return x.ndim == 0
+    else:
+        return jnp.isscalar(x) or x.shape == ()
+
+
+def checkpointed_scan(
+    body_fn,
+    init,
+    xs,
+    lengths: Sequence[int],
+    *,
+    reverse: bool = False,
+    policy: Optional[Callable[..., bool]] = None,
+    prevent_cse: bool = False,
+):
+    """
+    Runs a recursive checkpointed scan over xs, where the scan is split into multiple scans, each of which has length
+    lengths[i] for some i.
+
+    This uses less memory than not checkpointing a scan, but more than
+
+    Note this uses "vanilla" JAX arrays, not NamedArrays
+
+    """
+    if len(lengths) == 1:
+        return jax.lax.scan(jax.checkpoint(body_fn, prevent_cse=prevent_cse, policy=policy), init, xs, lengths[0])
+    else:
+        # we want to split the scan up into multiple recursive scans, doing a total of `prod(lengths)` steps
+        # this makes a tree of scans with depth len(lengths)
+        # check total length against any xs
+        total_length = np.prod(lengths)
+
+        def check_leaf(x):
+            assert x.shape[0] == total_length
+
+        jax.tree_util.tree_map(lambda x: check_leaf(x), xs)
+
+        ckpt = functools.partial(jax.checkpoint, prevent_cse=prevent_cse, policy=policy)
+
+        @ckpt
+        def _body_fn(carry, i, start):
+            my_xs = jax.tree_util.tree_map(lambda x: x[start + i], xs)
+            return body_fn(carry, my_xs)
+
+        def rec_scan_fn(lengths):
+            # returns a fn that, when called, scans over prod(lengths) steps recursively
+            if len(lengths) == 1:
+                range = jnp.arange(lengths[0])
+                return ckpt(
+                    lambda carry, start: jax.lax.scan(
+                        functools.partial(_body_fn, start=start), carry, range, lengths[0], reverse=reverse
+                    )
+                )
+            else:
+                my_len = lengths[0]
+                rest_len = lengths[1:]
+                range_to_scan = jnp.arange(my_len) * np.prod(rest_len)
+                return ckpt(
+                    lambda carry, start: jax.lax.scan(
+                        rec_scan_fn(rest_len),
+                        carry,
+                        range_to_scan + start,
+                        reverse=reverse,
+                    )
+                )
+
+        res, unflattened = rec_scan_fn(lengths)(init, 0)
+
+        # need to flatten the output
+        # we need to flatten the leading len(lengths) dimensions of the output
+        flattened = jax.tree_util.tree_map(lambda y: jnp.reshape(y, (-1,) + y.shape[len(lengths) :]), unflattened)
+
+        return res, flattened
