@@ -222,3 +222,53 @@ def test_einsum_various_errors():
 
     with pytest.raises(ValueError, match="Mismatched number of axes"):
         einsum("x y -> x", m1)
+
+
+def test_einsum_examples():
+
+    Batch = hax.Axis("batch", 32)
+    Embed = hax.Axis("embed", 64)
+    H = hax.Axis("h", 16)
+    W = hax.Axis("w", 16)
+    C = hax.Axis("c", 3)
+
+    # for jax
+    im = jnp.zeros((32, 16, 16, 3))
+    w2 = jnp.zeros((3, 64))
+
+    # for haliax
+    hax_im = hax.zeros((Batch, H, W, C))
+    hax_w2 = hax.zeros((C, Embed))
+
+    # Tests:
+    # | [`jnp.einsum("bhwc,ce -> bhwe", im, w2)`][jax.numpy.einsum]    | [`hax.einsum("b h w c, c e -> b h w e", im, w2)`][haliax.einsum]   |
+    # | [`jnp.einsum("...c,ce -> ...e", im, w2)`][jax.numpy.einsum]    | [`hax.einsum("... c, c e -> ... e", im, w2)`][haliax.einsum]       |
+    # | [`jnp.einsum("bhwc,ce -> bhw", im, w2)`][jax.numpy.einsum]     | [`hax.einsum("{c embed} -> embed", im, w2)`][haliax.einsum]        |
+    # | [`jnp.einsum("bhwc,ce -> bhw", im, w2)`][jax.numpy.einsum]     | [`hax.einsum("-> batch h w embed", im, w2)`][haliax.einsum]        |
+
+    hax_out = hax.einsum("b h w c, c e -> b h w e", hax_im, hax_w2)
+    jnp_out = jnp.einsum("bhwc,ce -> bhwe", im, w2)
+    assert jnp.all(jnp.equal(hax_out.array, jnp_out))
+
+    hax_out = hax.einsum("... c, c e -> ... e", hax_im, hax_w2)
+    jnp_out = jnp.einsum("...c,ce -> ...e", im, w2)
+    assert jnp.all(jnp.equal(hax_out.array, jnp_out))
+
+    hax_out = hax.einsum("{c embed} -> embed", hax_im, hax_w2)
+    jnp_out = jnp.einsum("bhwc,ce -> bhwe", im, w2)
+    assert jnp.all(jnp.equal(hax_out.array, jnp_out))
+
+    hax_out = hax.einsum("-> batch h w embed", hax_im, hax_w2)
+    jnp_out = jnp.einsum("bhwc,ce -> bhwe", im, w2)
+    assert jnp.all(jnp.equal(hax_out.array, jnp_out))
+
+    # | [`jnp.einsum("bhwc,ce -> bhwce", im, w2)`][jax.numpy.einsum]   | [`hax.einsum("{...} -> ...", im, w2)`][haliax.einsum]              |
+    # | [`jnp.einsum("bhwc,ce -> ", im, w2)`][jax.numpy.einsum]        | [`hax.einsum("{...} -> ", im, w2)`][haliax.einsum]                 |
+
+    hax_out = hax.einsum("{...} -> ...", hax_im, hax_w2)
+    jnp_out = jnp.einsum("bhwc,ce -> bhwce", im, w2)
+    assert jnp.all(jnp.equal(hax_out.array, jnp_out))
+
+    hax_out = hax.einsum("{...} -> ", hax_im, hax_w2)
+    jnp_out = jnp.einsum("bhwc,ce -> ", im, w2)
+    assert jnp.all(jnp.equal(hax_out.array, jnp_out))
