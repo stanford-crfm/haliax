@@ -1,4 +1,5 @@
 import jax.numpy as jnp
+import pytest
 
 import haliax as hax
 from haliax import Axis, NamedArray
@@ -154,3 +155,56 @@ def test_einsum_ordered_ellipsis():
             jnp.einsum("ijk,kji->jk", m1.array, m2.array),
         )
     )
+
+
+def test_einsum_works_with_same_initial_axis_letter():
+    Height = Axis("Height", 2)
+    Hidth = Axis("Hidth", 3)
+    Depth = Axis("Depth", 4)
+
+    m1 = hax.ones((Height, Hidth, Depth))
+    m2 = hax.ones((Depth, Hidth, Height))
+
+    assert jnp.all(
+        jnp.equal(
+            einsum("h ... d,d ... h-> ...", m1, m2).array,
+            jnp.einsum("ijk,kji->j", m1.array, m2.array),
+        )
+    )
+
+    assert jnp.all(
+        jnp.equal(
+            einsum("{Height Hidth Depth} -> Hidth", m1, m2).array,
+            jnp.einsum("ijk,kji->j", m1.array, m2.array),
+        )
+    )
+
+
+def test_einsum_various_errors():
+    Height = Axis("Height", 2)
+    Hidth = Axis("Hidth", 3)
+    Depth = Axis("Depth", 4)
+
+    m1 = hax.ones((Height, Hidth, Depth))
+    m2 = hax.ones((Depth, Hidth, Height))
+
+    with pytest.raises(ValueError, match="Can't use ellipsis"):
+        einsum("-> ...", m1, m2)
+
+    with pytest.raises(ValueError, match="multiple times"):
+        einsum("-> Height Height", m1, m2)
+
+    with pytest.raises(ValueError, match="does not match number of arrays"):
+        einsum("x y z, x y z -> x", m1, m2, m1)
+
+    with pytest.raises(ValueError, match="does not match number of arrays"):
+        einsum("x y z -> x", m1, m2)
+
+    with pytest.raises(ValueError, match="Mismatched number of axes"):
+        einsum("x y z a b -> x", m1)
+
+    with pytest.raises(ValueError, match="Mismatched number of axes"):
+        einsum("x y ... a b -> x", m1)
+
+    with pytest.raises(ValueError, match="Mismatched number of axes"):
+        einsum("x y -> x", m1)

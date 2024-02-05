@@ -117,15 +117,12 @@ def _output_only_named_einsum(equation, arrays, rhs):
             )
         else:
             name = capture.binding
+
+            if name in out_axes:
+                raise_parse_error(f"Axis name {name} occurs multiple times on the rhs", equation, capture.char_range)
+
             out_axes.append(name)
 
-            if name in name_mappings_for_einsum:
-                raise_parse_error(f"Axis name {name} occurs multiple time on the rhs", equation, capture.char_range)
-
-            letter = _assign_letter_to_name(name, name_mappings_for_einsum, used_letters)
-
-            if letter is None:
-                raise_parse_error("Ran out of letters for axis names", equation, capture.char_range)
     spec = _make_einsum_spec(name_mappings_for_einsum, used_letters, arrays, out_axes)
     return spec, out_axes
 
@@ -159,6 +156,8 @@ def _positional_einsum_spec(equation, arrays, lhses, rhs):
                 raise_parse_error("Parenthesized axes are not currently supported", equation, capture.char_range)
             else:
                 name = capture.binding
+                if axis_off >= len(a.axes):
+                    raise ValueError("Mismatched number of axes in einsum")
                 table.bind_alias(name, a.axes[axis_off], equation, capture.char_range)
                 letter = _assign_letter_to_name(name, name_mappings_for_einsum, used_letters)
                 spec += letter
@@ -169,12 +168,16 @@ def _positional_einsum_spec(equation, arrays, lhses, rhs):
             if Ellipsis in lhs.captures[axis_off:]:
                 raise_parse_error("Can't have two ellipses in an einsum", equation, None)
 
+            final_lhs_axis_off = axis_off
+
             axis_off = len(a.axes) - 1
             for capture in reversed(lhs.captures):
                 if capture is Ellipsis:
                     break
                 else:
                     name = capture.binding
+                    if axis_off < final_lhs_axis_off:
+                        raise ValueError("Mismatched number of axes in einsum")
                     table.bind_alias(name, a.axes[axis_off], equation, capture.char_range)
                     letter = _assign_letter_to_name(name, name_mappings_for_einsum, used_letters)
                     spec += letter
@@ -255,8 +258,6 @@ def _make_einsum_spec(name_mappings_for_einsum, used_letters, arrays, out_axes):
             spec += ","
         for axis in operand.axes:
             letter = _assign_letter_to_name(axis.name, name_mappings_for_einsum, used_letters)
-            if letter is None:
-                raise ValueError("Too many axes to contract")
             spec += letter
     spec += "->"
     for out in out_axes:
@@ -275,6 +276,8 @@ def _assign_letter_to_name(name, name_mappings_for_einsum, used_letters):
         for letter in "abcdefghijklmnopqrstuvwxyz":
             if letter not in used_letters:
                 break
+        else:
+            raise ValueError("Too many axes to contract")
     name_mappings_for_einsum[name] = letter
     used_letters.add(letter)
     return letter
