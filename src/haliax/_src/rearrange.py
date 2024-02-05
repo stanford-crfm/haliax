@@ -10,7 +10,7 @@ import jax.numpy as jnp
 from ..axis import Axis, AxisSelector, PartialAxisSpec, axis_name, rearrange_for_partial_order
 from ..core import NamedArray
 from ..partitioning import auto_sharded
-from .parsing import AliasTable, Expression, _raise_error, _resolve_bindings, parse_rearrangement
+from .parsing import AliasTable, Expression, _resolve_bindings, parse_rearrangement, raise_parse_error
 
 
 @typing.overload
@@ -213,7 +213,7 @@ def _determine_final_transpose_and_reshape(
 
         binding = capture.binding
         if binding is None:
-            _raise_error("All rhs axes must have a name. Use (name: bindings)", expression, capture.char_range)
+            raise_parse_error("All rhs axes must have a name. Use (name: bindings)", expression, capture.char_range)
 
         sz = 1
         first_axis = None
@@ -221,13 +221,13 @@ def _determine_final_transpose_and_reshape(
             intermed_axis = aliases.dealias_binding(ax_name)
 
             if not isinstance(intermed_axis, Axis):
-                _raise_error(f"Axis {ax_name} is not bound on the lhs", expression, capture.char_range)
+                raise_parse_error(f"Axis {ax_name} is not bound on the lhs", expression, capture.char_range)
 
             if first_axis is None:
                 first_axis = intermed_axis
 
             if intermed_axis in used_intermediate_axes:
-                _raise_error(f"Axis {intermed_axis} is used more than once", expression, capture.char_range)
+                raise_parse_error(f"Axis {intermed_axis} is used more than once", expression, capture.char_range)
             used_intermediate_axes.add(intermed_axis)
             transposed_intermediate_axes_order.append(intermed_axis)
 
@@ -310,7 +310,7 @@ def _determine_initial_reshape(
             assert not isinstance(capture, EllipsisType)
 
             if axis_pos >= len(array.axes):
-                _raise_error("Too many axes in lhs", expression, capture.char_range)
+                raise_parse_error("Too many axes in lhs", expression, capture.char_range)
 
             axis_index_for_capture[cpos] = axis_pos
             covered_axes.add(axis_pos)
@@ -322,13 +322,13 @@ def _determine_initial_reshape(
             for cpos in range(len(lhs.captures) - 1, ellipsis_pos, -1):
                 capture = lhs.captures[cpos]
                 if capture == Ellipsis:
-                    _raise_error("Only one ellipsis allowed", expression, None)
+                    raise_parse_error("Only one ellipsis allowed", expression, None)
 
                 assert not isinstance(capture, EllipsisType)
 
                 axis_index_for_capture[cpos] = axis_pos
                 if axis_pos in covered_axes:
-                    _raise_error(
+                    raise_parse_error(
                         f"Axis {array.axes[axis_pos]} is bound more than once",
                         expression,
                         capture.char_range,
@@ -338,11 +338,11 @@ def _determine_initial_reshape(
         else:
             # no ellipsis, so we need to check that we covered all axes
             if len(covered_axes) < len(array.axes):
-                _raise_error(
+                raise_parse_error(
                     "Not all axes are bound, use ... to skip missing axes", expression, len(expression) - 1
                 )  # type: ignore
             elif len(covered_axes) > len(array.axes):
-                _raise_error("Too many axes are bound", expression, lhs.captures[-1].char_range)  # type: ignore
+                raise_parse_error("Too many axes are bound", expression, lhs.captures[-1].char_range)  # type: ignore
 
         # now that we have the bindings, we can figure out the new shapes
         for cpos, capture in enumerate(lhs.captures):
@@ -352,11 +352,11 @@ def _determine_initial_reshape(
 
             axis_index = axis_index_for_capture[cpos]
             if axis_index is None:
-                _raise_error("Internal error", expression, capture.char_range)
+                raise_parse_error("Internal error", expression, capture.char_range)
 
             axis = array.axes[axis_index]
             if new_shapes[axis_index] is not None:
-                _raise_error(f"Axis {axis} is bound more than once", expression, capture.char_range)
+                raise_parse_error(f"Axis {axis} is bound more than once", expression, capture.char_range)
 
             new_axes = _solve_split_axes(axis, capture, aliases, used_new_names, expression)
             new_shapes[axis_index] = new_axes  # type: ignore
@@ -371,7 +371,7 @@ def _determine_initial_reshape(
             assert not isinstance(capture, EllipsisType)
 
             if capture.binding is None:
-                _raise_error(
+                raise_parse_error(
                     "Unordered axes must be bound by name, e.g. (a: b) or just a", expression, capture.char_range
                 )
 
@@ -386,14 +386,14 @@ def _determine_initial_reshape(
                 axis = array.resolve_axis(maybe_alias)
                 # aliases.bind_alias(capture.binding, axis, expression, capture.char_range)
             except ValueError:
-                _raise_error(f"Could not resolve axis {maybe_alias}", expression, capture.char_range)
+                raise_parse_error(f"Could not resolve axis {maybe_alias}", expression, capture.char_range)
 
             try:
                 axis_index = array.axes.index(axis)
             except ValueError:
-                _raise_error(f"Axis {axis} is not in the array", expression, capture.char_range)
+                raise_parse_error(f"Axis {axis} is not in the array", expression, capture.char_range)
             if new_shapes[axis_index] is not None:
-                _raise_error(f"Axis {axis} is bound more than once", expression, capture.char_range)
+                raise_parse_error(f"Axis {axis} is bound more than once", expression, capture.char_range)
 
             new_axes = _solve_split_axes(axis, capture, aliases, used_new_names, expression)
             new_shapes[axis_index] = new_axes  # type: ignore
@@ -416,7 +416,7 @@ def _solve_split_axes(axis, capture, aliases, used_new_names, expression):
     if len(capture.axes) == 1:
         new_axis_name = capture.axes[0]
         if new_axis_name in used_new_names:
-            _raise_error(f"Capture {new_axis_name} is assigned more than once", expression, capture.char_range)
+            raise_parse_error(f"Capture {new_axis_name} is assigned more than once", expression, capture.char_range)
         used_new_names.add(new_axis_name)
 
         new_axes.append(axis)
@@ -428,7 +428,9 @@ def _solve_split_axes(axis, capture, aliases, used_new_names, expression):
 
     for new_axis_name in capture.axes:
         if new_axis_name in used_new_names:
-            _raise_error(f"Capture {new_axis_name} is assigned more than once in lhs", expression, capture.char_range)
+            raise_parse_error(
+                f"Capture {new_axis_name} is assigned more than once in lhs", expression, capture.char_range
+            )
 
         used_new_names.add(new_axis_name)
 
@@ -439,11 +441,11 @@ def _solve_split_axes(axis, capture, aliases, used_new_names, expression):
         if isinstance(new_axis, Axis):
             new_axes.append(new_axis)
             if remaining_size % new_axis.size:
-                _raise_error(f"Axes do not divide evenly into axis {axis}", expression, capture.char_range)
+                raise_parse_error(f"Axes do not divide evenly into axis {axis}", expression, capture.char_range)
             remaining_size //= new_axis.size
         else:
             if unsolved_axis_index is not None:
-                _raise_error(
+                raise_parse_error(
                     "Sizes for this split axis are ambiguous. You must provide a size as a kwarg.",
                     expression,
                     capture.char_range,

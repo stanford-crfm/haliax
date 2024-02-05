@@ -88,16 +88,16 @@ def test_rearrange_with_flattening_unordered():
 
 
 def test_rearrange_with_unflatten():
-    assert einops_rearrange(zq, "(Q: B H) d, w c -> B d H w c", B=5).axes == (B, D, H, W, C)
+    assert einops_rearrange(zq, "(Q: B H) d w c -> B d H w c", B=5).axes == (B, D, H, W, C)
     # make sure the values are right too
     z_t = zq.array.reshape((B.size, H.size, D.size, W.size, C.size)).transpose((0, 2, 1, 3, 4))
-    assert (einops_rearrange(zq, "(Q: B H) d, w c -> B d H w c", B=5).array == z_t).all()
+    assert (einops_rearrange(zq, "(Q: B H) d w c -> B d H w c", B=5).array == z_t).all()
 
     # test with explicit axis arg
-    assert einops_rearrange(zq, "(Q: b H) d, w c -> b d H w c", b=B).axes == (B, D, H, W, C)
+    assert einops_rearrange(zq, "(Q: b H) d w c -> b d H w c", b=B).axes == (B, D, H, W, C)
     # make sure the values are right too
     z_t = zq.array.reshape((B.size, H.size, D.size, W.size, C.size)).transpose((0, 2, 1, 3, 4))
-    assert (einops_rearrange(zq, "(Q: b H) d, w c -> b d H w c", b=B).array == z_t).all()
+    assert (einops_rearrange(zq, "(Q: b H) d w c -> b d H w c", b=B).array == z_t).all()
 
 
 def test_rearrange_with_unflatten_unordered():
@@ -246,7 +246,7 @@ def test_examples():
     #  > without rearrange or names: x.reshape((a * b, c, d))
     # split a into b and c
     # * '(a: b c) d -> b c d'
-    assert einops_rearrange(zq, "(q: b h) d, w, c -> b h d w c", b=B, h="H").axes == (B, H, D, W, C)
+    assert einops_rearrange(zq, "(q: b h) d w c -> b h d w c", b=B, h="H").axes == (B, H, D, W, C)
     #  > without rearrange or names: x.reshape((b, c, d))
     # reorder a and b
     # * 'a b ... -> b a ...'

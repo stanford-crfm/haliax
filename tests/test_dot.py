@@ -11,8 +11,8 @@ def test_dot():
     Width = Axis("Width", 3)
     Depth = Axis("Depth", 4)
 
-    m1 = NamedArray(jnp.ones((Height.size, Width.size, Depth.size)), (Height, Width, Depth))
-    m2 = NamedArray(jnp.ones((Depth.size, Width.size, Height.size)), (Depth, Width, Height))
+    m1 = hax.ones((Height, Width, Depth))
+    m2 = hax.ones((Depth, Width, Height))
 
     assert jnp.all(jnp.equal(hax.dot(m1, m2, axis=Height).array, jnp.einsum("ijk,kji->jk", m1.array, m2.array)))
     assert jnp.all(
@@ -42,8 +42,8 @@ def test_dot_string_selection():
     Width = Axis("Width", 3)
     Depth = Axis("Depth", 4)
 
-    m1 = NamedArray(jnp.ones((Height.size, Width.size, Depth.size)), (Height, Width, Depth))
-    m2 = NamedArray(jnp.ones((Depth.size, Width.size, Height.size)), (Depth, Width, Height))
+    m1 = hax.ones((Height, Width, Depth))
+    m2 = hax.ones((Depth, Width, Height))
 
     assert jnp.all(jnp.equal(hax.dot(m1, m2, axis="Height").array, jnp.einsum("ijk,kji->jk", m1.array, m2.array)))
     assert jnp.all(
@@ -67,8 +67,8 @@ def test_dot_errors_if_different_sized_axes():
 
     H2 = Axis("Height", 4)
 
-    m1 = NamedArray(jnp.ones((Height.size, Width.size, Depth.size)), (Height, Width, Depth))
-    m2 = NamedArray(jnp.ones((Depth.size, Width.size, H2.size)), (Depth, Width, H2))
+    m1 = hax.ones((Height, Width, Depth))
+    m2 = hax.ones((Depth, Width, H2))
 
     with pytest.raises(ValueError):
         hax.dot(m1, m2, axis="Height")
@@ -79,8 +79,8 @@ def test_dot_with_output_axes():
     Width = Axis("Width", 3)
     Depth = Axis("Depth", 4)
 
-    m1 = NamedArray(jnp.ones((Height.size, Width.size, Depth.size)), (Height, Width, Depth))
-    m2 = NamedArray(jnp.ones((Depth.size, Width.size, Height.size)), (Depth, Width, Height))
+    m1 = hax.ones((Height, Width, Depth))
+    m2 = hax.ones((Depth, Width, Height))
 
     assert jnp.all(
         jnp.equal(
