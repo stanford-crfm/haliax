@@ -80,6 +80,20 @@ def test_einsum_basic_named():
         )
     )
 
+    assert jnp.all(
+        jnp.equal(
+            einsum("{Height Depth} -> ", m1, m2).array,
+            jnp.einsum("ijk,kji->j", m1.array, m2.array),
+        )
+    )
+
+    assert jnp.all(
+        jnp.equal(
+            einsum("{Height Depth} -> ", m1, m2).array,
+            jnp.einsum("ijk,kji->j", m1.array, m2.array),
+        )
+    )
+
 
 def test_einsum_unordered_ellipses():
     Height = Axis("Height", 2)
