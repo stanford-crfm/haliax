@@ -18,6 +18,7 @@ import haliax.tree_util as tree_util
 import haliax.util as util
 
 from ._src.dot import dot
+from ._src.einsum import einsum
 from ._src.rearrange import rearrange
 from ._src.resource_env import ResourceEnv, current_resource_env, resource_env
 from .axis import (
