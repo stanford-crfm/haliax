@@ -99,47 +99,14 @@ See also the section on [Indexing and Slicing](indexing.md).
 [Binary](#binary-operations) and [unary](#unary-operations) operations are all more or less directly from JAX's NumPy API.
 The only difference is they operate on named arrays instead.
 
-## Matrix Multiplication
+### Matrix Multiplication
 
-The only matrix multiplication operation is [haliax.dot][]. It functionally equivalent
-to [jax.numpy.einsum][] in that it performs generalized matrix multiplication over an
-arbitrary number of axes and one or more arrays. Syntactically, it is more similar to
-reduction operations like [haliax.sum][] and [haliax.mean][].
-
-The [cheat sheet](cheatsheet.md) has a section on [matrix multiplication](cheat_sheet.md#matrix-multiplication)
-that gives a few examples. Here are several more:
-
-```python
-import haliax as hax
-
-H = hax.Axis("H", 3)
-W = hax.Axis("W", 4)
-D = hax.Axis("D", 5)
-C = hax.Axis("C", 6)
-
-x = hax.arange((H, W, D, C))
-w = hax.arange((D, C))
-c = hax.arange((C,))
-
-y = hax.dot(x, c, axis=C) # shape is (H, W, D), equivalent to jnp.dot(x, c)
-
-y = hax.dot(x, w, axis=(D, C))  # shape is (H, W), equivalent to np.einsum("...dc,dc->...", x, w)
-y = hax.dot(x, w, axis=(D, C), out_axes=(W, H)) # shape is (W, H) instead of (H, W)
-y = hax.dot(x, w, c, axis=(D, C)) # shape is (H, W), equivalent to np.einsum("...dc,dc,c->...", x, w, c)
-y = hax.dot(x, c, axis=(H, D, C)) # shape is (W,), equivalent to np.einsum("hwdc,c->w", x, c)
-s = hax.dot(x, w, axis=None)  # scalar output, equivalent to np.einsum("hwdc,dc->", x, w)
-y = hax.dot(x, w, c, axis=())  # shape is (H, W, D, C), equivalent to np.einsum("hwdc,dc,c->hwdc", x, w, c)
-y = hax.dot(x, w, c, axis=(), out_axes=(D, ..., H))  # shape is (D, W, C, H), equivalent to np.einsum("hwdc,dc,c->dwch", x, w, c)
-```
-
-
-
-
-
+See also the page on [Matrix Multiplication](matmul.md) as well as the [cheat sheet section](cheatsheet.md#matrix-multiplication).
 
 ::: haliax.dot
+::: haliax.einsum
 
-### Reductions
+## Reductions
 
 Reduction operations are things like [haliax.sum][] and [haliax.mean][] that reduce an array along one or more axes.
 Except for [haliax.argmin][] and [haliax.argmax][], they all have the form:
@@ -149,14 +116,14 @@ def sum(x, axis: Optional[AxisSelection] = None, where: Optional[NamedArray] = N
     ...
 ```
 
-with the behavior closely mirroring that of JAX's NumPy API. The `axis` argument can
+with the behavior closely following that of JAX's NumPy API. The `axis` argument can
 be a single axis (or axis name), a tuple of axes, or `None` to reduce all axes. The `where` argument is a boolean array
 that specifies which elements to include in the reduction. It must be broadcastable to the input array, using
 Haliax's [broadcasting rules](broadcasting.md).
 
 The result of a reduction operation is always [haliax.NamedArray][] with the reduced axes removed.
 If you reduce all axes, the result is a NamedArray with 0 axes, i.e. a scalar.
-You can convert it to a [jax.numpy.ndarray][] with [NamedArray.scalar][], or just [NamedArray.array][].
+You can convert it to a [jax.numpy.ndarray][] with [haliax.NamedArray.scalar][], or just [haliax.NamedArray.array][].
 
 ::: haliax.all
 ::: haliax.amax
@@ -172,7 +139,7 @@ You can convert it to a [jax.numpy.ndarray][] with [NamedArray.scalar][], or jus
 ::: haliax.sum
 ::: haliax.var
 
-### Axis-Wise Operations
+### Axis-wise Operations
 Axis-wise operations are things like [haliax.cumsum][] and [haliax.sort][] that operate on a single axis of an array but
 don't reduce it.
 
