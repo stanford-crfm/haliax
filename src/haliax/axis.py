@@ -300,7 +300,9 @@ def overlapping_axes(ax1: AxisSelection, ax2: AxisSelection) -> Tuple[AxisSelect
 
 
 def overlapping_axes(ax1: AxisSelection, ax2: AxisSelection) -> Tuple[AxisSelector, ...]:
-    """Returns a tuple of axes that are present in both ax1 and ax2"""
+    """Returns a tuple of axes that are present in both ax1 and ax2.
+    The returned order is the same as ax1.
+    """
     ax2_dict = axis_spec_to_shape_dict(ax2)
     out: List[AxisSelector] = []
     ax1 = ensure_tuple(ax1)
@@ -475,6 +477,42 @@ def rearrange_for_partial_order(partial_order: PartialAxisSpec, axes: tuple[Ax, 
 
     # now we have a list of lists of axis names. we need to flatten it and convert to axes
     return tuple(as_axis(name) for name in sum(out_order, []))
+
+
+def replace_missing_with_ellipsis(ax1: AxisSelection, ax2: AxisSelection) -> PartialAxisSpec:
+    """Returns ax1, except that:
+
+    * any axis not in ax2 is replaced with Ellipsis
+    * if ax1 has a str axis where ax2 has an Axis, then it is replaced with the Axis
+
+    Raises if ax1 and ax2 have any axes with the same name but different sizes
+    """
+    ax2_dict = axis_spec_to_shape_dict(ax2)
+    out: List[AxisSelector | EllipsisType] = []
+    ax1 = ensure_tuple(ax1)
+
+    for ax in ax1:
+        if isinstance(ax, Axis):
+            if ax.name in ax2_dict:
+                sz = ax2_dict[ax.name]
+                if sz is not None and sz != ax.size:
+                    raise ValueError(f"Axis {ax.name} has different sizes in {ax1} and {ax2}")
+                out.append(ax)
+            else:
+                out.append(Ellipsis)
+        elif isinstance(ax, str):
+            if ax in ax2_dict:
+                ax_sz = ax2_dict[ax]
+                if ax_sz is not None:
+                    out.append(Axis(ax, ax_sz))
+                else:
+                    out.append(ax)
+            else:
+                out.append(Ellipsis)
+        else:
+            raise ValueError(f"Invalid axis spec: {ax}")
+
+    return tuple(out)
 
 
 __all__ = [

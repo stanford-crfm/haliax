@@ -45,6 +45,24 @@ def test_conv_basic_equiv_to_eqx():
     assert hax_output.array.shape == eqx_output.shape
     assert jnp.allclose(hax_output.array, eqx_output)
 
+    input = hax.random.normal(
+        jax.random.PRNGKey(1),
+        (
+            hax.Axis("Batch", 2),
+            In,
+            hax.Axis("Height", 5),
+            hax.Axis("Width", 6),
+            hax.Axis("Batch2", 3),
+        ),
+    )
+    hax_output = hax_conv(input).rearrange(("Batch", "Batch2", "Out", "Height", "Width"))
+    eqx_output = eqx.filter_vmap(eqx.filter_vmap(eqx_conv))(
+        input.rearrange(("Batch", "Batch2", "In", "Height", "Width")).array
+    )
+
+    assert hax_output.array.shape == eqx_output.shape
+    assert jnp.allclose(hax_output.array, eqx_output)
+
 
 def test_conv_grouped_equiv_to_eqx():
     key = jax.random.PRNGKey(0)

@@ -5,7 +5,7 @@ import warnings
 from dataclasses import dataclass
 from math import prod
 from types import EllipsisType
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union, overload
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Union, overload
 
 import jax
 import jax.numpy as jnp
@@ -1069,16 +1069,19 @@ def flatten_axes(array: NamedArray, old_axes: AxisSelection, new_axis: AxisSelec
     """
     old_axes = ensure_tuple(old_axes)
     old_axes = array.resolve_axis(old_axes)
-
-    if len(old_axes) == 0:
-        raise ValueError("Must specify at least one axis to merge")
+    total_axis_size = prod(array.axis_size(ax) for ax in old_axes)
 
     if isinstance(new_axis, Axis):
-        if new_axis.size != prod(array.axis_size(ax) for ax in old_axes):
+        if new_axis.size != total_axis_size:
             raise ValueError(f"Cannot merge {old_axes} into {new_axis}: size mismatch")
     else:
         assert isinstance(new_axis, str)
-        new_axis = Axis(new_axis, prod(ax.size for ax in old_axes))
+        new_axis = Axis(new_axis, total_axis_size)
+
+    if len(old_axes) == 0:
+        # just unsqueeze the array
+        new_array = jnp.expand_dims(array.array, axis=0)
+        return NamedArray(new_array, (new_axis,) + array.axes)
 
     # ensure that the old_axes are contiguous
     # we basically ensure that the old_axes occur after the index of the first old_axis
@@ -1391,6 +1394,48 @@ def check_shape(jnp_shape: Sequence[int], hax_axes: AxisSelection) -> Tuple[Axis
     return tuple(result_axes)
 
 
+def flatten_all_axes_but(
+    a: NamedArray, axis_name: str, axis: AxisSelection, reorder_to_front: bool = False
+) -> tuple[NamedArray, Callable[[NamedArray], NamedArray]]:
+    """
+    Flattens all axes of `a` except for `axes`.
+    The flattened axes are merged into a single axis with the name `axis_name`.
+
+    Also returns a function to restore the original axes. This function takes a NamedArray with at least the flattened axes
+    and returns a NamedArray with an order that is broadly consistent with the original order of the axes.
+
+    On TPU, this operation should be free as long as this doesn't impact the last two dims.
+
+    Usually you can just use vmap, but sometimes you actually want there to be exactly 1 batch axis,
+    or it's a pain to do a bunch of vmaps
+
+    """
+
+    result = a.flatten_axes(axis, axis_name)
+
+    if reorder_to_front:
+        result = result.rearrange((axis_name, ...))
+
+    old_axes = a.axes
+    axis = a.resolve_axis(axis)
+
+    del a
+
+    def unflatten(new_a: NamedArray) -> NamedArray:
+        # we want to restore the array to an order that is as consistent as possible with the original order
+        new_a = new_a.unflatten_axis(axis_name, axis)
+        if new_a.axes == old_axes:
+            return new_a
+
+        axes_from_first_array_present_in_new = haliax.axis.replace_missing_with_ellipsis(
+            haliax.axis_name(old_axes), new_a.axes
+        )
+        out_axes = haliax.axis.rearrange_for_partial_order(axes_from_first_array_present_in_new, new_a.axes)
+        return new_a.rearrange(out_axes)
+
+    return result, unflatten
+
+
 __all__ = [
     "NamedArray",
     "named",
@@ -1412,4 +1457,5 @@ __all__ = [
     "enable_shape_checks",
     "are_shape_checks_enabled",
     "check_shape",
+    "flatten_all_axes_but",
 ]
