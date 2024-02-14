@@ -795,3 +795,28 @@ def test_nice_short_string_in_named_array_in_eqx_module():
     mod = TestModule(named1)
 
     assert str(mod).startswith("TestModule(named1=Named(int32{'H': 10, 'W': 20}))")
+
+
+def test_named_arrays_work_in_eqxi_while_loop():
+    H = Axis("H", 10)
+    W = Axis("W", 20)
+
+    named1 = hax.random.uniform(PRNGKey(0), (H, W))
+
+    import equinox.internal as eqxi
+
+    def body_fun(t):
+        i, named1 = t
+        return i + 1, named1 + named1
+
+    def cond_fun(t):
+        i, named1 = t
+        return i < 10
+
+    def loss_fun(named1):
+        i, named1 = eqxi.while_loop(cond_fun, body_fun, (0, named1), kind="checkpointed", max_steps=10)
+        return named1.sum().scalar()
+
+    grad_fun = eqx.filter_value_and_grad(loss_fun)
+
+    grad_fun(named1)

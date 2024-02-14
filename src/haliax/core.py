@@ -128,7 +128,10 @@ class NamedArray:
     @classmethod
     def tree_unflatten(cls, aux, tree: Any) -> Any:
         assert len(tree) == 1
-        return cls(tree[0], axes=aux)
+        # We don't want check shapes b/c there are intermediate states where the shape is wrong
+        # e.g. in eqxi.while_loop
+        with enable_shape_checks(False):
+            return cls(tree[0], axes=aux)
 
     def has_axis(self, axis: AxisSelection) -> bool:
         """Returns true if the given axis is present in this NamedArray."""
