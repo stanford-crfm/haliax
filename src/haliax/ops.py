@@ -45,10 +45,8 @@ def where(
         if fill_value is None or new_axis is None:
             raise ValueError("Must specify both fill_value and new_axis")
         return tuple(
-            [
-                NamedArray(idx, (new_axis,))
-                for idx in jnp.where(condition.array, size=new_axis.size, fill_value=fill_value)
-            ]
+            NamedArray(idx, (new_axis,))
+            for idx in jnp.where(condition.array, size=new_axis.size, fill_value=fill_value)
         )
 
     if jnp.isscalar(condition):
