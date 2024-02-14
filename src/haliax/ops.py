@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import jax
 import jax.numpy as jnp
@@ -32,7 +32,7 @@ def where(
     y: NamedOrNumeric = None,
     fill_value: Optional[int] = None,
     new_axis: Optional[Axis] = None,
-) -> NamedArray | Tuple[NamedArray, ...]:
+) -> NamedArray | tuple[NamedArray, ...]:
     """Like jnp.where, but with named axes."""
 
     if (x is None) != (y is None):
