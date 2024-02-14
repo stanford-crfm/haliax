@@ -518,7 +518,7 @@ class NamedArray:
         # types when they're in PyTrees
         if self.array is None:
             return other.array is None
-        if other.array is None:
+        if hasattr(other, "array") and other.array is None:
             return False
 
         return haliax.equal(self, other)

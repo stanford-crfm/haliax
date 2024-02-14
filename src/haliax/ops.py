@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Optional, Union
 
 import jax
 import jax.numpy as jnp
@@ -26,12 +26,28 @@ def trace(array: NamedArray, axis1: AxisSelector, axis2: AxisSelector, offset=0,
     return NamedArray(inner, axes)
 
 
-def where(condition: Union[NamedOrNumeric, bool], x: NamedOrNumeric, y: NamedOrNumeric) -> NamedArray:
-    """Like jnp.where, but with named axes. This version currently only accepts the three argument form."""
+def where(
+    condition: Union[NamedOrNumeric, bool],
+    x: NamedOrNumeric = None,
+    y: NamedOrNumeric = None,
+    fill_value: Optional[int] = None,
+    new_axis: Optional[Axis] = None,
+) -> NamedArray | tuple[NamedArray, ...]:
+    """Like jnp.where, but with named axes."""
 
-    # TODO: support the one argument form
-    # if (x is None) != (y is None):
-    #     raise ValueError("Must either specify both x and y, or neither")
+    if (x is None) != (y is None):
+        raise ValueError("Must either specify both x and y, or neither")
+
+    # one argument form
+    if (x is None) and (y is None):
+        if not isinstance(condition, NamedArray):
+            raise ValueError(f"condition {condition} must be a NamedArray in single argument mode")
+        if fill_value is None or new_axis is None:
+            raise ValueError("Must specify both fill_value and new_axis")
+        return tuple(
+            NamedArray(idx, (new_axis,))
+            for idx in jnp.where(condition.array, size=new_axis.size, fill_value=fill_value)
+        )
 
     if jnp.isscalar(condition):
         if x is None:

@@ -136,6 +136,12 @@ def test_where():
     with pytest.raises(ValueError):
         _ = hax.where(named5 > named6, named5, named6)
 
+    # now single argument mode
+    Volume = hax.Axis("Volume", Height.size * Width.size * Depth.size)
+    named7 = hax.random.uniform(PRNGKey(0), (Height, Width, Depth))
+    named8, named9, named10 = hax.where(named7 > 0.5, fill_value=-1, new_axis=Volume)
+    assert jnp.all((named7[{"Height": named8, "Width": named9, "Depth": named10}] > 0.5).array)
+
 
 def test_clip():
     Height = Axis("Height", 10)
