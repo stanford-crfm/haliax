@@ -1214,6 +1214,7 @@ def flatten(array: NamedArray, new_axis_name: AxisSelector) -> NamedArray:
 
 def named(a: jnp.ndarray, axis: AxisSelection) -> NamedArray:
     """Creates a NamedArray from a numpy array and a list of axes."""
+    a = jnp.asarray(a)
     axes = check_shape(a.shape, axis)
     return NamedArray(a, axes)
 

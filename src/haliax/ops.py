@@ -1,3 +1,4 @@
+import typing
 from typing import Optional, Union
 
 import jax
@@ -5,6 +6,7 @@ import jax.numpy as jnp
 
 from .axis import Axis, AxisSelector
 from .core import NamedArray, NamedOrNumeric, broadcast_arrays, broadcast_arrays_and_return_axes
+from .jax_utils import is_scalarish
 
 
 def trace(array: NamedArray, axis1: AxisSelector, axis2: AxisSelector, offset=0, dtype=None) -> NamedArray:
@@ -26,10 +28,29 @@ def trace(array: NamedArray, axis1: AxisSelector, axis2: AxisSelector, offset=0,
     return NamedArray(inner, axes)
 
 
+@typing.overload
+def where(
+    condition: NamedOrNumeric | bool,
+    x: NamedOrNumeric,
+    y: NamedOrNumeric,
+) -> NamedArray:
+    ...
+
+
+@typing.overload
+def where(
+    condition: NamedArray,
+    *,
+    fill_value: int,
+    new_axis: Axis,
+) -> tuple[NamedArray, ...]:
+    ...
+
+
 def where(
     condition: Union[NamedOrNumeric, bool],
-    x: NamedOrNumeric = None,
-    y: NamedOrNumeric = None,
+    x: Optional[NamedOrNumeric] = None,
+    y: Optional[NamedOrNumeric] = None,
     fill_value: Optional[int] = None,
     new_axis: Optional[Axis] = None,
 ) -> NamedArray | tuple[NamedArray, ...]:
@@ -49,25 +70,22 @@ def where(
             for idx in jnp.where(condition.array, size=new_axis.size, fill_value=fill_value)
         )
 
-    if jnp.isscalar(condition):
+    if is_scalarish(condition):
         if x is None:
             raise ValueError("Must specify x and y when condition is a scalar")
         return jax.lax.cond(condition, lambda _: x, lambda _: y, None)
 
+    condition, x, y = broadcast_arrays(condition, x, y)  # type: ignore
+
     assert isinstance(condition, NamedArray)
 
-    if jnp.isscalar(x):
-        x = NamedArray(jnp.broadcast_to(x, condition.array.shape), condition.axes)
+    def _array_if_named(x):
+        if isinstance(x, NamedArray):
+            return x.array
+        return x
 
-    assert isinstance(x, NamedArray)
-
-    if jnp.isscalar(y):
-        y = NamedArray(jnp.broadcast_to(y, condition.array.shape), condition.axes)
-
-    assert isinstance(y, NamedArray)
-
-    condition, x, y = broadcast_arrays(condition, x, y)  # type: ignore
-    return NamedArray(jnp.where(condition.array, x.array, y.array), condition.axes)
+    raw = jnp.where(condition.array, _array_if_named(x), _array_if_named(y))
+    return NamedArray(raw, condition.axes)
 
 
 def clip(array: NamedOrNumeric, a_min: NamedOrNumeric, a_max: NamedOrNumeric) -> NamedArray:
