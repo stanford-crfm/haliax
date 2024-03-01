@@ -175,6 +175,47 @@ def stack(axis: AxisSelector, arrays: Sequence[NamedArray]) -> NamedArray:
     return NamedArray(jnp.stack([a.array for a in arrays], axis=0), (axis,) + arrays[0].axes)
 
 
+def repeat(
+    a: NamedArray, repeats: int | jnp.ndarray, axis: AxisSelector, total_repeat_length: Optional[int] = None
+) -> NamedArray:
+    """Version of [jax.numpy.repeat][] that returns a NamedArray"""
+    index = a._lookup_indices(axis)
+    if index is None:
+        raise ValueError(f"Axis {axis} not found in array {a}")
+
+    return named(
+        jnp.repeat(a.array, repeats, axis=index, total_repeat_length=total_repeat_length),
+        a.axes[:index] + (axis_name(axis),) + a.axes[index + 1 :],
+    )
+
+
+def tile(a: NamedArray, reps: dict[AxisSelector, int]) -> NamedArray:
+    """
+    Version of [jax.numpy.tile][] that returns a NamedArray.
+
+    As with the non-named tile, you can add new axes by passing a dict with an axis name as the key
+    and the number of reps as the value. The size of the axis (if it exists) will be ignored for new dims.
+    That is, the size of the resulting axis will be the number of reps for a new axis, and the size of the
+    original axis times the number of reps for an existing axis.
+    """
+    # we need to convert the reps to a sequence of ints
+    new_dims = []
+    dim_reps = [1] * len(a.axes)
+    for ax, i in reps.items():
+        index = a._lookup_indices(ax)
+        if index is None:
+            new_dims.append(Axis(axis_name(ax), i))
+        else:
+            dim_reps[index] = i
+
+    if len(new_dims) > 0:
+        dim_reps = [ax.size for ax in new_dims] + dim_reps
+
+    out_axes = tuple(new_dims) + tuple(ax.name for ax in a.axes)
+
+    return named(jnp.tile(a.array, dim_reps), out_axes)
+
+
 def concatenate(axis: AxisSelector, arrays: Sequence[NamedArray]) -> NamedArray:
     """Version of [jax.numpy.concatenate][] that returns a NamedArray. The returns array will have the same axis names in the
     same order as the first, with the selected axis extended by the sum of the sizes of the selected axes in the
