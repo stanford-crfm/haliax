@@ -99,11 +99,14 @@ See also the section on [Indexing and Slicing](indexing.md).
 [Binary](#binary-operations) and [unary](#unary-operations) operations are all more or less directly from JAX's NumPy API.
 The only difference is they operate on named arrays instead.
 
-## Matrix Multiplication
+### Matrix Multiplication
+
+See also the page on [Matrix Multiplication](matmul.md) as well as the [cheat sheet section](cheatsheet.md#matrix-multiplication).
 
 ::: haliax.dot
+::: haliax.einsum
 
-### Reductions
+## Reductions
 
 Reduction operations are things like [haliax.sum][] and [haliax.mean][] that reduce an array along one or more axes.
 Except for [haliax.argmin][] and [haliax.argmax][], they all have the form:
@@ -113,10 +116,14 @@ def sum(x, axis: Optional[AxisSelection] = None, where: Optional[NamedArray] = N
     ...
 ```
 
-with the behavior closely mirroring that of JAX's NumPy API. The `axis` argument can
+with the behavior closely following that of JAX's NumPy API. The `axis` argument can
 be a single axis (or axis name), a tuple of axes, or `None` to reduce all axes. The `where` argument is a boolean array
 that specifies which elements to include in the reduction. It must be broadcastable to the input array, using
 Haliax's [broadcasting rules](broadcasting.md).
+
+The result of a reduction operation is always [haliax.NamedArray][] with the reduced axes removed.
+If you reduce all axes, the result is a NamedArray with 0 axes, i.e. a scalar.
+You can convert it to a [jax.numpy.ndarray][] with [haliax.NamedArray.scalar][], or just [haliax.NamedArray.array][].
 
 ::: haliax.all
 ::: haliax.amax
@@ -132,7 +139,7 @@ Haliax's [broadcasting rules](broadcasting.md).
 ::: haliax.sum
 ::: haliax.var
 
-### Axis-Wise Operations
+### Axis-wise Operations
 Axis-wise operations are things like [haliax.cumsum][] and [haliax.sort][] that operate on a single axis of an array but
 don't reduce it.
 

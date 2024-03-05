@@ -8,66 +8,6 @@ import haliax as hax
 from haliax import Axis, NamedArray
 
 
-def test_dot():
-    Height = Axis("Height", 2)
-    Width = Axis("Width", 3)
-    Depth = Axis("Depth", 4)
-
-    m1 = NamedArray(jnp.ones((Height.size, Width.size, Depth.size)), (Height, Width, Depth))
-    m2 = NamedArray(jnp.ones((Depth.size, Width.size, Height.size)), (Depth, Width, Height))
-
-    assert jnp.all(jnp.equal(hax.dot(Height, m1, m2).array, jnp.einsum("ijk,kji->jk", m1.array, m2.array)))
-    assert jnp.all(
-        jnp.equal(
-            hax.dot((Height, Width), m1, m2).array,
-            jnp.einsum("ijk,kji->k", m1.array, m2.array),
-        )
-    )
-    assert jnp.all(
-        jnp.equal(
-            hax.dot((Height, Width, Depth), m1, m2).array,
-            jnp.einsum("ijk,kji->", m1.array, m2.array),
-        )
-    )
-
-
-def test_dot_string_selection():
-    Height = Axis("Height", 2)
-    Width = Axis("Width", 3)
-    Depth = Axis("Depth", 4)
-
-    m1 = NamedArray(jnp.ones((Height.size, Width.size, Depth.size)), (Height, Width, Depth))
-    m2 = NamedArray(jnp.ones((Depth.size, Width.size, Height.size)), (Depth, Width, Height))
-
-    assert jnp.all(jnp.equal(hax.dot("Height", m1, m2).array, jnp.einsum("ijk,kji->jk", m1.array, m2.array)))
-    assert jnp.all(
-        jnp.equal(
-            hax.dot(("Height", "Width"), m1, m2).array,
-            jnp.einsum("ijk,kji->k", m1.array, m2.array),
-        )
-    )
-    assert jnp.all(
-        jnp.equal(
-            hax.dot(("Height", "Width", "Depth"), m1, m2).array,
-            jnp.einsum("ijk,kji->", m1.array, m2.array),
-        )
-    )
-
-
-def test_dot_errors_if_different_sized_axes():
-    Height = Axis("Height", 2)
-    Width = Axis("Width", 3)
-    Depth = Axis("Depth", 4)
-
-    H2 = Axis("Height", 4)
-
-    m1 = NamedArray(jnp.ones((Height.size, Width.size, Depth.size)), (Height, Width, Depth))
-    m2 = NamedArray(jnp.ones((Depth.size, Width.size, H2.size)), (Depth, Width, H2))
-
-    with pytest.raises(ValueError):
-        hax.dot("Height", m1, m2)
-
-
 def test_unary_np_functions():
     Height = Axis("Height", 2)
     Width = Axis("Width", 3)
@@ -98,7 +38,7 @@ def test_reduction_functions():
     m1 = NamedArray(rand_m, (Height, Width, Depth))
 
     # sum out everything
-    assert jnp.all(jnp.equal(hax.sum(m1).array, jnp.sum(m1.array)))
+    assert jnp.all(jnp.equal(hax.sum(m1), jnp.sum(m1.array)))
     # ensure it's a scalar
 
     assert jnp.all(jnp.equal(hax.sum(m1, axis=Height).array, jnp.sum(m1.array, axis=0)))
@@ -124,7 +64,7 @@ def test_reduction_functions():
     )
 
     # argmax
-    assert jnp.all(jnp.equal(hax.argmax(m1).array, jnp.argmax(m1.array)))
+    assert jnp.all(jnp.equal(hax.argmax(m1, axis=None), jnp.argmax(m1.array)))
     assert jnp.all(jnp.equal(hax.argmax(m1, axis=Height).array, jnp.argmax(m1.array, axis=0)))
 
 
@@ -141,7 +81,7 @@ def test_reduction_functions_with_where():
     jmask = m1.array > 0.5
 
     # sum out everything
-    assert jnp.all(jnp.equal(hax.sum(m1, where=mask).array, jnp.sum(rand_m, where=jmask)))
+    assert jnp.all(jnp.equal(hax.sum(m1, where=mask), jnp.sum(rand_m, where=jmask)))
     # ensure it's a scalar
 
     assert jnp.all(jnp.equal(hax.sum(m1, axis=H, where=mask).array, jnp.sum(rand_m, axis=0, where=jmask)))
@@ -336,9 +276,7 @@ def test_rearrange():
     # test ellipsis
     assert jnp.all(jnp.equal(hax.rearrange(named1, (C, ..., D)).array, jnp.transpose(named1.array, (3, 0, 1, 2))))
 
-    # test errors for double ellipsis
-    with pytest.raises(ValueError):
-        hax.rearrange(named1, (C, ..., ...))
+    # this should be ok now
 
     # test errors for multiply specified axes
     with pytest.raises(ValueError):
@@ -352,6 +290,16 @@ def test_rearrange():
     # test for missing axes
     with pytest.raises(ValueError):
         hax.rearrange(named1, (C, W, D))
+
+    # test double ellipsis
+    assert hax.rearrange(named1, (C, ..., ...)).axes == (C, H, W, D)
+
+    # test ellipses in different places
+    assert hax.rearrange(named1, (..., C, ..., W)).axes == (H, D, C, W)
+
+    assert hax.rearrange(named1, (..., H, ..., D)).axes == (H, W, C, D)
+
+    assert hax.rearrange(named1, (D, ..., H, ...)).axes == (D, H, W, C)
 
 
 def test_rearrange_unused_ellipsis():
@@ -575,8 +523,8 @@ def test_index():
 
     named1 = hax.random.uniform(PRNGKey(0), (H, W, D))
 
-    assert jnp.all(jnp.equal(hax.index(named1, {"H": slice(0, 10, 2)}).array, named1.array[0:10:2, :, :]))
-    assert hax.index(named1, {"H": slice(0, 10, 2)}).axes == (Axis("H", 5), W, D)
+    assert jnp.all(jnp.equal(hax.index(named1, {"H": slice(0, 10, 2)}).array, named1.array[0:10:2, :, :]))  # type: ignore
+    assert hax.index(named1, {"H": slice(0, 10, 2)}).axes == (Axis("H", 5), W, D)  # type: ignore
 
     # try indexing syntax
     assert jnp.all(jnp.equal(named1[{"H": slice(0, 10, 2)}].array, named1.array[0:10:2, :, :]))
@@ -701,7 +649,7 @@ def test_slice_nd_array_present_dims():
     assert jnp.all(jnp.equal(named1[{"H": index2}].array, named1.array[index2.array, :, :]))
 
 
-def test_full_indexing_returns_scalar():
+def test_full_indexing_returns_named_array():
     H = Axis("H", 10)
     W = Axis("W", 20)
     D = Axis("D", 30)
@@ -709,8 +657,8 @@ def test_full_indexing_returns_scalar():
     named1 = hax.random.uniform(PRNGKey(0), (H, W, D))
     sliced = named1[{"H": 0, "W": 0, "D": 0}]
 
-    assert isinstance(sliced, jnp.ndarray)
-    assert sliced.shape == ()
+    assert isinstance(sliced, NamedArray)
+    assert sliced.shape == {}
 
 
 def test_indexing_bug_from_docs():

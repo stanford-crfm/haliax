@@ -57,7 +57,7 @@ def dot_product_attention_weights(
         query = query.astype(attention_dtype)
         key = key.astype(attention_dtype)
 
-    weights = haliax.dot(Key, query, key, precision=precision)
+    weights = haliax.dot(query, key, precision=precision, axis=Key)
 
     if bias is not None:
         weights = weights + bias
@@ -115,7 +115,7 @@ def dot_product_attention(
         Key, KPos, query, key, mask=mask, bias=bias, attention_dtype=attention_dtype, precision=precision
     )
 
-    return haliax.dot(KPos, weights, value)
+    return haliax.dot(weights, value, axis=KPos)
 
 
 def self_attention(

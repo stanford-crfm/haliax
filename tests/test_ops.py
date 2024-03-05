@@ -203,12 +203,25 @@ def test_mean_respects_where():
     named1 = hax.random.uniform(PRNGKey(0), (Height, Width))
     where = hax.random.uniform(PRNGKey(1), (Height, Width)) > 0.5
 
-    assert not jnp.all(jnp.isclose(hax.mean(named1).array, hax.mean(named1, where=where).array))
-    assert jnp.all(jnp.isclose(hax.mean(named1, where=where).array, jnp.mean(named1.array, where=where.array)))
+    assert not jnp.all(jnp.isclose(hax.mean(named1), hax.mean(named1, where=where)))
+    assert jnp.all(jnp.isclose(hax.mean(named1, where=where), jnp.mean(named1.array, where=where.array)))
 
     # check broadcasting
     where = hax.random.uniform(PRNGKey(2), (Height,)) > 0.5
-    assert not jnp.all(jnp.isclose(hax.mean(named1).array, hax.mean(named1, where=where).array))
+    assert not jnp.all(jnp.isclose(hax.mean(named1), hax.mean(named1, where=where)))
     assert jnp.all(
-        jnp.isclose(hax.mean(named1, where=where).array, jnp.mean(named1.array, where=where.array.reshape((-1, 1))))
+        jnp.isclose(hax.mean(named1, where=where), jnp.mean(named1.array, where=where.array.reshape((-1, 1))))
     )
+
+
+def test_reductions_produce_scalar_named_arrays_when_None_axis():
+    Height = Axis("Height", 10)
+    Width = Axis("Width", 3)
+
+    named1 = hax.random.uniform(PRNGKey(0), (Height, Width))
+
+    assert isinstance(hax.mean(named1, axis=None), NamedArray)
+
+    # But if we specify axes, we always get a NamedArray, even if it's a scalar
+    assert isinstance(hax.mean(named1, axis=("Height", "Width")), NamedArray)
+    assert hax.mean(named1, axis=("Height", "Width")).axes == ()

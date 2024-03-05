@@ -93,6 +93,11 @@ y = hax.rearrange(x, "{(N: step microbatch) ...} -> step microbatch ...", step=4
 # merging dims requires a name
 x = hax.rearrange(y, "step microbatch ... -> (N: step microbatch) ...")
 
+# you can partially specify the order by using two or more ellipses on the rhs
+y = hax.rearrange(x, "{H W} -> ... (F: H W) ...")
+y = hax.rearrange(x, "{H W C} -> ... (F: H W) ... C")  # ensures C is the last dimension
+
+
 # some fancier examples
 
 # split into patches
@@ -153,9 +158,9 @@ A note on "axis variable" vs "axis name": the former is an identifier that can r
 by **position** in the input, while the latter is an identifier that refers to a specific axis and is matched by **name** in the input
 (or used to name an axis in the output).
 
-The `rhs` is always ordered. Its syntax is similar to an ordered `lhs`, except that merged axes must always be named.
+The `rhs` is always ordered. Its syntax is similar to an ordered `lhs`, except that merged axes must always be named and there may be more than one ellipsis.
 
-* *rhs* is a sequence of axis variable names or named merged axes, separated by spaces or commas, and up to one ellipsis.
+* *rhs* is a sequence of axis variable names or named merged axes, separated by spaces or commas, and some number of ellipses.
 
 * *Named merged axes* are parenthesized expressions of the form `(name: ident ident ...)`, where `name` is an axis name and `ident` is an identifier.
 The name is used to name the merged axis in the output, and the `ident` are axis variable names that are merged from the input.

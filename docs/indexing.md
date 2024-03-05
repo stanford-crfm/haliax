@@ -90,7 +90,7 @@ q = hax.arange(N)
 def f(x, slice_size: int):
     num_blocks = N.size // slice_size
     def body(i, m):
-        return i + hax.mean(x["N", hax.dslice(i * slice_size, slice_size)]).scalar()
+        return i + hax.mean(x["N", hax.dslice(i * slice_size, slice_size)])
     jax.lax.fori_loop(0, num_blocks, body, 0.0)
 
 f(q, 2)
@@ -111,7 +111,7 @@ q = hax.arange(N)
 def f(x, slice_size: int):
     num_blocks = N.size // slice_size
     def body(i, m):
-        return i + hax.mean(x["N", hax.ds.block(i, slice_size)]).scalar()
+        return i + hax.mean(x["N", hax.ds.block(i, slice_size)])
     jax.lax.fori_loop(0, num_blocks, body, 0.0)
 
 f(q, 2)

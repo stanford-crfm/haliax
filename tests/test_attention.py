@@ -82,10 +82,10 @@ def test_alibi_attention_bias():
     weights_bias = dot_product_attention_weights(Hid, KeyPos, query, key, bias=bias)
     weights_no_bias = dot_product_attention_weights(Hid, KeyPos, query, key)
 
-    assert weights_bias.take(KeyPos, -1).item() > weights_bias.take(KeyPos, -2).item()
-    assert weights_bias.take(KeyPos, -1).item() > weights_no_bias.take(KeyPos, -1).item()
+    assert weights_bias[KeyPos, -1] > weights_bias[KeyPos, -2]
+    assert weights_bias[KeyPos, -1] > weights_no_bias[KeyPos, -1]
 
-    assert weights_no_bias.take(KeyPos, -1).item() == weights_no_bias.take(KeyPos, -2).item()
+    assert weights_no_bias[KeyPos, -1] == weights_no_bias[KeyPos, -2]
 
 
 @skip_if_no_torch
@@ -125,9 +125,7 @@ def test_fcm_attention_mask():
     weights = dot_product_attention_weights(Head, KeyPos, query, key, mask=mask)
 
     # check that all masked out values are zero
-    # TODO: think about how to make this work with named arrays
-    weights = weights.rearrange((KeyPos, QueryPos)).array
-    mask = mask.array
+    weights = weights.rearrange((KeyPos, QueryPos))
 
-    assert weights[mask == 0].sum() == 0
-    assert weights[mask == 1].sum() > 0
+    assert (weights * (mask == 0)).sum() == 0
+    assert (weights * (mask == 1)).sum() > 0

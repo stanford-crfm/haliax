@@ -6,10 +6,11 @@ from jaxtyping import PRNGKeyArray
 
 import haliax as hax
 
-from ..axis import Axis
+from ..axis import Axis, AxisSpec
 from ..core import NamedArray
 from ..jax_utils import named_call
 from ..tree_util import resize_axis
+from ..util import ensure_tuple
 
 
 class Embedding(eqx.Module):
@@ -17,24 +18,24 @@ class Embedding(eqx.Module):
 
     # axes
     Vocab: Axis = eqx.static_field()
-    Embed: Axis = eqx.static_field()
+    Embed: AxisSpec = eqx.static_field()
 
-    # TODO: should allow axisspec for Embed
     @staticmethod
-    def init(Vocab: Axis, Embed: Axis, initializer_range: float = 0.02, *, key):
-        weight = hax.random.normal(key, (Vocab, Embed)) * initializer_range
+    def init(Vocab: Axis, Embed: AxisSpec, initializer_range: float = 0.02, *, key):
+        all_axes = (Vocab,) + ensure_tuple(Embed)
+        weight = hax.random.normal(key, all_axes) * initializer_range
         return Embedding(weight=weight, Vocab=Vocab, Embed=Embed)
 
-    @named_call
     def __call__(self, input_ids, *, key: Optional[PRNGKeyArray] = None):
         return self.embed(input_ids)
 
+    @named_call
     def embed(self, input_ids):
         input_embeds = self.weight.take(self.Vocab, input_ids)
         return input_embeds
 
     def unembed(self, input_embeds):
-        return input_embeds.dot(self.Embed, self.weight)
+        return input_embeds.dot(self.weight, axis=self.Embed)
 
     def resize_embeddings(self, new_size: int, key: Optional[PRNGKeyArray] = None):
         new_weights = resize_axis(self.weight, self.Vocab, new_size, key=key)

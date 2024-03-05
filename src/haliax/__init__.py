@@ -3,7 +3,12 @@ from typing import Optional, Sequence
 
 import jax
 import jax.numpy as jnp
-from jax._src.typing import DTypeLike
+
+
+try:
+    from jax.typing import DTypeLike
+except ImportError:
+    from jax._src.typing import DTypeLike
 
 import haliax.debug as debug
 import haliax.nn as nn
@@ -11,6 +16,8 @@ import haliax.random as random
 import haliax.tree_util as tree_util
 import haliax.util as util
 
+from ._src.dot import dot
+from ._src.einsum import einsum
 from ._src.rearrange import rearrange
 from .axis import (
     Axis,
@@ -32,7 +39,6 @@ from .core import (
     broadcast_arrays,
     broadcast_axis,
     broadcast_to,
-    dot,
     enable_shape_checks,
     flatten,
     flatten_axes,
@@ -107,7 +113,7 @@ def full_like(a: NamedArray, fill_value: T, dtype: Optional[DTypeLike] = None) -
     return NamedArray(jnp.full_like(a.array, fill_value, dtype=dtype), a.axes)
 
 
-def arange(axis: Axis, *, start: int = 0, step: int = 1, dtype: Optional[DTypeLike] = None) -> NamedArray:
+def arange(axis: Axis, *, start=0, step=1, dtype: Optional[DTypeLike] = None) -> NamedArray:
     """Version of jnp.arange that returns a NamedArray"""
     # if start is a tracer, we need to be a bit cleverer since arange doesn't support tracers
     # return NamedArray(jnp.arange(start, stop, step, dtype=dtype), (axis,))
@@ -508,11 +514,11 @@ def any(array: NamedArray, axis: Optional[AxisSelection] = None, *, where: Optio
     return wrap_reduction_call(jnp.any, array, axis, where, single_axis_only=False, supports_where=True)
 
 
-def argmax(array: NamedArray, axis: Optional[AxisSelector] = None) -> NamedArray:
+def argmax(array: NamedArray, axis: Optional[AxisSelector]) -> NamedArray:
     return wrap_reduction_call(jnp.argmax, array, axis, None, single_axis_only=True, supports_where=False)
 
 
-def argmin(array: NamedArray, axis: Optional[AxisSelector] = None) -> NamedArray:
+def argmin(array: NamedArray, axis: Optional[AxisSelector]) -> NamedArray:
     return wrap_reduction_call(jnp.argmin, array, axis, None, single_axis_only=True, supports_where=False)
 
 
@@ -544,16 +550,6 @@ def prod(
     return wrap_reduction_call(jnp.prod, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype)
 
 
-def ptp(array: NamedArray, axis: Optional[AxisSelection] = None, *, where: Optional[NamedArray] = None) -> NamedArray:
-    return wrap_reduction_call(jnp.ptp, array, axis, where, single_axis_only=False, supports_where=True)
-
-
-def product(
-    array: NamedArray, axis: Optional[AxisSelection] = None, *, where: Optional[NamedArray] = None
-) -> NamedArray:
-    return wrap_reduction_call(jnp.product, array, axis, where, single_axis_only=False, supports_where=True)
-
-
 def std(
     array: NamedArray,
     axis: Optional[AxisSelection] = None,
@@ -564,6 +560,22 @@ def std(
 ) -> NamedArray:
     return wrap_reduction_call(
         jnp.std, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype, ddof=ddof
+    )
+
+
+def ptp(array: NamedArray, axis: Optional[AxisSelection] = None, *, where: Optional[NamedArray] = None) -> NamedArray:
+    return wrap_reduction_call(jnp.ptp, array, axis, where, single_axis_only=False, supports_where=True)
+
+
+def product(
+    array: NamedArray,
+    axis: Optional[AxisSelection] = None,
+    *,
+    where: Optional[NamedArray] = None,
+    dtype: Optional[DTypeLike] = None,
+) -> NamedArray:
+    return wrap_reduction_call(
+        jnp.product, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype
     )
 
 
@@ -596,30 +608,33 @@ def var(
 # "Normalization" functions that use an axis but don't change the shape
 
 
-def cumsum(a: NamedArray, axis: Optional[AxisSelector] = None, dtype: Optional[DTypeLike] = None) -> NamedArray:
+def cumsum(a: NamedArray, axis: AxisSelector, *, dtype: Optional[DTypeLike] = None) -> NamedArray:
     """
     Named version of [jax.numpy.cumsum](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.cumsum.html)
     """
     return wrap_axiswise_call(jnp.cumsum, a, axis, dtype=dtype, single_axis_only=True)
 
 
-def cumprod(a: NamedArray, axis: Optional[AxisSelector] = None, dtype: Optional[DTypeLike] = None) -> NamedArray:
+def cumprod(a: NamedArray, axis: AxisSelector, dtype: Optional[DTypeLike] = None) -> NamedArray:
     """
     Named version of [jax.numpy.cumprod](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.cumprod.html)
     """
     return wrap_axiswise_call(jnp.cumprod, a, axis, dtype=dtype, single_axis_only=True)
 
 
-def sort(a: NamedArray, axis: Optional[AxisSelector] = None) -> NamedArray:
+def sort(a: NamedArray, axis: AxisSelector) -> NamedArray:
     """
     Named version of [jax.numpy.sort](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.sort.html)
     """
     return wrap_axiswise_call(jnp.sort, a, axis, single_axis_only=True)
 
 
-def argsort(a: NamedArray, axis: Optional[AxisSelector] = None) -> NamedArray:
+def argsort(a: NamedArray, axis: AxisSelector) -> NamedArray:
     """
-    Named version of [jax.numpy.argsort](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.argsort.html)
+    Named version of [jax.numpy.argsort](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.argsort.html).
+
+    If `axis` is None, the returned array will be a 1D array of indices that would sort the flattened array,
+    identical to `jax.numpy.argsort(a.array)`.
     """
     return wrap_axiswise_call(jnp.argsort, a, axis, single_axis_only=True)
 

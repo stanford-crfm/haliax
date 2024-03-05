@@ -74,6 +74,19 @@ def test_scan_static_args():
     assert jnp.all(jnp.equal(selected.array, named1.take(Width, 2).rearrange(selected.axes).array))
 
 
+def test_scan_doesnt_scan_scalars():
+    Height = Axis("Height", 10)
+    named1 = hax.random.uniform(PRNGKey(0), (Height,))
+
+    def scan_fun(acc, z, x):
+        return acc + z * x, x * z
+
+    total, selected = hax.scan(scan_fun, Height)(0.0, 4.0, named1)
+
+    assert jnp.all(jnp.isclose(total, jnp.sum(named1.array * 4.0)))
+    assert jnp.all(jnp.equal(selected.array, named1.array * 4.0))
+
+
 def test_reduce():
     Height = Axis("Height", 10)
     Width = Axis("Width", 3)
@@ -116,6 +129,17 @@ def test_reduce_static_args():
     total = hax.fold(fold_fun, Depth)(acc, named1, True, static2=False)
 
     assert jnp.all(jnp.isclose(total.rearrange(acc.axes).array, jnp.sum(named1.array, axis=2)))
+
+
+def test_reduce_doesnt_reduce_scalars():
+    Height = Axis("Height", 10)
+    named1 = hax.random.uniform(PRNGKey(0), (Height,))
+
+    acc = hax.zeros((Height,))
+
+    total = hax.fold(lambda x, z, y: x + z * y, Height)(acc, 4.0, named1)
+
+    assert jnp.all(jnp.isclose(total.rearrange(acc.axes).array, jnp.sum(named1.array * 4.0)))
 
 
 def test_vmap_unmapped_args():
@@ -193,10 +217,10 @@ def test_vmap_str_args():
     assert selected.axes == expected_names
 
     # also ensure that this works when we return a non-haliax array
-    def vmap_fun(x):
+    def vmap_fun2(x):
         return x.sum(Width).array
 
-    selected = hax.vmap(vmap_fun, "Batch")(named1)
+    selected = hax.vmap(vmap_fun2, "Batch")(named1)
 
     assert jnp.all(jnp.equal(selected, expected_jax))
 

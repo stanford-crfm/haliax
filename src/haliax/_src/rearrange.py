@@ -2,249 +2,15 @@
 import dataclasses
 import typing
 from types import EllipsisType
-from typing import Mapping, NoReturn, Optional, Sequence
+from typing import Mapping, Optional, Sequence
 
 import jax.lax
 import jax.numpy as jnp
 
-from ..axis import Axis, AxisSelector, axis_name
+from ..axis import Axis, AxisSelector, PartialAxisSpec, axis_name, rearrange_for_partial_order
 from ..core import NamedArray
-from ..partitioning import shard
-
-
-@dataclasses.dataclass
-class _AxisCapture:
-    binding: Optional[str] = None
-    axes: tuple[str, ...] = ()
-    char_range: Optional[tuple[int, int]] = None
-
-    def __post_init__(self):
-        if len(self.axes) == 0:
-            raise ValueError("Empty axes not allowed")
-
-
-@dataclasses.dataclass
-class Expression:
-    captures: Sequence[_AxisCapture | EllipsisType]
-    is_ordered: bool
-
-
-def _raise_error(message: str, expression: str, pos: Optional[int | tuple[int, int]]) -> NoReturn:
-    """Raise a ValueError with a message and the position in the expression."""
-    fmt = f"Error while parsing:\n    {expression}"
-    if pos is not None:
-        if isinstance(pos, int):
-            fmt += f'\n    {" " * pos}^'
-        else:
-            fmt += f"\n    {' ' * pos[0]}{'^' * max(1, pos[1] - pos[0])}"
-
-    fmt += f"\n{message}"
-
-    raise ValueError(fmt)
-
-
-def _parse_quoted_string(expression: str, pos: int) -> tuple[str, int]:
-    """Parse a quoted string from an einops-style haliax rearrangement string."""
-
-    if expression[pos] not in "'\"":
-        _raise_error(f"Expected \" or ' at position {pos}", expression, pos)
-    quote = expression[pos]
-    pos += 1
-    ident = ""
-    while pos < len(expression):
-        if expression[pos] == quote:
-            pos += 1
-            break
-        elif expression[pos] == "\\":
-            pos += 1
-            if pos >= len(expression):
-                _raise_error(f"Unexpected end of string at position {pos}", expression, pos)
-            ident += expression[pos]
-            pos += 1
-            continue
-        else:
-            ident += expression[pos]
-            pos += 1
-            continue
-    if len(ident) == 0:
-        _raise_error("Empty strings are not valid identifiers", expression, pos)
-
-    return ident, pos
-
-
-def _parse_ident(expression: str, pos: int) -> tuple[str, int]:
-    """parses an identifier or string literal from an einops-style haliax rearrangement string."""
-    if expression[pos] in "'\"":
-        return _parse_quoted_string(expression, pos)
-    else:
-        ident = ""
-        while pos < len(expression):
-            if str.isalnum(expression[pos]) or expression[pos] == "_":
-                if len(ident) == 0 and str.isdigit(expression[pos]):
-                    _raise_error("Identifiers cannot start with a number", expression, pos)
-                ident += expression[pos]
-                pos += 1
-                continue
-            else:
-                break
-        if len(ident) == 0:
-            _raise_error("Identifier expected", expression, pos)
-
-        return ident, pos
-
-
-def _parse_group(expression, pos):
-    # parses a group of axes like (a b c) or (a: b c)
-    pos_in = pos
-    if expression[pos] != "(":
-        raise ValueError("Expected (")
-    pos += 1
-    binding = None
-    axes = []
-    current_ident = ""
-    while pos < len(expression):
-        if expression[pos] == ")":
-            pos += 1
-            break
-        elif expression[pos] == ":":
-            if binding is not None:
-                _raise_error("Only one binding allowed per group", expression, pos)
-            if not current_ident:
-                _raise_error("Binding cannot be empty", expression, pos)
-            if len(axes) > 0:
-                _raise_error("Binding must come before axes", expression, pos)
-            binding = current_ident
-            current_ident = ""
-            pos += 1
-            continue
-        elif str.isspace(expression[pos]) or expression[pos] == ",":
-            if current_ident:
-                axes.append(current_ident)
-                current_ident = ""
-            pos += 1
-            continue
-        elif expression[pos] == "(":
-            _raise_error("Only one level of nesting is allowed", expression, pos)
-        elif expression[pos] == "}":
-            raise ValueError(f"Unexpected }} at {pos}")
-        elif str.isalnum(expression[pos]) or expression[pos] == "_":
-            # don't allow numbers at the start of an identifier
-            if len(current_ident) == 0 and str.isdigit(expression[pos]):
-                _raise_error("Identifiers cannot start with a number", expression, pos)
-            current_ident += expression[pos]
-            pos += 1
-            continue
-        elif expression[pos] in "'\"":
-            # parse quoted string as identifier
-            if current_ident:
-                axes.append(current_ident)
-
-            ident, pos = _parse_quoted_string(expression, pos)
-            current_ident = ident
-            continue
-        else:
-            _raise_error(f"Unexpected character {expression[pos]}", expression, pos)
-
-    if current_ident:
-        axes.append(current_ident)
-
-    if len(axes) == 0:
-        _raise_error("No axes found", expression, pos_in)
-
-    # todo: should we allow anonymous/literal
-    char_range = (pos_in, pos)
-    return _AxisCapture(binding, tuple(axes), char_range), pos
-
-
-def _parse_expression(expression: str, pos) -> tuple[Expression, int]:
-    """Parse one side of an einops-style haliax rearrangement string."""
-    captures = []
-    is_ordered = True
-    seen_char = False
-    finished = False
-
-    while pos < len(expression):
-        if expression[pos] == "{":
-            if seen_char:
-                _raise_error("Unexpected {", expression, pos)
-            seen_char = True
-            is_ordered = False
-            pos += 1
-            continue
-        elif expression[pos] == "}":
-            if is_ordered:
-                _raise_error("Unexpected }", expression, pos)
-            pos += 1
-            finished = True
-            continue
-        elif expression[pos] == "(":
-            if finished:
-                _raise_error("Unexpected ( after }", expression, pos)
-            seen_char = True
-            capture, pos = _parse_group(expression, pos)
-            captures.append(capture)
-            continue
-        elif str.isspace(expression[pos]) or expression[pos] == ",":
-            pos += 1
-            continue
-        elif expression[pos : pos + 3] == "...":
-            seen_char = True
-            if finished:
-                _raise_error("Unexpected ... after }", expression, pos)
-            captures.append(Ellipsis)
-            pos += 3
-            continue
-        elif expression[pos] == "-":
-            if not seen_char:
-                _raise_error("Unexpected -", expression, pos)
-            if pos + 1 >= len(expression):
-                _raise_error("Unexpected end of string", expression, pos)
-            if expression[pos + 1] != ">":
-                _raise_error("Expected >", expression, pos)
-            break
-        else:
-            if finished:
-                _raise_error("Unexpected character after }", expression, pos)
-            ident, new_pos = _parse_ident(expression, pos)
-            captures.append(_AxisCapture(binding=ident, axes=(ident,), char_range=(pos, new_pos)))
-            seen_char = True
-            pos = new_pos
-            continue
-
-    if not finished and not is_ordered:
-        _raise_error("Expected }", expression, pos)
-
-    return Expression(captures, is_ordered), pos
-
-
-def parse_rearrangement(expression: str) -> tuple[Expression, Expression]:
-    """Parse an einops-style haliax rearrangement string."""
-    pos = 0
-    lhs, pos = _parse_expression(expression, pos)
-
-    # consume the ->
-    if pos + 2 >= len(expression):
-        _raise_error("Unexpected end of string", expression, pos)
-    if expression[pos : pos + 2] != "->":
-        _raise_error("Expected ->", expression, pos)
-
-    pos += 2
-    rhs, pos = _parse_expression(expression, pos)
-
-    # make sure we consumed the whole string
-    if pos != len(expression):
-        _raise_error("Unexpected character", expression, pos)
-
-    return lhs, rhs
-
-
-@dataclasses.dataclass
-class _Plan:
-    intermediate_axes: tuple[Axis, ...]
-    transpose: Optional[tuple[int, ...]]
-    needs_final_reshape: bool
-
-    final_axes: tuple[Axis, ...]
+from ..partitioning import auto_sharded
+from .parsing import AliasTable, Expression, _resolve_bindings, parse_rearrangement, raise_parse_error
 
 
 @typing.overload
@@ -321,52 +87,31 @@ def rearrange(array: NamedArray, *args, **kwargs) -> NamedArray:
         return axis_spec_rearrange(array, axes)
 
 
-def axis_spec_rearrange(array: NamedArray, axes: Sequence[AxisSelector | EllipsisType]) -> NamedArray:
-    if len(axes) == 0 and len(array.axes) != 0:
+def axis_spec_rearrange(array: NamedArray, axis_spec: PartialAxisSpec) -> NamedArray:
+    if len(axis_spec) == 0 and len(array.axes) != 0:
         raise ValueError("No axes specified")
 
     # various fast paths
-    if len(axes) == 1 and axes[0] is Ellipsis:
+    if len(axis_spec) == 1 and axis_spec[0] is Ellipsis:
         return array
 
-    if axes == array.axes:
+    if axis_spec == array.axes:
         return array
 
-    if axes[-1] is Ellipsis and array.axes[0 : len(axes) - 1] == axes[0 : len(axes) - 1]:
+    if axis_spec[-1] is Ellipsis and array.axes[0 : len(axis_spec) - 1] == axis_spec[0 : len(axis_spec) - 1]:
         return array
 
-    if axes[0] is Ellipsis and array.axes[len(axes) - 1 :] == axes[1:]:
+    if axis_spec[0] is Ellipsis and array.axes[len(axis_spec) - 1 :] == axis_spec[1:]:
         return array
 
-    if axes.count(Ellipsis) > 1:
-        raise ValueError("Only one ellipsis allowed")
+    out_axes = rearrange_for_partial_order(axis_spec, array.axes)
 
-    used_indices = [False] * len(array.axes)
-    permute_spec: list[int | EllipsisType] = []
-    ellipsis_pos = None
-    for ax in axes:
-        if ax is Ellipsis:
-            permute_spec.append(Ellipsis)  # will revisit
-            ellipsis_pos = len(permute_spec) - 1
-        else:
-            assert isinstance(ax, Axis) or isinstance(ax, str)  # please mypy
-            index = array._lookup_indices(ax)
-            if index is None:
-                raise ValueError(f"Axis {ax} not found in {array}")
-            if used_indices[index]:
-                raise ValueError(f"Axis {ax} specified more than once")
-            used_indices[index] = True
-            permute_spec.append(index)
+    # now build a permute_spec
+    permute_spec = []
+    index_of_in = {ax: i for i, ax in enumerate(array.axes)}
 
-    if not all(used_indices):
-        # find the ellipsis position, replace it with all the unused indices
-        if ellipsis_pos is None:
-            missing_axes = [ax for i, ax in enumerate(array.axes) if not used_indices[i]]
-            raise ValueError(f"Axes {missing_axes} not found and no ... specified. Array axes: {array.axes}") from None
-
-        permute_spec[ellipsis_pos : ellipsis_pos + 1] = tuple(i for i in range(len(array.axes)) if not used_indices[i])
-    elif ellipsis_pos is not None:
-        permute_spec.remove(Ellipsis)
+    for ax in out_axes:
+        permute_spec.append(index_of_in[ax])
 
     out_axes = tuple(array.axes[i] for i in typing.cast(list[int], permute_spec))
     return NamedArray(jnp.transpose(array.array, permute_spec), out_axes)
@@ -389,7 +134,7 @@ def einops_rearrange(array: NamedArray, expression: str, **bindings: AxisSelecto
     if plan.intermediate_axes != array.axes:
         raw_array = raw_array.reshape([ax.size for ax in plan.intermediate_axes])
         array = NamedArray(raw_array, plan.intermediate_axes)
-        array = shard(array)
+        array = auto_sharded(array)
         raw_array = array.array
 
     final_shape = tuple(ax.size for ax in plan.final_axes)
@@ -401,7 +146,16 @@ def einops_rearrange(array: NamedArray, expression: str, **bindings: AxisSelecto
     else:
         finished_array = raw_array
 
-    return shard(NamedArray(finished_array, plan.final_axes))
+    return auto_sharded(NamedArray(finished_array, plan.final_axes))
+
+
+@dataclasses.dataclass
+class _Plan:
+    intermediate_axes: tuple[Axis, ...]
+    transpose: Optional[tuple[int, ...]]
+    needs_final_reshape: bool
+
+    final_axes: tuple[Axis, ...]
 
 
 def _plan_rearrange(
@@ -426,90 +180,59 @@ def _plan_rearrange(
     return _Plan(intermediate_axes, transpose, needs_final_reshape, final_axes)
 
 
-class AliasTable:
-    bindings: dict[str, AxisSelector]  # names in the string to either axes or
-
-    def __init__(self, bindings):
-        self.bindings = bindings
-
-    def dealias_binding(self, binding: str) -> Optional[AxisSelector]:
-        return self.bindings.get(binding, None)
-
-    def bind_alias(self, alias: str, axis: Axis, expr, char_range):
-        if axis.name in self.bindings:
-            if self.bindings[alias] != axis:
-                _raise_error(f"Alias {alias} is assigned to more than one axis", expr, char_range)
-        else:
-            self.bindings[alias] = axis
-
-
-def _resolve_bindings(array, bindings: Mapping[str, Axis | str | int]) -> AliasTable:
-    b: dict[str, AxisSelector] = {}
-    for name, selector in bindings.items():
-        if isinstance(selector, str):
-            try:
-                selector = array.resolve_axis(selector)
-            except ValueError:
-                pass
-        elif isinstance(selector, int):
-            selector = Axis(name, selector)
-        assert not isinstance(selector, int)
-        b[name] = selector
-    return AliasTable(b)
-
-
 def _determine_final_transpose_and_reshape(
     expression, rhs: Expression, aliases: "AliasTable", intermediate_axes: tuple[Axis, ...]
 ) -> tuple[tuple[int, ...], tuple[Axis, ...]]:
-    # The rhs tells us two things:
+    # The rhs tells us three things:
     # 1. how to reorder the intermediate axes
     # 2. how to merge the intermediate axes into the final axes
+    # 3. where ellipses are in the final axes (where we can put unused intermediate axes)
 
-    transposition_order: list[int | EllipsisType] = []
+    # MUTATES `aliases`
 
-    final_axes: list[Axis | EllipsisType] = []
-    used_axes = set()  # axes must be used exactly once
+    # Our approach is to:
+    # 1. Figure out the partial order of the intermediate axes
+    # 2. Compute the full final axes (using rearrange_for_partial_order)
+    # 3. Figure out the transposition order to get the intermediate axes into the right order
+    # return (2) and (3)
 
-    position_of_ellipsis = None  # If there's an ellipsis, we want to put any remaining axes there
-    position_of_ellipsis_in_transposition = None  # if there's an ellipsis, we want to put any remaining axes there
+    transposed_intermediate_axes_order: list[Axis | EllipsisType] = []
 
-    # each capture, except for ellipsis results in one final axis
+    first_intermediate_for_final: dict[Axis, Axis] = {}  # intermediate -> final
+
+    used_intermediate_axes = set()  # axes must be used exactly once
+    has_ellipsis = False
+
     for cpos, capture in enumerate(rhs.captures):
         if capture == Ellipsis:
-            if position_of_ellipsis is not None:
-                previous_capture = rhs.captures[cpos - 1]
-                _raise_error("Only one ellipsis allowed", expression, previous_capture.char_range)
-            position_of_ellipsis = cpos
-            final_axes.append(Ellipsis)
-            transposition_order.append(Ellipsis)
-            position_of_ellipsis_in_transposition = len(transposition_order) - 1
+            has_ellipsis = True
+            transposed_intermediate_axes_order.append(Ellipsis)
             continue
 
         assert not isinstance(capture, EllipsisType)
 
         binding = capture.binding
         if binding is None:
-            _raise_error("All rhs axes must have a name. Use (name: bindings)", expression, capture.char_range)
+            raise_parse_error("All rhs axes must have a name. Use (name: bindings)", expression, capture.char_range)
 
-        # now look at the captured axes. these are the axes that we're going to merge into one final axis
-        # we're also going to move them around to match the order of the intermediate axes
         sz = 1
+        first_axis = None
         for ax_name in capture.axes:
-            axis = aliases.dealias_binding(ax_name)
-            if not isinstance(axis, Axis):
-                _raise_error(f"Axis {ax_name} is not bound on the lhs", expression, capture.char_range)
+            intermed_axis = aliases.dealias_binding(ax_name)
 
-            if axis in used_axes:
-                _raise_error(f"Axis {axis} is used more than once", expression, capture.char_range)
-            used_axes.add(axis)
+            if not isinstance(intermed_axis, Axis):
+                raise_parse_error(f"Axis {ax_name} is not bound on the lhs", expression, capture.char_range)
 
-            sz *= axis.size
+            if first_axis is None:
+                first_axis = intermed_axis
+
+            if intermed_axis in used_intermediate_axes:
+                raise_parse_error(f"Axis {intermed_axis} is used more than once", expression, capture.char_range)
+            used_intermediate_axes.add(intermed_axis)
+            transposed_intermediate_axes_order.append(intermed_axis)
+
+            sz *= intermed_axis.size
             # now find the position of this axis in the intermediate axes
-            try:
-                index_in_intermediate = intermediate_axes.index(axis)
-                transposition_order.append(index_in_intermediate)
-            except ValueError:
-                _raise_error(f"Axis {ax_name} is not in the lhs", expression, capture.char_range)
 
         # figure out the name of the final axis
         axis = aliases.dealias_binding(binding)
@@ -518,41 +241,35 @@ def _determine_final_transpose_and_reshape(
         else:
             new_axis = Axis(axis_name(axis), sz)
 
-        # Do not bind here because axis names can be reused
+        # TODO: this isn't ideal for the unusual case where we have an empty set of axes to bind to an axis
+        # we won't accurately get the order for these unitary axes
+        if first_axis is not None:
+            first_intermediate_for_final[first_axis] = new_axis
 
-        final_axes.append(new_axis)
-
-    if position_of_ellipsis is not None:
-        unused_intermediate_axes = [ax for ax in intermediate_axes if ax not in used_axes]
+    if not has_ellipsis:
+        unused_intermediate_axes = set(intermediate_axes) - used_intermediate_axes
         if len(unused_intermediate_axes) > 0:
-            # we need to put the unused axes in the ellipsis
-            final_axes = (
-                final_axes[:position_of_ellipsis] + unused_intermediate_axes + final_axes[position_of_ellipsis + 1 :]
-            )
+            raise ValueError("Not all intermediate axes are used. Use ... to insert unused axes")
 
-            unused_indices = [i for i in range(len(intermediate_axes)) if intermediate_axes[i] not in used_axes]
+    # now we have a partial order of the intermediate axes
+    reordered_intermediate_axes = rearrange_for_partial_order(transposed_intermediate_axes_order, intermediate_axes)
 
-            assert position_of_ellipsis_in_transposition is not None
+    # now we need to figure out the final axes
+    final_axes: list[Axis] = []
+    transposition_order: list[int] = []
 
-            transposition_order = (
-                transposition_order[:position_of_ellipsis_in_transposition]
-                + unused_indices
-                + transposition_order[position_of_ellipsis_in_transposition + 1 :]
-            )
+    for intermediate_axis in reordered_intermediate_axes:
+        if intermediate_axis not in used_intermediate_axes:
+            # this axis is not used, so we keep it from the reordered axes
+            final_axes.append(intermediate_axis)
+            transposition_order.append(intermediate_axes.index(intermediate_axis))
+        else:
+            final_axis = first_intermediate_for_final.get(intermediate_axis, None)
 
-    else:
-        # make sure we used all the axes
-        if len(used_axes) < len(intermediate_axes):
-            # figure out their binding names as possible:
-            inverse_bindings = {v: k for k, v in aliases.bindings.items()}
-            unused_intermediate_axis_names = [
-                inverse_bindings.get(ax, ax.name) for ax in intermediate_axes if ax not in used_axes
-            ]
-            _raise_error(
-                f"Not all intermediate axes are used: {','.join(unused_intermediate_axis_names) }",
-                expression,
-                len(expression) - 1,
-            )
+            if final_axis is not None:
+                final_axes.append(final_axis)
+
+            transposition_order.append(intermediate_axes.index(intermediate_axis))
 
     return tuple(transposition_order), tuple(final_axes)  # type: ignore
 
@@ -593,7 +310,7 @@ def _determine_initial_reshape(
             assert not isinstance(capture, EllipsisType)
 
             if axis_pos >= len(array.axes):
-                _raise_error("Too many axes in lhs", expression, capture.char_range)
+                raise_parse_error("Too many axes in lhs", expression, capture.char_range)
 
             axis_index_for_capture[cpos] = axis_pos
             covered_axes.add(axis_pos)
@@ -605,13 +322,13 @@ def _determine_initial_reshape(
             for cpos in range(len(lhs.captures) - 1, ellipsis_pos, -1):
                 capture = lhs.captures[cpos]
                 if capture == Ellipsis:
-                    _raise_error("Only one ellipsis allowed", expression, None)
+                    raise_parse_error("Only one ellipsis allowed", expression, None)
 
                 assert not isinstance(capture, EllipsisType)
 
                 axis_index_for_capture[cpos] = axis_pos
                 if axis_pos in covered_axes:
-                    _raise_error(
+                    raise_parse_error(
                         f"Axis {array.axes[axis_pos]} is bound more than once",
                         expression,
                         capture.char_range,
@@ -621,11 +338,11 @@ def _determine_initial_reshape(
         else:
             # no ellipsis, so we need to check that we covered all axes
             if len(covered_axes) < len(array.axes):
-                _raise_error(
+                raise_parse_error(
                     "Not all axes are bound, use ... to skip missing axes", expression, len(expression) - 1
                 )  # type: ignore
             elif len(covered_axes) > len(array.axes):
-                _raise_error("Too many axes are bound", expression, lhs.captures[-1].char_range)  # type: ignore
+                raise_parse_error("Too many axes are bound", expression, lhs.captures[-1].char_range)  # type: ignore
 
         # now that we have the bindings, we can figure out the new shapes
         for cpos, capture in enumerate(lhs.captures):
@@ -635,11 +352,11 @@ def _determine_initial_reshape(
 
             axis_index = axis_index_for_capture[cpos]
             if axis_index is None:
-                _raise_error("Internal error", expression, capture.char_range)
+                raise_parse_error("Internal error", expression, capture.char_range)
 
             axis = array.axes[axis_index]
             if new_shapes[axis_index] is not None:
-                _raise_error(f"Axis {axis} is bound more than once", expression, capture.char_range)
+                raise_parse_error(f"Axis {axis} is bound more than once", expression, capture.char_range)
 
             new_axes = _solve_split_axes(axis, capture, aliases, used_new_names, expression)
             new_shapes[axis_index] = new_axes  # type: ignore
@@ -654,7 +371,7 @@ def _determine_initial_reshape(
             assert not isinstance(capture, EllipsisType)
 
             if capture.binding is None:
-                _raise_error(
+                raise_parse_error(
                     "Unordered axes must be bound by name, e.g. (a: b) or just a", expression, capture.char_range
                 )
 
@@ -669,14 +386,14 @@ def _determine_initial_reshape(
                 axis = array.resolve_axis(maybe_alias)
                 # aliases.bind_alias(capture.binding, axis, expression, capture.char_range)
             except ValueError:
-                _raise_error(f"Could not resolve axis {maybe_alias}", expression, capture.char_range)
+                raise_parse_error(f"Could not resolve axis {maybe_alias}", expression, capture.char_range)
 
             try:
                 axis_index = array.axes.index(axis)
             except ValueError:
-                _raise_error(f"Axis {axis} is not in the array", expression, capture.char_range)
+                raise_parse_error(f"Axis {axis} is not in the array", expression, capture.char_range)
             if new_shapes[axis_index] is not None:
-                _raise_error(f"Axis {axis} is bound more than once", expression, capture.char_range)
+                raise_parse_error(f"Axis {axis} is bound more than once", expression, capture.char_range)
 
             new_axes = _solve_split_axes(axis, capture, aliases, used_new_names, expression)
             new_shapes[axis_index] = new_axes  # type: ignore
@@ -699,7 +416,7 @@ def _solve_split_axes(axis, capture, aliases, used_new_names, expression):
     if len(capture.axes) == 1:
         new_axis_name = capture.axes[0]
         if new_axis_name in used_new_names:
-            _raise_error(f"Capture {new_axis_name} is assigned more than once", expression, capture.char_range)
+            raise_parse_error(f"Capture {new_axis_name} is assigned more than once", expression, capture.char_range)
         used_new_names.add(new_axis_name)
 
         new_axes.append(axis)
@@ -711,7 +428,9 @@ def _solve_split_axes(axis, capture, aliases, used_new_names, expression):
 
     for new_axis_name in capture.axes:
         if new_axis_name in used_new_names:
-            _raise_error(f"Capture {new_axis_name} is assigned more than once in lhs", expression, capture.char_range)
+            raise_parse_error(
+                f"Capture {new_axis_name} is assigned more than once in lhs", expression, capture.char_range
+            )
 
         used_new_names.add(new_axis_name)
 
@@ -722,11 +441,11 @@ def _solve_split_axes(axis, capture, aliases, used_new_names, expression):
         if isinstance(new_axis, Axis):
             new_axes.append(new_axis)
             if remaining_size % new_axis.size:
-                _raise_error(f"Axes do not divide evenly into axis {axis}", expression, capture.char_range)
+                raise_parse_error(f"Axes do not divide evenly into axis {axis}", expression, capture.char_range)
             remaining_size //= new_axis.size
         else:
             if unsolved_axis_index is not None:
-                _raise_error(
+                raise_parse_error(
                     "Sizes for this split axis are ambiguous. You must provide a size as a kwarg.",
                     expression,
                     capture.char_range,

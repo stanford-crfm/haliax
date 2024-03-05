@@ -192,27 +192,22 @@ class Conv(_ConvBase):
         # jax's conv_general_dilated only supports exactly one batch dimension (not 0), so we vmap over any others.
         # We could choose instead to flatten them, but then we'd definitely lose sharding.
         batch_dims = without_axes(inputs.axes, self.weight.axes)
-        x = _vmap_all_but_one_batch_dim(self._do_conv, batch_dims)(inputs)
+        flat_inputs, unflatten = haliax.core.flatten_all_axes_but(
+            inputs, "__batch__", batch_dims, reorder_to_front=True
+        )
+        x = self._do_conv(flat_inputs)
+        x = unflatten(x)
 
         if self.bias is not None:
             x = x + self.bias
 
-        output_axes = _compute_output_axes(inputs, batch_dims, self.In, self.Out)
-        x = x.rearrange(output_axes)
-
         return x
 
     def _do_conv(self, inputs):
-        batch_dims = without_axes(inputs.axes, self.weight.axes)
-        output_axes = _compute_output_axes(inputs, batch_dims, self.In, self.Out)
+        # _do_conv expects there ot be a single __batch__ dimension
+        output_axes = _compute_output_axes(inputs, "__batch__", self.In, self.Out)
 
-        if len(batch_dims) == 1:
-            batch_index = inputs.axes.index(batch_dims[0])
-        else:
-            assert len(batch_dims) == 0
-            # there must be a batch dimension, even if it's size 1
-            inputs = inputs.broadcast_axis(Axis("__batch__", 1))
-            batch_index = 0
+        batch_index = _index_of_name(inputs.axes, "__batch__")
 
         lhs_dim_spec = self._lhs_dim_spec(batch_index, inputs)
         rhs_dim_spec = self._weight_dim_spec
@@ -226,9 +221,6 @@ class Conv(_ConvBase):
             feature_group_count=self.groups,
             dimension_numbers=(lhs_dim_spec, rhs_dim_spec, output_dim_spec),
         )
-
-        if len(batch_dims) == 0:
-            x = x.squeeze(0)
 
         return named(x, output_axes)
 
@@ -334,7 +326,11 @@ class ConvTranspose(_ConvBase):
         del key
 
         batch_dims = without_axes(inputs.axes, self.weight.axes)
-        x = _vmap_all_but_one_batch_dim(self._do_conv, batch_dims)(inputs)
+        flat_inputs, unflatten = haliax.core.flatten_all_axes_but(
+            inputs, "__batch__", batch_dims, reorder_to_front=True
+        )
+        x = self._do_conv(flat_inputs)
+        x = unflatten(x)
 
         if self.bias is not None:
             x = x + self.bias
@@ -344,22 +340,14 @@ class ConvTranspose(_ConvBase):
         return x.rearrange(output_axes)
 
     def _do_conv(self, inputs):
-        batch_dims = without_axes(inputs.axes, self.weight.axes)
-        output_axes = _compute_output_axes(inputs, batch_dims, self.In, self.Out)
-
-        if len(batch_dims) == 1:
-            batch_index = inputs.axes.index(batch_dims[0])
-        else:
-            assert len(batch_dims) == 0
-            # there must be a batch dimension, even if it's size 1
-            inputs = inputs.broadcast_axis(Axis("__batch__", 1))
-            batch_index = 0
-
         # cribbed from Equinox's ConvTranspose class
         padding = tuple(
             (d * (k - 1) - p0, d * (k - 1) - p1 + o)
             for k, (p0, p1), o, d in zip(self.kernel_size, self.padding, self.output_padding, self.dilation)
         )
+
+        output_axes = _compute_output_axes(inputs, "__batch__", self.In, self.Out)
+        batch_index = _index_of_name(inputs.axes, "__batch__")
 
         lhs_dim_spec = self._lhs_dim_spec(batch_index, inputs)
         rhs_dim_spec = self._weight_dim_spec
@@ -375,9 +363,6 @@ class ConvTranspose(_ConvBase):
             feature_group_count=self.groups,
             dimension_numbers=(lhs_dim_spec, rhs_dim_spec, output_dim_spec),
         )
-
-        if len(batch_dims) == 0:
-            x = x.squeeze(0)
 
         return named(x, output_axes)
 
@@ -397,7 +382,7 @@ def _convert_padding_spec(Spatial, padding):
         padding = ((padding, padding),) * len(Spatial)
     elif isinstance(padding, tuple):
         padding = _expand_and_check_shape(len(Spatial), padding, "padding")
-        padding_spec = []
+        padding_spec: list = []
         for p in padding:
             if isinstance(p, int):
                 padding_spec.append((p, p))
@@ -420,21 +405,6 @@ def _index_of_name(names: Sequence[str | Axis], name) -> int:
         if x == name:
             return i
     return -1
-
-
-def _vmap_all_but_one_batch_dim(op, batch_dims):
-    batch_dims = list(batch_dims)
-    # We want to prioritize vmapping over *sharded* batch dimensions (TODO: make sure this is correct)
-    # TODO: I think we may need to do shard_map or something to make sure we don't lose sharding
-    sharded_batch_dims = [ax for ax in batch_dims if haliax.partitioning.physical_axis_name(ax) is not None]
-    while len(sharded_batch_dims) > 1:
-        dim = sharded_batch_dims.pop()
-        batch_dims.remove(dim)
-        op = haliax.vmap(op, axis=dim.name)
-    while len(batch_dims) > 1:
-        dim = batch_dims.pop()
-        op = haliax.vmap(op, axis=dim.name)
-    return op
 
 
 def _compute_output_axes(inputs, batch_dims, In, Out):

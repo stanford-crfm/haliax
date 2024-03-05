@@ -8,9 +8,8 @@ We're happy to add more examples if you have any that you think would be useful.
 
 Throughout we assume the following:
 
-```
+```python
 import jax.numpy as jnp
-import jax
 
 import haliax as hax
 
@@ -18,10 +17,11 @@ Batch = hax.Axis("batch", 32)
 Embed = hax.Axis("embed", 64)
 H = hax.Axis("h", 16)
 W = hax.Axis("w", 16)
+C = hax.Axis("c", 3)
 
 
-Step = hax.axis("step", 2)
-Mini = hax.axis("mini", 16)
+Step = hax.Axis("step", 2)
+Mini = hax.Axis("mini", 16)
 
 # for jax
 x = jnp.zeros((32, 64))
@@ -29,15 +29,17 @@ y = jnp.zeros((32, 64))
 z = jnp.zeros((32,))
 w = jnp.zeros((64,))
 ind = jnp.arange((8,), dtype=jnp.int32)
-im = jnp.zeros((32, 16, 16))
+im = jnp.zeros((32, 16, 16, 3))
+w2 = jnp.zeros((3, 64))
 
 # for haliax
 x = hax.zeros((Batch, Embed))
 y = hax.zeros((Batch, Embed))
 z = hax.zeros((Batch,))
 w = hax.zeros((Embed,))
-ind = hax.arange(Axis("Index", 8), dtype=jnp.int32)
-im = hax.zeros((Batch, H, W))
+ind = hax.arange(hax.Axis("Index", 8), dtype=jnp.int32)
+im = hax.zeros((Batch, H, W, C))
+w2 = hax.zeros((C, Embed))
 ```
 
 
@@ -86,12 +88,12 @@ im = hax.zeros((Batch, H, W))
 
 See also the section on [Rearrange](rearrange.md).
 
-| JAX (with einops)                                                       | Haliax                                                                   |
-|-------------------------------------------------------------------------|--------------------------------------------------------------------------|
+| JAX (with einops)                                                                          | Haliax                                                                   |
+|--------------------------------------------------------------------------------------------|--------------------------------------------------------------------------|
 | [`einops.rearrange(x, "batch embed -> embed batch")`](https://einops.rocks/api/rearrange/) | [`hax.rearrange(x, ("embed", "batch"))`][haliax.rearrange]               |
 | [`einops.rearrange(x, "batch embed -> embed batch")`](https://einops.rocks/api/rearrange/) | [`hax.rearrange(x, "b e -> e b")`][haliax.rearrange]                     |
 | [`einops.rearrange(im, "... h w -> ... (h w)")`](https://einops.rocks/api/rearrange/)      | [`hax.flatten_axes(im, ("h", "w"), "hw")`][haliax.flatten_axes]          |
-| [`einops.rearrange(im, "... h w -> ... (h w)")`](https://einops.rocks/api/rearrange/)      | [`hax.rearrange(im, "{h w} -> ... (embed: h w)")`][haliax.rearrange]     |
+| [`einops.rearrange(im, "... h w c -> ... (h w c)")`](https://einops.rocks/api/rearrange/)  | [`hax.rearrange(im, "{h w c} -> ... (embed: h w c)")`][haliax.rearrange] |
 | [`einops.rearrange(x, "b (h w) -> b h w", h=8)`](https://einops.rocks/api/rearrange/)      | [`hax.rearrange(x, "b (h w) -> b h w", h=8)`][haliax.rearrange]          |
 | [`einops.rearrange(x, "b (h w) -> b h w", h=8)`](https://einops.rocks/api/rearrange/)      | [`hax.rearrange(x, "{(embed: h w)} -> ... h w", h=8)`][haliax.rearrange] |
 
@@ -151,9 +153,19 @@ Reductions are similar to JAX, except that they use an axis name instead of an a
 
 ### Matrix Multiplication
 
-| JAX                                                 | Haliax                                 |
-|-----------------------------------------------------|----------------------------------------|
-| [`jnp.dot(z, x)`][jax.numpy.dot]                    | [`hax.dot("batch", z, x)`][haliax.dot] |
-| [`jnp.matmul(z, x)`][jax.numpy.matmul]              | [`hax.dot("batch", z, x)`][haliax.dot] |
-| [`jnp.dot(w, x.t)`][jax.numpy.dot]                  | [`hax.dot("embed", w, x)`][haliax.dot] |
-| [`jnp.einsum("ij,j -> i", x, w)`][jax.numpy.einsum] | [`hax.dot("embed", x, w)`][haliax.dot] |
+| JAX                                                            | Haliax                                                             |
+|----------------------------------------------------------------|--------------------------------------------------------------------|
+| [`jnp.dot(z, x)`][jax.numpy.dot]                               | [`hax.dot(z, x, axis="batch")`][haliax.dot]                        |
+| [`jnp.matmul(z, x)`][jax.numpy.matmul]                         | [`hax.dot(z, x, axis="batch")`][haliax.dot]                        |
+| [`jnp.dot(w, x.t)`][jax.numpy.dot]                             | [`hax.dot(w, x, axis="embed")`][haliax.dot]                        |
+| [`jnp.einsum("ij,j -> i", x, w)`][jax.numpy.einsum]            | [`hax.dot(x, w, axis="embed")`][haliax.dot]                        |
+| [`jnp.einsum("i,ij,ij,j -> i", z, x, y, w)`][jax.numpy.einsum] | [`hax.dot(z, x, y, w, axis="embed")`][haliax.dot]                  |
+| [`jnp.einsum("ij,j -> ji", x, w)`][jax.numpy.einsum]           | [`hax.dot(x, w, axis=(), out_axes=("embed", "batch")`][haliax.dot] |
+| [`jnp.einsum("bhwc,ce -> bhwe", im, w2)`][jax.numpy.einsum]    | [`hax.einsum("b h w c, c e -> b h w e", im, w2)`][haliax.einsum]   |
+| [`jnp.einsum("...c,ce -> ...e", im, w2)`][jax.numpy.einsum]    | [`hax.einsum("... c, c e -> ... e", im, w2)`][haliax.einsum]       |
+| [`jnp.einsum("bhwc,ce -> bhwe", im, w2)`][jax.numpy.einsum]    | [`hax.einsum("{c embed} -> embed", im, w2)`][haliax.einsum]        |
+| [`jnp.einsum("bhwc,ce -> bhwe", im, w2)`][jax.numpy.einsum]    | [`hax.einsum("-> batch h w embed", im, w2)`][haliax.einsum]        |
+| [`jnp.einsum("bhwc,ce -> bhwce", im, w2)`][jax.numpy.einsum]   | [`hax.einsum("{...} -> ...", im, w2)`][haliax.einsum]              |
+| [`jnp.einsum("bhwc,ce -> ", im, w2)`][jax.numpy.einsum]        | [`hax.einsum("{...} -> ", im, w2)`][haliax.einsum]                 |
+| [`jnp.einsum("bhwc,ce -> bhwce", im, w2)`][jax.numpy.einsum]   | [`hax.dot(im, w2, axis=())`][haliax.dot]                           |
+| [`jnp.einsum("bhwc,ce -> ", im, w2)`][jax.numpy.einsum]        | [`hax.dot(im, w2, axis=None)`][haliax.dot]                         |

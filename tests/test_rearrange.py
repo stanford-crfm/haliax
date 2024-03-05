@@ -3,102 +3,7 @@ from jax.random import PRNGKey
 
 import haliax as hax
 from haliax import Axis
-from haliax._src.rearrange import einops_rearrange, parse_rearrangement
-
-
-def _simplify_captures(expr):
-    def simplify_capture(capture):
-        if capture == Ellipsis:
-            return Ellipsis
-        elif (capture.binding == capture.axes[0] or capture.binding is None) and len(capture.axes) == 1:
-            return capture.axes[0]
-        elif capture.binding is None:
-            return capture.axes
-        else:
-            return {capture.binding: capture.axes}
-
-    return [simplify_capture(capture) for capture in expr.captures]
-
-
-def test_parse_rearrangement_simple():
-    lhs, rhs = parse_rearrangement("a b c d -> b, c, a, d")
-    assert lhs.is_ordered
-    assert _simplify_captures(lhs) == ["a", "b", "c", "d"]
-    assert rhs.is_ordered
-    assert _simplify_captures(rhs) == ["b", "c", "a", "d"]
-
-    lhs, rhs = parse_rearrangement("a ... c d -> b c a d")
-    assert lhs.is_ordered
-    assert _simplify_captures(lhs) == ["a", Ellipsis, "c", "d"]
-    assert rhs.is_ordered
-    assert _simplify_captures(rhs) == ["b", "c", "a", "d"]
-
-    # longer identifiers
-    lhs, rhs = parse_rearrangement("a_longer b123 c d -> b123 c a_longer d")
-    assert lhs.is_ordered
-    assert _simplify_captures(lhs) == ["a_longer", "b123", "c", "d"]
-    assert rhs.is_ordered
-    assert _simplify_captures(rhs) == ["b123", "c", "a_longer", "d"]
-
-
-def test_parse_paren_groups():
-    lhs, rhs = parse_rearrangement("a (b c) d -> b c a d")
-    assert lhs.is_ordered
-    assert _simplify_captures(lhs) == ["a", ("b", "c"), "d"]
-    assert rhs.is_ordered
-    assert _simplify_captures(rhs) == ["b", "c", "a", "d"]
-
-    lhs, rhs = parse_rearrangement("a (b: c) (d: e f) -> b c a d")
-    assert lhs.is_ordered
-    assert _simplify_captures(lhs) == ["a", {"b": ("c",)}, {"d": ("e", "f")}]
-
-
-def test_parse_unordered():
-    lhs, rhs = parse_rearrangement("{a b c d} -> {b c a d}")
-    assert not lhs.is_ordered
-    assert _simplify_captures(lhs) == ["a", "b", "c", "d"]
-    assert not rhs.is_ordered
-    assert _simplify_captures(rhs) == ["b", "c", "a", "d"]
-
-    lhs, rhs = parse_rearrangement("{(c: a b), d e,} -> (q: a d e) b")
-    assert not lhs.is_ordered
-    assert _simplify_captures(lhs) == [{"c": ("a", "b")}, "d", "e"]
-    assert rhs.is_ordered
-    assert _simplify_captures(rhs) == [{"q": ("a", "d", "e")}, "b"]
-
-
-def test_parse_quoted_identifiers():
-    lhs, rhs = parse_rearrangement("a \"b c\" d -> 'b c' a d")
-    assert lhs.is_ordered
-    assert _simplify_captures(lhs) == ["a", "b c", "d"]
-    assert rhs.is_ordered
-    assert _simplify_captures(rhs) == ["b c", "a", "d"]
-
-    lhs, rhs = parse_rearrangement("{a \"b c\" (d: 'hello')} -> b c a d")
-    assert not lhs.is_ordered
-    assert _simplify_captures(lhs) == ["a", "b c", {"d": ("hello",)}]
-    assert rhs.is_ordered
-    assert _simplify_captures(rhs) == ["b", "c", "a", "d"]
-
-
-def test_parse_errors():
-    with pytest.raises(ValueError, match="Unexpected end of string"):
-        parse_rearrangement("a b")
-
-    with pytest.raises(ValueError, match="Expected }"):
-        parse_rearrangement("{ a -> c")
-
-    with pytest.raises(ValueError, match="Unexpected }"):
-        parse_rearrangement("a } -> c")
-
-    with pytest.raises(ValueError, match="Unexpected }"):
-        parse_rearrangement("(a: b } -> c")
-
-    with pytest.raises(ValueError, match="Unexpected character"):
-        parse_rearrangement("(a b ! -> c d e")
-
-    with pytest.raises(ValueError, match="Identifier expected"):
-        parse_rearrangement("a b ! -> c d e")
+from haliax._src.rearrange import einops_rearrange
 
 
 # some axes
@@ -108,6 +13,7 @@ C = Axis("C", 3)
 D = Axis("D", 2)
 B = Axis("B", 5)
 Q = hax.Axis("Q", B.size * H.size)
+E = Axis("E", H.size * W.size * D.size)
 
 z = hax.random.randint(PRNGKey(0), (B, D, H, W, C), 0, 255)
 zq = hax.random.randint(PRNGKey(0), (Q, D, W, C), 0, 255)
@@ -182,16 +88,16 @@ def test_rearrange_with_flattening_unordered():
 
 
 def test_rearrange_with_unflatten():
-    assert einops_rearrange(zq, "(Q: B H) d, w c -> B d H w c", B=5).axes == (B, D, H, W, C)
+    assert einops_rearrange(zq, "(Q: B H) d w c -> B d H w c", B=5).axes == (B, D, H, W, C)
     # make sure the values are right too
     z_t = zq.array.reshape((B.size, H.size, D.size, W.size, C.size)).transpose((0, 2, 1, 3, 4))
-    assert (einops_rearrange(zq, "(Q: B H) d, w c -> B d H w c", B=5).array == z_t).all()
+    assert (einops_rearrange(zq, "(Q: B H) d w c -> B d H w c", B=5).array == z_t).all()
 
     # test with explicit axis arg
-    assert einops_rearrange(zq, "(Q: b H) d, w c -> b d H w c", b=B).axes == (B, D, H, W, C)
+    assert einops_rearrange(zq, "(Q: b H) d w c -> b d H w c", b=B).axes == (B, D, H, W, C)
     # make sure the values are right too
     z_t = zq.array.reshape((B.size, H.size, D.size, W.size, C.size)).transpose((0, 2, 1, 3, 4))
-    assert (einops_rearrange(zq, "(Q: b H) d, w c -> b d H w c", b=B).array == z_t).all()
+    assert (einops_rearrange(zq, "(Q: b H) d w c -> b d H w c", b=B).array == z_t).all()
 
 
 def test_rearrange_with_unflatten_unordered():
@@ -231,6 +137,27 @@ def test_with_unflatten_flatten_unordered():
     assert (einops_rearrange(zq, "{ W D C (Q: B H)} -> D (Z: B C) W H", H=H).array == z_t).all()
 
 
+def test_rearrange_multiple_ellipses():
+    z_out = einops_rearrange(z, "b d h w c  -> d ... c ... h")
+    assert z_out.axes == (D, B, C, W, H)
+
+    z_out = einops_rearrange(z, "b d h w c -> d ... (Q: b h) ... w")
+    assert z_out.axes == (D, Q, C, W)
+
+    z_out = einops_rearrange(z, "b d h w c -> d ... (BB: b) ... w")
+    assert z_out.axes == (D, B.alias("BB"), H, C, W)
+
+    z_out = einops_rearrange(z, "{H W D} -> ... (E: H W D) ...")
+    assert z_out.axes == (B, E, C)
+
+    z_out = einops_rearrange(z, "{B H} -> ... (Q: B H) ...")
+    assert z_out.axes == (Q, D, W, C)
+
+    z_out = einops_rearrange(z, "{B H W} -> ... (Q: B H) ... W")
+
+    assert z_out.axes == (Q, D, C, W)
+
+
 def test_semantic_errors():
     with pytest.raises(ValueError, match="Too many axes in lhs"):
         einops_rearrange(z, "b d h w c q -> b d h w c q")
@@ -246,9 +173,6 @@ def test_semantic_errors():
 
     with pytest.raises(ValueError, match="Only one ellipsis allowed"):
         einops_rearrange(z, "b d ... h w c ... -> b d h w c ...")
-
-    with pytest.raises(ValueError, match="Only one ellipsis allowed"):
-        einops_rearrange(z, "b d ... h w c  -> ... b d h w c ...")
 
     with pytest.raises(ValueError, match="Capture q is assigned more than once"):
         einops_rearrange(z, "b d c q q -> b d h w c q")
@@ -322,7 +246,7 @@ def test_examples():
     #  > without rearrange or names: x.reshape((a * b, c, d))
     # split a into b and c
     # * '(a: b c) d -> b c d'
-    assert einops_rearrange(zq, "(q: b h) d, w, c -> b h d w c", b=B, h="H").axes == (B, H, D, W, C)
+    assert einops_rearrange(zq, "(q: b h) d w c -> b h d w c", b=B, h="H").axes == (B, H, D, W, C)
     #  > without rearrange or names: x.reshape((b, c, d))
     # reorder a and b
     # * 'a b ... -> b a ...'
