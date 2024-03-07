@@ -149,3 +149,7 @@ def is_scalarish(x):
         return x.ndim == 0
     else:
         return jnp.isscalar(x) or x.shape == ()
+
+
+def is_on_mac_metal():
+    return jax.devices()[0].platform.lower() == "metal"

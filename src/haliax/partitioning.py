@@ -18,7 +18,7 @@ from haliax._src.compile_utils import compile_cache
 
 from .axis import Axis, AxisSelection, AxisSelector
 from .core import NamedArray
-from .jax_utils import Static, is_in_jit, is_jax_array_like
+from .jax_utils import Static, is_in_jit, is_jax_array_like, is_on_mac_metal
 from .tree_util import hashable_combine, hashable_partition
 from .util import StringHolderEnum, ensure_tuple, is_named_array
 
@@ -136,6 +136,9 @@ def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] 
 
         if _is_jit_tracer(x.array):
             pspec = pspec_for_axis(x.axes, mapping)
+            if is_on_mac_metal():
+                warnings.warn("Sharding constraints are not supported in jit on metal", RuntimeWarning)
+                return x
             return with_sharding_constraint(x, pspec)
         elif not is_jax_array_like(x.array):
             # this happens when we filter out params for things like lora
