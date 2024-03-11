@@ -60,7 +60,7 @@ class BlockSeq(eqx.Module, Generic[M]):
     homogeneous (though the init method assumes that it is).
     """
 
-    seq: Sequence[M]
+    blocks: Sequence[M]
     Block: Axis = eqx.static_field()
     gradient_checkpointing: bool = eqx.static_field()
 
@@ -96,7 +96,7 @@ class BlockSeq(eqx.Module, Generic[M]):
         out = []
         carry = init
 
-        for i, block in enumerate(self.seq):
+        for i, block in enumerate(self.blocks):
             if self.gradient_checkpointing:
                 block = filter_checkpoint(block)
             (block_args, block_kwargs) = haliax.tree_util.tree_map(
@@ -110,7 +110,7 @@ class BlockSeq(eqx.Module, Generic[M]):
 
     def fold(self, init: T, *args, **kwargs) -> T:
         carry = init
-        for i, block in enumerate(self.seq):
+        for i, block in enumerate(self.blocks):
             if self.gradient_checkpointing:
                 block = filter_checkpoint(block)
             (block_args, block_kwargs) = haliax.tree_util.tree_map(
@@ -120,7 +120,7 @@ class BlockSeq(eqx.Module, Generic[M]):
         return carry
 
     def unstacked(self) -> Sequence[M]:
-        return self.seq
+        return self.blocks
 
     @staticmethod
     def _slice_out(Block, i, x):
