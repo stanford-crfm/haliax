@@ -131,6 +131,9 @@ class BlockSeq(eqx.Module, Generic[M]):
         else:
             return x
 
+    def _state_dict_key_map(self) -> Dict[str, Optional[str]]:
+        return {"blocks": None}
+
 
 class Stacked(eqx.Module, Generic[M]):
     """
