@@ -26,6 +26,9 @@ class BlockFoldable(Protocol[M]):
     """
     A superclass for [Stacked][] and [BlockSeq][] that exposes the fold and scan methods, as
     well as a few other methods that are useful for these modules.
+
+    This is a protocol, so you can use it as a type hint for a function that takes a Stacked or BlockSeq.
+    Equinox modules can't directly inherit from Protocols, but you can use it as a type hint.
     """
 
     Block: Axis
