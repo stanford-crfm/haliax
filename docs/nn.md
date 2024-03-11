@@ -21,7 +21,7 @@ of the same module (e.g. transformer blocks), which is a common pattern in deep 
 
 ### Meta
 
-::: haliax.nn.BlockFoldable
+::: haliax.nn.scan.BlockFoldable
 ::: haliax.nn.BlockSeq
 ::: haliax.nn.Stacked
 ::: haliax.nn.MLP

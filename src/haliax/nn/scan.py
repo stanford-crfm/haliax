@@ -24,7 +24,7 @@ class ModuleInit(Protocol[M_co]):
 
 class BlockFoldable(Protocol[M]):
     """
-    A superclass for [Stacked][] and [BlockSeq][] that exposes the fold and scan methods, as
+    A superclass for [haliax.nn.Stacked][] and [haliax.nn.BlockSeq][] that exposes the fold and scan methods, as
     well as a few other methods that are useful for these modules.
 
     This is a protocol, so you can use it as a type hint for a function that takes a Stacked or BlockSeq.
@@ -56,7 +56,7 @@ class BlockSeq(eqx.Module, Generic[M]):
     where you have multiple instances of the same transformer block and the input is applied in a fold/for loop
     in sequence.
 
-    It's similar in spirit to an [equinox.nn.Sequential]. Unlike [Stacked][], ModuleSeq does not need to be
+    It's similar in spirit to an [equinox.nn.Sequential]. Unlike [equinox.nn.Stacked][], BlockSeq does not need to be
     homogeneous (though the init method assumes that it is).
     """
 
