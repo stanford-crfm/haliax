@@ -11,12 +11,125 @@ from haliax.jax_utils import filter_checkpoint
 from ..axis import Axis
 
 
-M = TypeVar("M", bound=eqx.Module, covariant=True)
+M = TypeVar("M", bound=eqx.Module)
+M_co = TypeVar("M_co", bound=eqx.Module, covariant=True)
+S = TypeVar("S", bound=eqx.Module)
+T = TypeVar("T")
 
 
-class ModuleInit(Protocol[M]):
-    def __call__(self, *args, **kwargs) -> M:
+class ModuleInit(Protocol[M_co]):
+    def __call__(self, *args, **kwargs) -> M_co:
         ...
+
+
+class BlockFoldable(Protocol[M]):
+    """
+    A superclass for [haliax.nn.Stacked][] and [haliax.nn.BlockSeq][] that exposes the fold and scan methods, as
+    well as a few other methods that are useful for these modules.
+
+    This is a protocol, so you can use it as a type hint for a function that takes a Stacked or BlockSeq.
+    Equinox modules can't directly inherit from Protocols, but you can use it as a type hint.
+    """
+
+    Block: Axis
+
+    @classmethod
+    def init(
+        cls: Type[S], Block: Axis, module: Type[M], *, gradient_checkpointing: bool = False, prevent_cse: bool = False
+    ) -> ModuleInit[S]:
+        ...
+
+    def scan(self, init: T, *extra_args, **extra_kwargs):
+        ...
+
+    def fold(self, init: T, *args, **kwargs) -> T:
+        ...
+
+    def unstacked(self) -> Sequence[M]:
+        ...
+
+
+class BlockSeq(eqx.Module, Generic[M]):
+    """
+    A "BlockSeq" wraps another module and produces a "sequential" version of it, where an input is applied
+    to each instance of the sequential module in sequence. This is useful for e.g. transformers
+    where you have multiple instances of the same transformer block and the input is applied in a fold/for loop
+    in sequence.
+
+    It's similar in spirit to an [equinox.nn.Sequential]. Unlike [equinox.nn.Stacked][], BlockSeq does not need to be
+    homogeneous (though the init method assumes that it is).
+    """
+
+    seq: Sequence[M]
+    Block: Axis = eqx.static_field()
+    gradient_checkpointing: bool = eqx.static_field()
+
+    @classmethod
+    def init(
+        cls: Type[S], Block: Axis, module: Type[M], *, gradient_checkpointing: bool = False, prevent_cse: bool = False
+    ) -> ModuleInit[S]:
+        """
+        This is a curried init method that takes the Block and module and returns a function that takes
+        the arguments to the module's init method. Any NamedArrays in the arguments will be sliced along the
+        Block axis (if it exists). JAX arrays will be sliced along the first axis.
+        """
+        del prevent_cse  # not needed, but kept for compat with Stacked
+
+        @functools.wraps(module)
+        def fn(*args, **kwargs):
+            # The only complexity here is that the args and kwargs might have a Block axis in them,
+            # in which case we need to loop over them them to slice them out.
+
+            def init_block(i):
+                (block_args, block_kwargs) = haliax.tree_util.tree_map(
+                    functools.partial(BlockSeq._slice_out, Block, i), (args, kwargs)
+                )
+                return module.init(*block_args, **block_kwargs)
+
+            seq = [init_block(i) for i in range(Block.size)]
+
+            return BlockSeq(seq, Block, gradient_checkpointing)
+
+        return fn
+
+    def scan(self, init: T, *extra_args, **extra_kwargs):
+        out = []
+        carry = init
+
+        for i, block in enumerate(self.seq):
+            if self.gradient_checkpointing:
+                block = filter_checkpoint(block)
+            (block_args, block_kwargs) = haliax.tree_util.tree_map(
+                functools.partial(BlockSeq._slice_out, self.Block, i), (extra_args, extra_kwargs)
+            )
+            carry, extra = block(carry, *block_args, **block_kwargs)
+            out.append(extra)
+
+        # TODO: do we want to stack the outputs?
+        return carry, out
+
+    def fold(self, init: T, *args, **kwargs) -> T:
+        carry = init
+        for i, block in enumerate(self.seq):
+            if self.gradient_checkpointing:
+                block = filter_checkpoint(block)
+            (block_args, block_kwargs) = haliax.tree_util.tree_map(
+                functools.partial(BlockSeq._slice_out, self.Block, i), (args, kwargs)
+            )
+            carry = block(carry, *block_args, **block_kwargs)
+        return carry
+
+    def unstacked(self) -> Sequence[M]:
+        return self.seq
+
+    @staticmethod
+    def _slice_out(Block, i, x):
+        if haliax.is_named_array(x) and haliax.selects_axis(x.axes, Block):
+            return x[Block, i]
+        elif haliax.jax_utils.is_jax_array_like(x):
+            return x[i]
+        else:
+            return x
 
 
 class Stacked(eqx.Module, Generic[M]):
@@ -68,9 +181,9 @@ class Stacked(eqx.Module, Generic[M]):
     gradient_checkpointing: bool = eqx.static_field()
     prevent_cse: bool = eqx.static_field()
 
-    @staticmethod
+    @classmethod
     def init(
-        Block: Axis, module: Type[M], *, gradient_checkpointing: bool = False, prevent_cse: bool = False
+        cls, Block: Axis, module: Type[M], *, gradient_checkpointing: bool = False, prevent_cse: bool = False
     ) -> ModuleInit["Stacked[M]"]:
         """
         Initialize a Stacked module. This method is curried: you can pass in the Block and module, and it will return
