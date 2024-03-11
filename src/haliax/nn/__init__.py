@@ -38,7 +38,7 @@ from .loss import binary_cross_entropy_loss, cross_entropy_loss, cross_entropy_l
 from .mlp import MLP
 from .normalization import LayerNorm, log_softmax, logsumexp, softmax, standardize
 from .pool import max_pool, mean_pool, min_pool
-from .scan import Stacked
+from .scan import BlockSeq, Stacked
 
 
 # TODO: support where in softmax, etc
@@ -85,6 +85,8 @@ __all__ = [
     "Linear",
     "Embedding",
     "Stacked",
+    "BlockSeq",
+    "MLP",
     "relu",
     "gelu",
     "quick_gelu",
