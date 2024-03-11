@@ -29,6 +29,7 @@ def dot(
     precision: PrecisionLike = None,
     preferred_element_type: Optional[DTypeLike] = None,
     out_axes: Optional[PartialAxisSpec] = ...,
+    _dot_general=jax.lax.dot_general
 ) -> NamedArray:
     ...
 
@@ -40,6 +41,7 @@ def dot(
     precision: PrecisionLike = None,
     preferred_element_type: Optional[DTypeLike] = None,
     out_axes: Optional[PartialAxisSpec] = ...,
+    _dot_general=jax.lax.dot_general
 ) -> NamedArray:
     ...
 
@@ -49,6 +51,7 @@ def dot(
     precision: PrecisionLike = None,
     preferred_element_type: Optional[DTypeLike] = None,
     out_axes: Optional[PartialAxisSpec] = None,
+    _dot_general=jax.lax.dot_general,
     **kwargs,
 ) -> NamedArray:
     """Returns the tensor product of two NamedArrays. The axes `axis` are contracted over,
@@ -142,6 +145,7 @@ def dot(
             *[a.array for a in arrays],
             precision=precision,
             preferred_element_type=preferred_element_type,
+            _dot_general=_dot_general,
         )
 
     out = NamedArray(output, output_axes)
