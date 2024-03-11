@@ -70,6 +70,7 @@ class BlockSeq(eqx.Module, Generic[M]):
         the arguments to the module's init method. Any NamedArrays in the arguments will be sliced along the
         Block axis (if it exists). JAX arrays will be sliced along the first axis.
         """
+        del prevent_cse  # not needed, but kept for compat with Stacked
 
         @functools.wraps(module)
         def fn(*args, **kwargs):

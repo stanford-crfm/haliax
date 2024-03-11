@@ -44,7 +44,7 @@ def dropout(x, pdrop, broadcast_axes=None, *, inference, key=None):
                 shape_to_generate = tuple(ax for ax in x.axes if ax not in axes)
 
             q = 1 - pdrop
-            mask = haliax.random.bernoulli(key, shape_to_generate, q)
+            mask: NamedArray = haliax.random.bernoulli(key, shape_to_generate, q)
             q = x.dtype.type(q)
 
             out = haliax.where(mask, x / q, 0)

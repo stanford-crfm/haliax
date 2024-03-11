@@ -379,6 +379,85 @@ def test_concatenate():
     assert hax.concatenate("H", (named1, named2)).axes == (W, Axis("H", 7))
 
 
+def test_repeat():
+    # Test analogs to this numpy code:
+    # x = np.array([[1,2],[3,4]])
+    #
+    # np.repeat(x, 3, axis=1)
+    # array([[1, 1, 1, 2, 2, 2],
+    #        [3, 3, 3, 4, 4, 4]])
+    #
+    # np.repeat(x, [1, 2], axis=0)
+    # array([[1, 2],
+    #        [3, 4],
+    #        [3, 4]])
+
+    H = Axis("H", 2)
+    W = Axis("W", 2)
+
+    named1 = hax.named([[1, 2], [3, 4]], (H, W))
+
+    assert jnp.all(jnp.equal(hax.repeat(named1, 3, axis=W).array, jnp.repeat(named1.array, 3, axis=1)))
+    assert hax.repeat(named1, 3, axis=W).axes == (H, Axis("W", 6))
+
+    assert jnp.all(
+        jnp.equal(
+            hax.repeat(named1, jnp.array([1, 2]), axis=H).array, jnp.repeat(named1.array, jnp.array([1, 2]), axis=0)
+        )
+    )
+    assert hax.repeat(named1, jnp.array([1, 2]), axis=H).axes == (Axis("H", 3), W)
+
+
+def test_tile():
+    # a = np.array([0, 1, 2])
+    #
+    # np.tile(a, 2)
+    # array([0, 1, 2, 0, 1, 2])
+    #
+    # np.tile(a, (2, 2))
+    # array([[0, 1, 2, 0, 1, 2],
+    #        [0, 1, 2, 0, 1, 2]])
+    #
+    # np.tile(a, (2, 1, 2))
+    # array([[[0, 1, 2, 0, 1, 2]],
+    #        [[0, 1, 2, 0, 1, 2]]])
+    #
+    # b = np.array([[1, 2], [3, 4]])
+    #
+    # np.tile(b, 2)
+    # array([[1, 2, 1, 2],
+    #        [3, 4, 3, 4]])
+    #
+    # np.tile(b, (2, 1))
+    # array([[1, 2],
+    #        [3, 4],
+    #        [1, 2],
+    #        [3, 4]])
+    #
+    # c = np.array([1,2,3,4])
+    #
+    # np.tile(c,(4,1))
+    # array([[1, 2, 3, 4],
+    #        [1, 2, 3, 4],
+    #        [1, 2, 3, 4],
+    #        [1, 2, 3, 4]])
+
+    named1 = hax.named([0, 1, 2], "H")
+
+    assert jnp.all(jnp.equal(hax.tile(named1, {"H": 2}).array, jnp.tile(named1.array, 2)))
+    assert jnp.all(jnp.equal(hax.tile(named1, {"H": 2, "W": 1}).array, jnp.tile(named1.array, (1, 2))))
+
+    named2 = hax.named([[1, 2], [3, 4]], ("H", "W"))
+
+    assert jnp.all(jnp.equal(hax.tile(named2, {"H": 2}).array, jnp.tile(named2.array, (2, 1))))
+    assert jnp.all(jnp.equal(hax.tile(named2, {"H": 2, "W": 1}).array, jnp.tile(named2.array, (2, 1))))
+
+    named3 = hax.named([1, 2, 3, 4], "H")
+
+    assert jnp.all(jnp.equal(hax.tile(named3, {"H": 4, "W": 1}).array, jnp.tile(named3.array, (1, 4))))
+    assert jnp.all(jnp.equal(hax.tile(named3, {"H": 4, "W": 1, "D": 1}).array, jnp.tile(named3.array, (1, 1, 4))))
+
+
 def test_unflatten_axis():
     H = Axis("Height", 2)
     W = Axis("Width", 3)
@@ -743,3 +822,28 @@ def test_nice_short_string_in_named_array_in_eqx_module():
     mod = TestModule(named1)
 
     assert str(mod).startswith("TestModule(named1=Named(int32{'H': 10, 'W': 20}))")
+
+
+def test_named_arrays_work_in_eqxi_while_loop():
+    H = Axis("H", 10)
+    W = Axis("W", 20)
+
+    named1 = hax.random.uniform(PRNGKey(0), (H, W))
+
+    import equinox.internal as eqxi
+
+    def body_fun(t):
+        i, named1 = t
+        return i + 1, named1 + named1
+
+    def cond_fun(t):
+        i, named1 = t
+        return i < 10
+
+    def loss_fun(named1):
+        i, named1 = eqxi.while_loop(cond_fun, body_fun, (0, named1), kind="checkpointed", max_steps=10)
+        return named1.sum().scalar()
+
+    grad_fun = eqx.filter_value_and_grad(loss_fun)
+
+    grad_fun(named1)
