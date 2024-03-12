@@ -284,8 +284,8 @@ class _NamedJitWrapper(eqx.Module):
         in_axis_resources = self._in_axis_resources
         out_axis_resources = self._out_axis_resources
 
-        # if out_axis_resources is None:
-        #     out_axis_resources = axis_resources
+        if out_axis_resources is None:
+            out_axis_resources = axis_resources
 
         dynamic_argspec, static_argspec = hashable_partition((args, kwargs), is_jax_array_like)
         dynamic = (self._dynamic_fun, dynamic_argspec)
