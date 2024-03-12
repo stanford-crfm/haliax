@@ -1,4 +1,4 @@
-from typing import Callable, Sequence
+from typing import Callable, Optional, Sequence
 
 import equinox as eqx
 import jax
@@ -7,6 +7,7 @@ from jaxtyping import PRNGKeyArray
 from ..axis import Axis, AxisSpec
 from ..core import NamedArray
 from ..jax_utils import maybe_rng_split
+from ..mixed_precision import DTypeish
 from .activations import relu
 from .linear import Linear
 
@@ -42,11 +43,25 @@ class MLP(eqx.Module):
         width: int | Axis,
         depth: int,
         activation: Callable = relu,
+        compute_dtype: Optional[DTypeish] = "compute",
         *,
         use_bias: bool = True,
         use_final_bias: bool = True,
         key: PRNGKeyArray,
-    ):
+    ) -> "MLP":
+        """
+
+        Args:
+            Input: input axes
+            Output: output axes
+            width: width of hidden layers
+            depth: number of hidden layers
+            activation: activation function, defaults to relu
+            compute_dtype: dtype to use for computation, or None to use jax default rules.
+            use_bias: whether to include bias terms in hidden layers
+            use_final_bias: whether to include bias term in final layer
+            key: rng key for initialization.
+        """
         Width = _get_width(width)
         Width2 = Width.alias(Width.name + "2")
 
@@ -56,18 +71,18 @@ class MLP(eqx.Module):
 
         if depth == 0:
             # special case: no hidden layers
-            layers.append(Linear.init(Input, Output, use_bias=use_final_bias, key=keys[0]))
+            layers.append(Linear.init(Input, Output, compute_dtype, use_bias=use_final_bias, key=keys[0]))
         else:
             # first hidden layer
-            layers.append(Linear.init(Input, Width, use_bias=use_bias, key=keys[0]))
+            layers.append(Linear.init(Input, Width, compute_dtype, use_bias=use_bias, key=keys[0]))
             # middle hidden layers
             cur = Width
             next = Width2
             for i in range(1, depth):
-                layers.append(Linear.init(cur, next, use_bias=use_bias, key=keys[i]))
+                layers.append(Linear.init(cur, next, compute_dtype, use_bias=use_bias, key=keys[i]))
                 cur, next = next, cur
             # final hidden layer
-            layers.append(Linear.init(cur, Output, use_bias=use_final_bias, key=keys[-1]))
+            layers.append(Linear.init(cur, Output, compute_dtype, use_bias=use_final_bias, key=keys[-1]))
 
         return MLP(
             layers=tuple(layers),

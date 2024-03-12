@@ -1,3 +1,5 @@
+from typing import Optional
+
 import jax.nn as jnn
 import jax.numpy as jnp
 
@@ -9,6 +11,7 @@ import haliax.nn.normalization
 
 from ..axis import Axis
 from ..core import NamedArray
+from ..types import DTypeLike
 from .activations import (
     celu,
     elu,
@@ -44,7 +47,7 @@ from .scan import BlockSeq, Stacked
 # TODO: support where in softmax, etc
 
 
-def one_hot(x: NamedArray | int, class_axis: Axis, *, dtype=None) -> NamedArray:
+def one_hot(x: NamedArray | int, class_axis: Axis, *, dtype: Optional[DTypeLike] = None) -> NamedArray:
     """
     Convert an integer to a one-hot vector. This is basically a generalization of [jax.nn.one_hot][]
     for NamedArrays.

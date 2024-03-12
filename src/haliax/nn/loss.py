@@ -43,7 +43,7 @@ def cross_entropy_loss(
     where: Optional[NamedArray] = None,
     reduction_axis: Optional[AxisSelection] = None,
 ) -> jnp.ndarray | NamedArray:
-    loss, _ = cross_entropy_loss_and_log_normalizers(logits, Label, targets)
+    loss = cross_entropy(logits, Label, targets)
 
     # if target_y isn't some kind of floating point, something is wrong, so warn
     if not jnp.issubdtype(targets.dtype, jnp.floating):
@@ -85,11 +85,7 @@ def binary_cross_entropy_loss(
     where: Optional[NamedArray] = None,
     reduction_axis: Optional[AxisSelection] = None,
 ) -> jnp.ndarray | NamedArray:
-    log_p = hax.nn.log_sigmoid(logits)
-    log_not_p = hax.nn.log_sigmoid(-logits)  # == log(1-sigmoid(x))
-    targets = targets.astype(logits.dtype)
-    loss = -targets * log_p - (1.0 - targets) * log_not_p
-
+    loss = binary_cross_entropy(logits, targets)
     loss = maybe_reduce_loss(loss, reduction, reduction_axis, where)
     return loss
 
@@ -117,11 +113,16 @@ def cross_entropy_loss_and_log_normalizers(
     """
     Compute the cross entropy loss and log normalizers for a batch of predictions and targets.
 
-    :param pred_y: a NamedArray with the Label axis (and possibly others for e.g. batch and seq) containing the logits
-    :param Label: the Label axis
-    :param target_y: a NamedArray with the Label axis (and possibly others) containing the targets
+    Args:
+         pred_y: a NamedArray with the Label axis (and possibly others for e.g. batch and seq) containing the logits
+         Label: the Label axis
+         target_y: a NamedArray with the Label axis (and possibly others) containing the targets
 
-    :return: tuple of two named arrays, with "per position" losses and log normalizers
+    Returns:
+        a tuple of two named arrays:
+        - the "per position" losses
+        - the log normalizers
+
     """
     log_normalizers = hax.nn.logsumexp(pred_y, Label)
     neg_log_normalized = log_normalizers - pred_y
@@ -129,3 +130,44 @@ def cross_entropy_loss_and_log_normalizers(
     loss = hax.dot(target_y, neg_log_normalized, axis=Label)
 
     return loss, log_normalizers
+
+
+def cross_entropy(
+    logits: NamedArray,
+    Label: AxisSelector,
+    targets: NamedArray,
+) -> NamedArray:
+    """
+    Compute the cross entropy loss for a batch of predictions and targets.
+
+    Args:
+       logits: a NamedArray with the Label axis (and possibly others for e.g. batch and seq) containing the logits
+       Label: the Label axis
+       targets: a NamedArray with the Label axis (and possibly others) containing the targets
+
+    Returns:
+       a named array with the "per position" losses
+    """
+    return cross_entropy_loss_and_log_normalizers(logits, Label, targets)[0]
+
+
+def binary_cross_entropy(logits: NamedArray, targets: NamedArray):
+    """
+    Compute the binary cross entropy loss for a batch of predictions and targets.
+    Returns the loss for each position in the batch.
+
+    This function is agnostic to all dimensions.
+
+    Args:
+        logits: NamedArray with the same shape as targets.
+        targets: NamedArray with the same shape as logits.
+
+    Returns:
+        NamedArray with the same shape as logits and targets
+
+    """
+    log_p = hax.nn.log_sigmoid(logits)
+    log_not_p = hax.nn.log_sigmoid(-logits)  # == log(1-sigmoid(x))
+    targets = targets.astype(logits.dtype)
+    loss = -targets * log_p - (1.0 - targets) * log_not_p
+    return loss
