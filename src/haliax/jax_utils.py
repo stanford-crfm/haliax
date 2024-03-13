@@ -1,15 +1,19 @@
 import functools as ft
 import typing
-from typing import Any, Callable, List, Optional, Sequence, Union
+from typing import Any, Callable, Optional, Sequence, Union
 
 import equinox as eqx
 import jax
 import numpy as np
+from jax import Array
 from jax import numpy as jnp
 from jax import random as jrandom
+from jax._src.numpy import lax_numpy
+from jax._src.typing import DTypeLike
 from jaxtyping import PRNGKeyArray
 
 import haliax
+from haliax.types import PrecisionLike
 
 
 F = typing.TypeVar("F", bound=Callable[..., Any])
@@ -153,3 +157,41 @@ def is_scalarish(x):
 
 def is_on_mac_metal():
     return jax.devices()[0].platform.lower() == "metal"
+
+
+def _jittable_dg_einsum(
+    subscripts,
+    /,
+    *operands,
+    out: None = None,
+    optimize: str = "optimal",
+    precision: PrecisionLike = None,
+    preferred_element_type: DTypeLike | None = None,
+    _dot_general: Callable[..., Array] = jax.lax.dot_general,
+) -> Array:
+    operands = (subscripts, *operands)
+    if out is not None:
+        raise NotImplementedError("The 'out' argument to jnp.einsum is not supported.")
+    spec = operands[0] if isinstance(operands[0], str) else None
+    optimize = "optimal" if optimize is True else optimize
+
+    import opt_einsum
+
+    # Allow handling of shape polymorphism
+    non_constant_dim_types = {
+        type(d) for op in operands if not isinstance(op, str) for d in np.shape(op) if not jax.core.is_constant_dim(d)
+    }
+    if not non_constant_dim_types:
+        contract_path = opt_einsum.contract_path
+    else:
+        ty = next(iter(non_constant_dim_types))
+        contract_path = lax_numpy._poly_einsum_handlers.get(ty, lax_numpy._default_poly_einsum_handler)
+    # using einsum_call=True here is an internal api for opt_einsum... sorry
+    operands, contractions = contract_path(*operands, einsum_call=True, use_blas=True, optimize=optimize)
+
+    contractions = tuple((a, frozenset(b), c) for a, b, c, *_ in contractions)
+
+    einsum = eqx.filter_jit(lax_numpy._einsum, inline=True)
+    if spec is not None:
+        einsum = jax.named_call(einsum, name=spec)
+    return einsum(operands, contractions, precision, preferred_element_type, _dot_general)  # type: ignore[operator]
