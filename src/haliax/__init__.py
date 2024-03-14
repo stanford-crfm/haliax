@@ -12,6 +12,7 @@ except ImportError:
 
 import haliax.debug as debug
 import haliax.nn as nn
+import haliax.quantization as quantization
 import haliax.random as random
 import haliax.tree_util as tree_util
 import haliax.util as util

@@ -151,7 +151,7 @@ class Fp8DotGeneralOp(OverwriteWithGradient):
         return y
 
 
-@dataclass
+@dataclass(frozen=True)
 class Fp8Config:
     amax_history_length: int = 1024
     compute_dtype: DTypeLike = None
