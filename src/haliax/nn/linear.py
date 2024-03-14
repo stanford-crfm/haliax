@@ -50,7 +50,7 @@ class Linear(eqx.Module):
             key: Not used, but there for compat with other modules
         """
         del key
-        q = inputs.dot(self.weight, axis=self.In, _dot_general=self.dot_general)
+        q = inputs.dot(self.weight, axis=self.In, dot_general=self.dot_general)
         q = hax.auto_sharded(q)
 
         if self.bias is not None:

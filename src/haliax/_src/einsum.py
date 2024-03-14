@@ -9,6 +9,7 @@ import haliax
 
 from ..axis import AxisSelector, axis_name, eliminate_axes, rearrange_for_partial_order, union_axes
 from ..core import NamedArray
+from ..jax_utils import _jittable_dg_einsum
 from ..types import DTypeLike, PrecisionLike
 from ..util import ensure_tuple
 from .parsing import AliasTable, parse_einsum, raise_parse_error
@@ -70,7 +71,7 @@ def einsum(
 
         spec, out_axes = _positional_einsum_spec(equation, arrays, lhses, rhs)
 
-    out_raw = jnp.einsum(
+    out_raw = _jittable_dg_einsum(
         spec,
         *[a.array for a in arrays],
         precision=precision,
