@@ -5,8 +5,15 @@ import jax.tree_util
 import numpy as np
 
 import haliax as hax
-from haliax.fp8 import Fp8DotGeneralOp, apply_updates, compute_scale, partition_for_grad_overwrite
+from haliax._src.fp8 import compute_scale
 from haliax.nn import Linear
+from haliax.quantization import (
+    Fp8Config,
+    Fp8DotGeneralOp,
+    apply_updates,
+    fp8_quantize_tree,
+    partition_for_grad_overwrite,
+)
 
 
 def test_fp8_is_reasonable():
@@ -14,7 +21,7 @@ def test_fp8_is_reasonable():
     Out = hax.Axis("Out", 8)
     linear = Linear.init(In, Out, key=jrandom.PRNGKey(0))
 
-    fp8_linear = Linear.init(In, Out, key=jrandom.PRNGKey(0), dot_general=hax.fp8.Fp8DotGeneralOp.init())
+    fp8_linear = Linear.init(In, Out, key=jrandom.PRNGKey(0), dot_general=hax.quantization.Fp8DotGeneralOp.init())
 
     input = hax.random.normal(jrandom.PRNGKey(0), In)
     output = linear(input)
@@ -119,3 +126,83 @@ def test_fp_loop():
         np.testing.assert_allclose(linear.dot_general.input_scale, scale_x, rtol=rtol, atol=atol)  # type: ignore
         np.testing.assert_allclose(linear.dot_general.kernel_scale, scale_k, rtol=rtol, atol=atol)  # type: ignore
         np.testing.assert_allclose(linear.dot_general.output_grad_scale, scale_g, rtol=rtol, atol=atol)  # type: ignore
+
+
+def test_layer_splicing():
+    key, init_key, random_key = jrandom.split(jrandom.PRNGKey(seed=123), 3)
+    Input = hax.Axis("Input", 16)
+    Hidden = hax.Axis("Hidden", 16)
+    Output = hax.Axis("Output", 32)
+    mlp = hax.nn.MLP.init(Input, Output, Hidden, 3, key=init_key)
+
+    mlp_q = fp8_quantize_tree(mlp, Fp8Config())
+    for layer in mlp_q.layers:
+        assert isinstance(layer.dot_general, Fp8DotGeneralOp)
+
+    input = hax.random.normal(jrandom.PRNGKey(0), Input) * 10  # 10 so we don't underflow
+    output = mlp(input)
+    output_q = mlp_q(input)
+    assert jnp.allclose(output.array, output_q.array, atol=1e-3, rtol=1e-3)
+    assert not jnp.allclose(output_q.array, 0)  # don't want them to all underflow
+
+    mlp_q = fp8_quantize_tree(mlp, Fp8Config(targets="layers.0"))
+    for i, layer in enumerate(mlp_q.layers):
+        if i == 0:
+            assert isinstance(layer.dot_general, Fp8DotGeneralOp)
+        else:
+            assert not isinstance(layer.dot_general, Fp8DotGeneralOp)
+
+    mlp_q = fp8_quantize_tree(mlp, Fp8Config(targets=["0", "1"]))
+    for i, layer in enumerate(mlp_q.layers):
+        if i < 2:
+            assert isinstance(layer.dot_general, Fp8DotGeneralOp)
+        else:
+            assert not isinstance(layer.dot_general, Fp8DotGeneralOp)
+
+
+def test_fp8ize_stacking():
+    class Block(eqx.Module):
+        up_proj: hax.nn.Linear
+        down_proj: hax.nn.Linear
+
+        @staticmethod
+        def init(In, Out, key):
+            up_proj = hax.nn.Linear.init(In, Out, key=key)
+            down_proj = hax.nn.Linear.init(Out, In, key=key)
+            return Block(up_proj, down_proj)
+
+        def __call__(self, x):
+            return self.down_proj(self.up_proj(x))
+
+    Layer = hax.Axis("Layer", 3)
+
+    class Tformer(eqx.Module):
+        blocks: hax.nn.Stacked[Block]
+
+        @staticmethod
+        def init(In, Out, key):
+            blocks = hax.nn.Stacked.init(Layer, Block)(In, Out, key=jax.random.split(key, Layer.size))
+            return Tformer(blocks)
+
+        def __call__(self, x):
+            return self.blocks.fold(x)
+
+    In = hax.Axis("In", 16)
+    Out = hax.Axis("Out", 32)
+    tformer = Tformer.init(In, Out, key=jrandom.PRNGKey(0))
+    tformer_q = fp8_quantize_tree(tformer, Fp8Config())
+
+    # want to be sure this vmaps the dot_general to the right places
+    dg = tformer_q.blocks.stacked.up_proj.dot_general
+    assert isinstance(dg, Fp8DotGeneralOp)
+    assert dg.input_scale.shape == (Layer.size, 1)
+    assert dg.input_amax_history.shape == (Layer.size, 1024)
+    dg = tformer_q.blocks.stacked.down_proj.dot_general
+    assert isinstance(dg, Fp8DotGeneralOp)
+
+    # just stack the up_proj
+    tformer_q = fp8_quantize_tree(tformer, Fp8Config(targets=["up_proj"]))
+    dg = tformer_q.blocks.stacked.up_proj.dot_general
+    assert isinstance(dg, Fp8DotGeneralOp)
+    dg = tformer_q.blocks.stacked.down_proj.dot_general
+    assert not isinstance(dg, Fp8DotGeneralOp)

@@ -1,0 +1,243 @@
+# Support for FP8
+# Much of this is lifted from FLAX
+# https://github.com/google/flax/blob/main/flax/linen/fp8_ops.py
+import dataclasses
+import functools
+import warnings
+from dataclasses import dataclass
+from typing import Optional, Protocol, TypeVar
+
+import equinox as eqx
+import jax
+from jax import numpy as jnp
+from jax._src.tree_util import BuiltInKeyEntry
+from jax.tree_util import DictKey, FlattenedIndexKey, GetAttrKey, SequenceKey
+from jax.typing import DTypeLike
+
+import haliax.nn as hnn
+from haliax.types import PrecisionLike
+
+from ._src.fp8 import dot_general_with_precision, in_qdq, out_qdq
+from .axis import Axis
+from .hof import vmap
+
+
+T = TypeVar("T")
+
+
+class OverwriteWithGradient(eqx.Module):
+    """
+    Sometimes there is state that must be computed in the backward pass which we want to
+    persist for subsequent passes. Typically, we see this with quantization, particularly
+    FP8. This module is a marker that indicates to [haliax.quant.apply_updates][] that the
+    gradient should be used to overwrite the state rather than added to it.
+
+    Typically this is used in conjunction with [haliax.quant.partition_for_grad_overwrite][]
+    and the types are kinds of DotGeneralOp.
+    """
+
+    pass
+
+
+def partition_for_grad_overwrite(grad: T) -> tuple[T, T]:
+    """
+    This function is used to partition the state of a module into two parts: one that will be
+    overwritten by the gradient and one that will be updated by the gradient. This is used by
+    [eqx.apply_updates][] to determine which state should be updated and which should
+    be overwritten.
+    The usual pattern is something like:
+
+        ```python
+        grads = jax.grad(loss_fn)(model)
+        overwrites, grads = partition_for_grad_overwrite(grads)
+        updates = optimizer.update(grads, params=model)
+        model = hax.quant.apply_updates(model, updates, overwrites)
+        ```
+
+    """
+
+    def is_overwrite_with_gradient(v):
+        return isinstance(v, OverwriteWithGradient)
+
+    x, y = eqx.partition(grad, is_overwrite_with_gradient, is_leaf=is_overwrite_with_gradient)
+    return x, y
+
+
+def apply_updates(tree, updates, overwrites):
+    """
+    A `jax.tree_util.tree_map`-broadcasted version of
+    ```python
+    if overwrite is not None:
+        return overwrite
+    if update is None:
+        return model
+    else:
+        return model + update
+    """
+
+    def _apply_update(tree, update, overwrite):
+        if overwrite is not None:
+            return overwrite
+
+        return eqx.apply_updates(tree, update)
+
+    def is_leaf(x):
+        return x is None or isinstance(x, OverwriteWithGradient)
+
+    return jax.tree_util.tree_map(_apply_update, tree, updates, overwrites, is_leaf=is_leaf)
+
+
+class DotGeneralOp(Protocol):
+    """
+    This protocol is used to define the signature of the `dot_general` function that is
+    passed to the `Linear` module. This is used to allow for custom dot_general functions
+    for quantized types.
+    """
+
+    def __call__(
+        self,
+        lhs,
+        rhs,
+        dimension_numbers,
+        precision: PrecisionLike = None,
+        preferred_element_type: DTypeLike | None = None,
+    ) -> jnp.ndarray:
+        ...
+
+
+class Fp8DotGeneralOp(OverwriteWithGradient):
+    input_scale: jnp.ndarray
+    output_grad_scale: jnp.ndarray
+    kernel_scale: jnp.ndarray
+    input_amax_history: jnp.ndarray
+    output_grad_amax_history: jnp.ndarray
+    kernel_amax_history: jnp.ndarray
+    compute_dtype: Optional[DTypeLike] = eqx.field(static=True)
+
+    @classmethod
+    def init(cls, amax_history_length: int = 1024, compute_dtype: DTypeLike = None):
+        return cls(
+            input_scale=jnp.ones(1, dtype=jnp.float32),
+            output_grad_scale=jnp.ones(1, dtype=jnp.float32),
+            kernel_scale=jnp.ones(1, dtype=jnp.float32),
+            input_amax_history=jnp.zeros(amax_history_length, dtype=jnp.float32),
+            output_grad_amax_history=jnp.zeros(amax_history_length, dtype=jnp.float32),
+            kernel_amax_history=jnp.zeros(amax_history_length, dtype=jnp.float32),
+            compute_dtype=compute_dtype,
+        )
+
+    # copied from flax
+    def __call__(
+        self,
+        lhs,
+        rhs,
+        dimension_numbers,
+        precision: PrecisionLike = None,
+        preferred_element_type: DTypeLike | None = None,
+    ):
+        # Use the `k.dtype` since it aligns with the `dtype` of its layers,
+        # namely, the computation data type.
+        if self.compute_dtype is None:
+            comp_dtype = rhs.dtype
+        else:
+            comp_dtype = self.compute_dtype
+        lhs = jnp.asarray(lhs, comp_dtype)
+
+        x_qdq = in_qdq(comp_dtype, lhs, self.input_scale, self.input_amax_history)
+        k_qdq = in_qdq(comp_dtype, rhs, self.kernel_scale, self.kernel_amax_history)
+        y_qdq = dot_general_with_precision(x_qdq, k_qdq, dimension_numbers, precision, preferred_element_type)
+        y = out_qdq(comp_dtype, y_qdq, self.output_grad_scale, self.output_grad_amax_history)
+
+        return y
+
+
+@dataclass
+class Fp8Config:
+    amax_history_length: int = 1024
+    compute_dtype: DTypeLike = None
+    targets: Optional[list[str] | str] = dataclasses.field(default=None)
+    """
+    If provided, only modules with names in this list will be quantized. If a single string, will be treated as a regex"""
+
+
+def fp8_quantize_tree(tree: T, config: Fp8Config) -> T:
+    """
+    Converts a module tree to use FP8 quantization.
+    Linear modules that have a name that matches the targets (if provided) will be converted to use FP8.
+    (If targets is None, all linear modules will be converted.)
+
+    This essentially goes through and adds FP8DotGeneralOp to the Linear modules.
+    """
+
+    def _is_special_module(module):
+        # TODO: add conv?
+        return isinstance(module, hnn.Linear) or isinstance(module, hnn.Stacked)
+
+    def _batchify_ctor(ctor, batch_dims):
+        # this is gross but it basically just vmaps the ctor over each batch dimension
+        return functools.reduce(lambda ctor, batch_axis: vmap(ctor, batch_axis), reversed(batch_dims), ctor)
+
+    # TODO: test scanlayers for dg
+    def fp8_quantize_module(path_prefix, batch_dims: tuple[Axis, ...], path, module: T) -> T:
+        path = path_prefix + path
+        if isinstance(module, hnn.Stacked):
+            new_inner = jax.tree_util.tree_map_with_path(
+                functools.partial(fp8_quantize_module, path_prefix + (GetAttrKey("stacked"),), batch_dims + (module.Block,)),  # type: ignore
+                module.stacked,
+                is_leaf=_is_special_module,
+            )
+            return dataclasses.replace(module, stacked=new_inner)  # type: ignore
+        elif isinstance(module, hnn.Linear):
+            if _matches_target_fp8(path, config):
+                vmapped_dg = _batchify_ctor(Fp8DotGeneralOp.init, batch_dims)(
+                    config.amax_history_length, config.compute_dtype
+                )
+                module = dataclasses.replace(module, dot_general=vmapped_dg)  # type: ignore
+            return module
+        else:
+            return module
+
+    return jax.tree_util.tree_map_with_path(
+        lambda p, m: fp8_quantize_module((), (), p, m), tree, is_leaf=_is_special_module
+    )
+
+
+def _matches_target_fp8(key_path, config: Fp8Config) -> bool:
+    if not key_path:
+        key = ""
+    else:
+        key = key_path_to_str(key_path[-1:])
+
+    if config.targets is None:
+        return True
+    if isinstance(config.targets, list):
+        return key in config.targets
+
+    import re
+
+    key_path_str = key_path_to_str(key_path)
+    return re.match(config.targets, key_path_str) is not None
+
+
+def key_path_to_str(key_path: tuple[BuiltInKeyEntry, ...]) -> str:
+    out = ""
+    for k in key_path:
+        match k:
+            case SequenceKey(i):  # type: ignore
+                out = _join_key(out, str(i))
+            case GetAttrKey(name):  # type: ignore
+                out = _join_key(out, name)
+            case DictKey(key):  # type: ignore
+                out = _join_key(out, key)
+            case FlattenedIndexKey(i):  # type: ignore
+                out = _join_key(out, str(i))
+            case _:
+                warnings.warn(f"Unsupported key type {k}")
+                out = _join_key(out, str(k))
+    return out
+
+
+def _join_key(prefix: str, key: str) -> str:
+    if prefix:
+        return f"{prefix}.{key}"
+    return key
