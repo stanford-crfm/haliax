@@ -29,10 +29,10 @@ class OverwriteWithGradient(eqx.Module):
     """
     Sometimes there is state that must be computed in the backward pass which we want to
     persist for subsequent passes. Typically, we see this with quantization, particularly
-    FP8. This module is a marker that indicates to [haliax.quant.apply_updates][] that the
+    FP8. This module is a marker that indicates to [haliax.quantization.apply_updates][] that the
     gradient should be used to overwrite the state rather than added to it.
 
-    Typically this is used in conjunction with [haliax.quant.partition_for_grad_overwrite][]
+    Typically this is used in conjunction with [haliax.quantization.partition_for_grad_overwrite][]
     and the types are kinds of DotGeneralOp.
     """
 
@@ -43,7 +43,7 @@ def partition_for_grad_overwrite(grad: T) -> tuple[T, T]:
     """
     This function is used to partition the state of a module into two parts: one that will be
     overwritten by the gradient and one that will be updated by the gradient. This is used by
-    [eqx.apply_updates][] to determine which state should be updated and which should
+    [equinox.apply_updates][] to determine which state should be updated and which should
     be overwritten.
     The usual pattern is something like:
 
