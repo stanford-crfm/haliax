@@ -23,7 +23,7 @@ def test_fp8_is_reasonable():
 
     fp8_linear = Linear.init(In, Out, key=jrandom.PRNGKey(0), dot_general=hax.quantization.Fp8DotGeneralOp.init())
 
-    input = hax.random.normal(jrandom.PRNGKey(0), In)
+    input = hax.random.normal(jrandom.PRNGKey(0), In) * 10
     output = linear(input)
     fp8_output = fp8_linear(input)
 
