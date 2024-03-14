@@ -207,7 +207,7 @@ def _matches_target_fp8(key_path, config: Fp8Config) -> bool:
     if not key_path:
         key = ""
     else:
-        key = key_path_to_str(key_path[-1:])
+        key = _key_path_to_str(key_path[-1:])
 
     if config.targets is None:
         return True
@@ -216,11 +216,11 @@ def _matches_target_fp8(key_path, config: Fp8Config) -> bool:
 
     import re
 
-    key_path_str = key_path_to_str(key_path)
+    key_path_str = _key_path_to_str(key_path)
     return re.match(config.targets, key_path_str) is not None
 
 
-def key_path_to_str(key_path: tuple[BuiltInKeyEntry, ...]) -> str:
+def _key_path_to_str(key_path: tuple[BuiltInKeyEntry, ...]) -> str:
     out = ""
     for k in key_path:
         match k:
