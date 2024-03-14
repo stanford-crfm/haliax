@@ -49,18 +49,19 @@ class MyModule(eqx.Module):
     down_proj: hax.nn.Linear
 
     @staticmethod
-    def init(self, *, key):
+    def init(*, key):
         super().__init__()
         k_up, k_down = jax.random.split(key)
-        self.up_proj = hax.nn.Linear.init(In, Mid, key=k_up)
-        self.down_proj = hax.nn.Linear.init(Mid, Out, key=k_down)
+        return MyModule(
+            up_proj=hax.nn.Linear.init(In, Mid, key=k_up),
+            down_proj=hax.nn.Linear.init(Mid, Out, key=k_down),
+        )
 
     def __call__(self, x):
         x = self.up_proj(x)
         x = hax.nn.relu(x)
         x = self.down_proj(x)
         return x
-
 
 module = MyModule.init(key=jax.random.PRNGKey(0))
 
@@ -72,9 +73,17 @@ from haliax.quantization import Fp8Config
 
 config = Fp8Config(targets=["up_proj"])
 module = hax.quantization.fp8_linear_layers(module, config)
+
+# Train step
+grads = eqx.filter_grad(loss_fn)(module, data)
+overwrite, grads = haxq.partition_for_grad_overwrite(grads)
+updates, opt_state = opt.update(grads, opt_state, params=module)  # or however you update your optimizer
+module = hax.quantization.apply_updates(module, updates, grads)
 ```
 
-That's it! One line of
+That's it! Just a few lines of code to enabl e FP8. The `fp8_linear_layers` function will transform your module to use FP8
+for linear layers (or a subset if you want), and the combo of `partition_for_grad_overwrite` and `apply_updates` function will apply the updates to the module
+in a way that is compatible with FP8.
 
 ## How FP8 works
 
@@ -88,11 +97,24 @@ a custom implementation of `dot_general` to functions and modules like [haliax.d
 The `dot_general` for FP8 is implemented by scaling
 the inputs, projecting the inputs to FP8, performing the computation in FP8, and then
 scaling the result back to the original precision.
-
-The subtle part of FP8 is that the scaling is a trained parameter, based on a history of the inputs to the layer
+The subtle part of FP8 is that the scaling is a parameter that is trained based on a history of the inputs to the layer
 (as well as gradients coming in from backward). This means that the FP8 `dot_general` needs to maintain state.
-In Equinox, this means that the `dot_general` is actually a `Module` that packages together the
-state and the computation.
-(Unlike [equinox.nn.StatefulLayer][] which returns a state object you pass back into the module, the FP8 `dot_general`
+In Equinox, this means that the `dot_general` is actually a `Module` that packages together the state and the
+computation. (Unlike [equinox.nn.StatefulLayer][] which returns a state object you pass back into the module, the FP8 `dot_general`
 module hijacks the gradient computation to update its state. This is necessary because the FP8 scaling factors
 depend on the gradients.)
+
+The way this happens is by "hijacking" the gradient computation. When you call `eqx.filter_grad(loss_fn)(module, data)`,
+you will get the gradient computation as normal, but you'll also get the updated state of the FP8 `dot_general` module.
+This updated state needs to directly replace the state in the module (rather than be used for a gradient step), which is
+why you need to use the `partition_for_grad_overwrite`
+
+The FP8 `dot_general` module is implemented in [haliax.quantization.Fp8DotGeneral][]. It's actually not that complicated:
+
+1) It holds a scaling factor and history of maximum values for each of (lhs, rhs, output) and updates them based on the
+gradients.
+2) When invoked, it scales the inputs, projects them to FP8, performs the computation, and scales the result back to the
+original precision.  It remembers the maximum absolute value for each of the inputs.
+3) For the gradients, it scales the gradients, projects them to FP8, does the backward computation,
+and scales the gradients back to the original precision. It remembers the maximum absolute value for the incoming
+gradient and stores it in the gradient.
