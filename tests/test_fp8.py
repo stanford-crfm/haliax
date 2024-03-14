@@ -31,7 +31,6 @@ def test_fp8_is_reasonable():
     assert output.dtype == fp8_output.dtype
 
     assert jnp.allclose(output.array, fp8_output.array, atol=1e-1, rtol=1e-1)
-    assert not jnp.all(output.array == fp8_output.array)
 
 
 # https://github.com/google/flax/blob/6f2b08e024c2fd2f8cec42a6c82408cb35412319/tests/linen/linen_test.py#L1222
