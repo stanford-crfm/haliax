@@ -71,8 +71,11 @@ def einsum(
         spec, out_axes = _positional_einsum_spec(equation, arrays, lhses, rhs)
 
     out_raw = jnp.einsum(
-        spec, *[a.array for a in arrays], precision=precision, preferred_element_type=preferred_element_type,
-        _dot_general=_dot_general
+        spec,
+        *[a.array for a in arrays],
+        precision=precision,
+        preferred_element_type=preferred_element_type,
+        _dot_general=_dot_general,
     )
 
     out = haliax.named(out_raw, out_axes)
