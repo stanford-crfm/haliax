@@ -1,16 +1,25 @@
 # FP8 Training
 
-It's actually very easy to use FP8 in Haliax. The FP8 in Haliax is currently designed with optimizing throughput
-on FP8-enabled devices (currently H100). It's not designed to, e.g., quantize a model to FP8 for deployment,
-though this shouldn't be that hard to add. (We would be happy to accept contributions to add this functionality,
-and are happy to work with you to do so.)
+!!! warning
+        FP8 training in Haliax is currently experimental and may change in the future.
+
+FP8 refers to 8-bit floating point numbers. FP8 is a massively reduced precision compared to the 32-bit floating point numbers
+or 16-bit floating point numbers that are typically used in deep learning: there are only 256 possible values in FP8, compared to
+the (almost) 2^32 in 32-bit and 2^16 in 16-bit. However, FP8 is still useful for training deep learning models, especially on
+hardware that is optimized for FP8. In particular, it can massively accelerate training on hardware that is optimized for FP8:
+H100 has 2x FP8 FLOPS compared to FP16 FLOPS and almost 60x(!) compared to F32 FLOPS.
+
+The FP8 in Haliax is currently designed to optimize throughput on FP8-enabled devices (currently H100) rather
+than to save memory. In particular, Haliax's FP8 support is not designed to quantize a model to FP8 for deployment,
+though this shouldn't be that hard to add for models that were trained using this functionality.
+We would be happy to accept contributions to add this functionality,
+and are happy to work with you to do so. In particular, adding this for models trained using Haliax's FP8 should be easy.
 
 ## TL;DR
 
-To enable FP8, do this:
+Using FP8 with Haliax is actually pretty straightforward. To enable FP8, do this:
 
 ```python
-import haliax as hax
 import haliax.quantization as haxq
 # setup
 module = haxq.fp8_linear_layers(module)
@@ -30,7 +39,12 @@ And train your model like normal.
 
 ## How to use FP8
 
-FP8 is enabled by a transform on your model. Here's a simple example:
+To use FP8, you need to do two things:
+
+* Enable FP8 for the layers you want to use FP8
+* Modify your training step to be compatible with FP8
+
+Each of these is just a couple of lines of code.
 
 
 ```python
@@ -118,3 +132,25 @@ original precision.  It remembers the maximum absolute value for each of the inp
 3) For the gradients, it scales the gradients, projects them to FP8, does the backward computation,
 and scales the gradients back to the original precision. It remembers the maximum absolute value for the incoming
 gradient and stores it in the gradient.
+
+# API Reference
+
+## Functions
+
+::: haliax.quantization.fp8_linear_layers
+::: haliax.quantization.partition_for_grad_overwrite
+::: haliax.quantization.apply_updates
+
+
+## Interfaces
+::: haliax.quantization.DotGeneralOp
+::: haliax.quantization.OverwriteWithGradient
+
+## Modules
+
+
+::: haliax.quantization.Fp8DotGeneralOp
+
+## Configuration
+
+::: haliax.quantization.Fp8Config
