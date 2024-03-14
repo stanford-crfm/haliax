@@ -9,6 +9,7 @@ import haliax as hax
 from ..axis import AxisSpec
 from ..core import NamedArray
 from ..jax_utils import named_call
+from ..quantization import DotGeneralOp
 
 
 class Linear(eqx.Module):
@@ -20,10 +21,12 @@ class Linear(eqx.Module):
 
     In: AxisSpec = eqx.static_field()
     Out: AxisSpec = eqx.static_field()
-    dot_general: Callable = jax.lax.dot_general
+    dot_general: DotGeneralOp = jax.lax.dot_general
 
     @staticmethod
-    def init(In: AxisSpec, Out: AxisSpec, *, key, use_bias=True, out_first: bool = False, dot_general = jax.lax.dot_general) -> "Linear":
+    def init(
+        In: AxisSpec, Out: AxisSpec, *, key, use_bias=True, out_first: bool = False, dot_general=jax.lax.dot_general
+    ) -> "Linear":
         """
 
         Args:
