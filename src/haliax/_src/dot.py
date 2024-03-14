@@ -17,6 +17,7 @@ from haliax.axis import (
     union_axes,
 )
 from haliax.core import NamedArray
+from haliax.jax_utils import _jittable_dg_einsum
 from haliax.types import DTypeLike, PrecisionLike
 from haliax.util import ensure_tuple
 
@@ -29,6 +30,7 @@ def dot(
     precision: PrecisionLike = None,
     preferred_element_type: Optional[DTypeLike] = None,
     out_axes: Optional[PartialAxisSpec] = ...,
+    dot_general=jax.lax.dot_general,
 ) -> NamedArray:
     ...
 
@@ -40,6 +42,7 @@ def dot(
     precision: PrecisionLike = None,
     preferred_element_type: Optional[DTypeLike] = None,
     out_axes: Optional[PartialAxisSpec] = ...,
+    dot_general=jax.lax.dot_general,
 ) -> NamedArray:
     ...
 
@@ -49,6 +52,7 @@ def dot(
     precision: PrecisionLike = None,
     preferred_element_type: Optional[DTypeLike] = None,
     out_axes: Optional[PartialAxisSpec] = None,
+    dot_general=jax.lax.dot_general,
     **kwargs,
 ) -> NamedArray:
     """Returns the tensor product of two NamedArrays. The axes `axis` are contracted over,
@@ -98,6 +102,9 @@ def dot(
 
     _ensure_no_mismatched_axes(*arrays)
 
+    # to call dot_general we need two things:
+    # list of contractions and list of arrays
+
     all_axes: Tuple[Axis, ...] = ft.reduce(union_axes, (a.axes for a in arrays), ())  # type: ignore
     output_axes: Tuple[Axis, ...]
     if axis is None:
@@ -137,11 +144,12 @@ def dot(
         jax_str = f"contract {', '.join(axis_name(ax) for ax in axis)} -> {', '.join(a.name for a in output_axes)}"
 
     with jax.named_scope(jax_str):
-        output = jnp.einsum(
+        output = _jittable_dg_einsum(
             ", ".join(array_specs) + "-> " + output_spec,
             *[a.array for a in arrays],
             precision=precision,
             preferred_element_type=preferred_element_type,
+            _dot_general=dot_general,
         )
 
     out = NamedArray(output, output_axes)

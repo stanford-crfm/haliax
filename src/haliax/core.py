@@ -415,11 +415,15 @@ class NamedArray:
 
     # Deprecated overload
     @typing.overload
-    def dot(self, axis: Optional[AxisSelection], *b, precision: PrecisionLike = None) -> "NamedArray":
+    def dot(
+        self, axis: Optional[AxisSelection], *b, precision: PrecisionLike = None, dot_general=jax.lax.dot_general
+    ) -> "NamedArray":
         ...
 
     @typing.overload
-    def dot(self, *args, axis: Optional[AxisSelection], precision: PrecisionLike = None) -> "NamedArray":
+    def dot(
+        self, *args, axis: Optional[AxisSelection], precision: PrecisionLike = None, dot_general=jax.lax.dot_general
+    ) -> "NamedArray":
         ...
 
     def dot(self, *args, **kwargs) -> "NamedArray":

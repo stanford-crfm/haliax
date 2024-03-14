@@ -7,6 +7,7 @@ from jaxtyping import PRNGKeyArray
 from ..axis import Axis, AxisSpec
 from ..core import NamedArray
 from ..jax_utils import maybe_rng_split
+from ..quantization import DotGeneralOp
 from .activations import relu
 from .linear import Linear
 
@@ -46,6 +47,7 @@ class MLP(eqx.Module):
         use_bias: bool = True,
         use_final_bias: bool = True,
         key: PRNGKeyArray,
+        dot_general: DotGeneralOp = jax.lax.dot_general,
     ):
         Width = _get_width(width)
         Width2 = Width.alias(Width.name + "2")
@@ -56,18 +58,18 @@ class MLP(eqx.Module):
 
         if depth == 0:
             # special case: no hidden layers
-            layers.append(Linear.init(Input, Output, use_bias=use_final_bias, key=keys[0]))
+            layers.append(Linear.init(Input, Output, use_bias=use_final_bias, key=keys[0], dot_general=dot_general))
         else:
             # first hidden layer
-            layers.append(Linear.init(Input, Width, use_bias=use_bias, key=keys[0]))
+            layers.append(Linear.init(Input, Width, use_bias=use_bias, key=keys[0], dot_general=dot_general))
             # middle hidden layers
             cur = Width
             next = Width2
             for i in range(1, depth):
-                layers.append(Linear.init(cur, next, use_bias=use_bias, key=keys[i]))
+                layers.append(Linear.init(cur, next, use_bias=use_bias, key=keys[i], dot_general=dot_general))
                 cur, next = next, cur
             # final hidden layer
-            layers.append(Linear.init(cur, Output, use_bias=use_final_bias, key=keys[-1]))
+            layers.append(Linear.init(cur, Output, use_bias=use_final_bias, key=keys[-1], dot_general=dot_general))
 
         return MLP(
             layers=tuple(layers),

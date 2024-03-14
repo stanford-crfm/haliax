@@ -2,12 +2,14 @@ import functools
 from types import EllipsisType
 from typing import Optional, Sequence, Tuple, Union
 
+import jax.lax
 import jax.numpy as jnp
 
 import haliax
 
 from ..axis import AxisSelector, axis_name, eliminate_axes, rearrange_for_partial_order, union_axes
 from ..core import NamedArray
+from ..jax_utils import _jittable_dg_einsum
 from ..types import DTypeLike, PrecisionLike
 from ..util import ensure_tuple
 from .parsing import AliasTable, parse_einsum, raise_parse_error
@@ -18,6 +20,7 @@ def einsum(
     *arrays: NamedArray,
     precision: PrecisionLike = None,
     preferred_element_type: Optional[DTypeLike] = None,
+    _dot_general=jax.lax.dot_general,
 ) -> NamedArray:
     """Compute the tensor contraction of the input arrays according to Haliax's named variant of the Einstein summation
     convention.
@@ -68,11 +71,16 @@ def einsum(
 
         spec, out_axes = _positional_einsum_spec(equation, arrays, lhses, rhs)
 
-    out_raw = jnp.einsum(
-        spec, *[a.array for a in arrays], precision=precision, preferred_element_type=preferred_element_type
+    out_raw = _jittable_dg_einsum(
+        spec,
+        *[a.array for a in arrays],
+        precision=precision,
+        preferred_element_type=preferred_element_type,
+        _dot_general=_dot_general,
     )
 
-    return haliax.named(out_raw, out_axes)
+    out = haliax.named(out_raw, out_axes)
+    return haliax.auto_sharded(out)
 
 
 def _unordered_einsum(arrays, equation, lhses, rhs):

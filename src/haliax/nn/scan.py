@@ -56,7 +56,7 @@ class BlockSeq(eqx.Module, Generic[M]):
     where you have multiple instances of the same transformer block and the input is applied in a fold/for loop
     in sequence.
 
-    It's similar in spirit to an [equinox.nn.Sequential]. Unlike [equinox.nn.Stacked][], BlockSeq does not need to be
+    It's similar in spirit to an [equinox.nn.Sequential][]. Unlike [equinox.nn.Sequential][], BlockSeq does not need to be
     homogeneous (though the init method assumes that it is).
     """
 
