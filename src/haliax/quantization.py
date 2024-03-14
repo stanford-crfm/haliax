@@ -157,10 +157,11 @@ class Fp8Config:
     compute_dtype: DTypeLike = None
     targets: Optional[list[str] | str] = dataclasses.field(default=None)
     """
-    If provided, only modules with names in this list will be quantized. If a single string, will be treated as a regex"""
+    If provided, only modules with names in this list will be quantized. If a single string, will be treated as a regex
+    """
 
 
-def fp8_quantize_tree(tree: T, config: Fp8Config) -> T:
+def fp8_linear_layers(tree: T, config: Fp8Config = Fp8Config()) -> T:
     """
     Converts a module tree to use FP8 quantization.
     Linear modules that have a name that matches the targets (if provided) will be converted to use FP8.
