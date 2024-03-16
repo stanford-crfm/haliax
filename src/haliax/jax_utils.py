@@ -131,7 +131,10 @@ def named_call(f=_UNSPECIFIED, name: Optional[str] = None):
             else:
                 name = f.__qualname__
 
-        return jax.named_scope(name)(f)
+        # because of https://github.com/google/jax/issues/7029 it seems like we need to use jax.named_scope
+        # AND jax.profiler.annotate_function
+
+        return jax.profiler.annotate_function(jax.named_scope(name)(f), name=name)
 
 
 def is_in_jit():
