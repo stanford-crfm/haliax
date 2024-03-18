@@ -21,11 +21,11 @@ class Linear(eqx.Module):
 
     In: AxisSpec = eqx.static_field()
     Out: AxisSpec = eqx.static_field()
-    dot_general: DotGeneralOp = jax.lax.dot_general
+    dot_general: DotGeneralOp = eqx.field(default_factory=DotGeneralOp.default)
 
     @staticmethod
     def init(
-        In: AxisSpec, Out: AxisSpec, *, key, use_bias=True, out_first: bool = False, dot_general=jax.lax.dot_general
+        In: AxisSpec, Out: AxisSpec, *, key, use_bias=True, out_first: bool = False, dot_general=None
     ) -> "Linear":
         """
 
@@ -40,6 +40,10 @@ class Linear(eqx.Module):
         joint_spec = hax.concat_axis_specs(Out, In) if out_first else hax.concat_axis_specs(In, Out)
         weight = hax.random.normal(key, joint_spec) * 0.02
         bias = hax.zeros(Out) if use_bias else None
+
+        if dot_general is None:
+            dot_general = DotGeneralOp.default()
+
         return Linear(weight, bias, In, Out, dot_general=dot_general)
 
     @named_call

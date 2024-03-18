@@ -1,3 +1,5 @@
+from typing import Callable
+
 import equinox as eqx
 import jax.nn
 import jax.random as jrandom
@@ -145,3 +147,13 @@ def test_mlp(depth):
             else:
                 assert hax_mlp.layers[i].In == M
                 assert hax_mlp.layers[i].Out == M.alias("M2")
+
+
+def test_linear_has_no_function_leaves_by_default():
+    H = Axis("H", 10)
+    C = Axis("C", 12)
+    W = Axis("W", 14)
+    E = Axis("E", 16)
+
+    hax_linear = hax.nn.Linear.init((H, C, W), E, key=jrandom.PRNGKey(0))
+    assert all(not isinstance(v, Callable) for v in jax.tree_util.tree_leaves(hax_linear))  # type: ignore

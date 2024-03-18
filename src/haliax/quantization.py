@@ -104,6 +104,39 @@ class DotGeneralOp(Protocol):
     ) -> jnp.ndarray:
         ...
 
+    @staticmethod
+    def default():
+        return DefaultDotGeneralOp.init()
+
+
+class DefaultDotGeneralOp(eqx.Module):
+    """
+    The default dot_general function that is used by the `Linear` module. This is the
+    standard JAX `jax.lax.dot_general` function.
+
+    Notes:
+        We could have used `jax.lax.dot_general` directly, but we use this class so that we don't
+        unnecessarily have functions as leaves in the module tree.
+    """
+
+    def __call__(
+        self,
+        lhs,
+        rhs,
+        dimension_numbers,
+        precision: PrecisionLike = None,
+        preferred_element_type: DTypeLike | None = None,
+    ) -> jnp.ndarray:
+        return jax.lax.dot_general(lhs, rhs, dimension_numbers, precision, preferred_element_type)
+
+    # not really necessary, but it's nice to have a singleton
+    @staticmethod
+    def init():
+        if not hasattr(DefaultDotGeneralOp, "_instance"):
+            DefaultDotGeneralOp._instance = DefaultDotGeneralOp()
+
+        return DefaultDotGeneralOp._instance
+
 
 class Fp8DotGeneralOp(OverwriteWithGradient):
     input_scale: jnp.ndarray

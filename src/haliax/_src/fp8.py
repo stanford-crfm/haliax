@@ -119,11 +119,13 @@ out_qdq.defvjp(out_qdq_fwd, out_qdq_bwd)
 @partial(custom_jvp, nondiff_argnums=(2, 3, 4))
 def dot_general_with_precision(lhs, rhs, dimension_numbers, precision=None, preferred_element_type=None):
     if precision is not None or preferred_element_type is not None:
-        warnings.warn(
-            "The function dot_general_with_precision will set the "
-            "precision/preferred_element_type and disregard any provided "
-            "values."
-        )
+        # einsum sets preferred_element_type and so this is just noisy
+        # warnings.warn(
+        #     "The function dot_general_with_precision will set the "
+        #     "precision/preferred_element_type and disregard any provided "
+        #     "values."
+        # )
+        pass
     return lax.dot_general(lhs, rhs, dimension_numbers, precision=lax.Precision.DEFAULT)
 
 

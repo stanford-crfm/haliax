@@ -1,4 +1,4 @@
-from typing import Callable, Sequence
+from typing import Callable, Optional, Sequence
 
 import equinox as eqx
 import jax
@@ -47,7 +47,7 @@ class MLP(eqx.Module):
         use_bias: bool = True,
         use_final_bias: bool = True,
         key: PRNGKeyArray,
-        dot_general: DotGeneralOp = jax.lax.dot_general,
+        dot_general: Optional[DotGeneralOp] = None,
     ):
         Width = _get_width(width)
         Width2 = Width.alias(Width.name + "2")

@@ -149,6 +149,7 @@ gradient and stores it in the gradient.
 ## Modules
 
 
+::: haliax.quantization.DefaultDotGeneralOp
 ::: haliax.quantization.Fp8DotGeneralOp
 
 ## Configuration
