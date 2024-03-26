@@ -101,15 +101,11 @@ def auto_sharded(x: T, mesh: Optional[Mesh] = None) -> T:
 def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] = None) -> T:
     """
     Shard a PyTree using the provided axis mapping. NamedArrays in the PyTree are sharded using the axis mapping.
-    Other arrays are not sharded (unless they're already sharded).
+    Other arrays (i.e. plain JAX arrays) are left alone.
 
-    Inside of a jit context, this method grounds out in calls to `with_sharding_constraint`. Outside of a jit
-    context, this method grounds out in either device_put or make_array_from_callback, depending on whether the
-    resulting sharding spans more than one host.
-
-    Outside of jit, this method will warn if there is no resource mapping found.
+    This is basically a fancy wrapper around `with_sharding_constraint` that uses the axis mapping to determine
+    the sharding.
     """
-    raise NotImplementedError("This function is not yet implemented")
 
     if mapping is None:
         mapping = current_thread_local_mapping()
@@ -117,7 +113,6 @@ def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] 
     if mapping is None:
         if not is_in_jit():
             warnings.warn("No resource mapping found. Not sharding.", RuntimeWarning)
-
         return x
 
     assert not isinstance(mesh, dict)
@@ -126,10 +121,7 @@ def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] 
         mesh = _get_mesh()
 
         if mesh.empty:
-            mesh = None
-
-    if mesh is None:
-        return x
+            return x
 
     if is_on_mac_metal():
         warnings.warn("Sharding constraints are not supported in jit on metal", RuntimeWarning)
@@ -141,12 +133,12 @@ def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] 
 
         if not is_jax_array_like(x.array):
             # this happens when we filter out params for things like lora.
-            # could use partition, but eh
+            # could use eqx.partition to avoid this, but eh
             return x
 
-        desired_sharding = infer_resource_partitions(x, mapping, mesh=mesh, preserve_existing_shardings=False)
+        sharding = infer_resource_partitions(x, mapping, mesh=mesh, preserve_existing_shardings=False)
 
-        return with_sharding_constraint(x, desired_sharding)
+        return with_sharding_constraint(x, sharding)
 
     return htu.tree_map(_do_device_put, x)
 
@@ -601,7 +593,7 @@ def round_axis_for_partitioning(axis: Axis, mapping: Optional[ResourceMapping] =
         return Axis(axis.name, new_size)
 
 
-def _get_mesh():
+def _get_mesh() -> Mesh:
     from jax.experimental.maps import thread_resources
 
     return thread_resources.env.physical_mesh
