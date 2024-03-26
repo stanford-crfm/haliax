@@ -143,7 +143,6 @@ def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] 
             return with_sharding_constraint(x, pspec)
         elif not is_jax_array_like(x.array):
             # this happens when we filter out params for things like lora
-            # or things like `Dropout.inference` We could use a filter but eh.
             return x
         else:
             raw_x = x.array
@@ -151,7 +150,9 @@ def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] 
 
             desired_sharding = infer_resource_partitions(x, mapping, mesh=mesh, preserve_existing_shardings=False)
 
-            return with_sharding_constraint(raw_x, desired_sharding)
+            raw_x = with_sharding_constraint(raw_x, desired_sharding)
+
+            return NamedArray(raw_x, x.axes)
 
             if current_sharding.is_equivalent_to(desired_sharding, ndim=raw_x.ndim):
                 return x
