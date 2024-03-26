@@ -109,6 +109,7 @@ def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] 
 
     Outside of jit, this method will warn if there is no resource mapping found.
     """
+    raise NotImplementedError("This function is not yet implemented")
 
     if mapping is None:
         mapping = current_thread_local_mapping()
@@ -138,35 +139,14 @@ def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] 
         if not is_named_array(x):
             return x
 
-        if _is_jit_tracer(x.array):
-            pspec = pspec_for_axis(x.axes, mapping)
-            return with_sharding_constraint(x, pspec)
-        elif not is_jax_array_like(x.array):
-            # this happens when we filter out params for things like lora
+        if not is_jax_array_like(x.array):
+            # this happens when we filter out params for things like lora.
+            # could use partition, but eh
             return x
-        else:
-            raw_x = x.array
-            current_sharding = raw_x.sharding
 
-            desired_sharding = infer_resource_partitions(x, mapping, mesh=mesh, preserve_existing_shardings=False)
+        desired_sharding = infer_resource_partitions(x, mapping, mesh=mesh, preserve_existing_shardings=False)
 
-            raw_x = with_sharding_constraint(raw_x, desired_sharding)
-            raise NotImplementedError("This is not yet implemented")
-
-            return NamedArray(raw_x, x.axes)
-
-            if current_sharding.is_equivalent_to(desired_sharding, ndim=raw_x.ndim):
-                return x
-            elif desired_sharding.is_fully_addressable:
-                raw_x = jax.device_put(raw_x, desired_sharding)
-                return NamedArray(raw_x, x.axes)
-            else:
-                # if the sharding is not fully addressable, we can't use device_put, so we use this hacky workaround.
-                # TODO: we lose "src" information, but i think that's only for autodiff, and this isn't an autodiff
-                # context, I think?
-                shape = raw_x.shape
-                raw_x = jax.make_array_from_callback(shape, desired_sharding, lambda index: raw_x[index])
-                return NamedArray(raw_x, x.axes)
+        return with_sharding_constraint(x, desired_sharding)
 
     return htu.tree_map(_do_device_put, x)
 
