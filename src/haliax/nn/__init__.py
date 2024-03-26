@@ -58,7 +58,9 @@ def one_hot(x: NamedArray | int, class_axis: Axis, *, dtype=None) -> NamedArray:
     """
     if isinstance(x, NamedArray):
         array = jnn.one_hot(x.array, num_classes=class_axis.size, dtype=dtype)
-        return hax.auto_sharded(hax.named(array, x.axes + (class_axis,)))
+        # Disabling this to prevent a crash in XLA on GPU
+        # return hax.auto_sharded(hax.named(array, x.axes + (class_axis,)))
+        return hax.named(array, x.axes + (class_axis,))
     else:
         assert isinstance(x, int)
         assert class_axis.size > x >= -class_axis.size

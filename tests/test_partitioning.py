@@ -36,7 +36,7 @@ def test_infer_named_axes():
 
         spec = PartitionSpec(None, ResourceAxis.DATA, ResourceAxis.MODEL)
 
-        assert axes.named.array == NamedSharding(mesh, spec)
+        assert axes.named == NamedSharding(mesh, spec)
         assert axes.unnamed1.is_fully_replicated
 
 
