@@ -130,26 +130,28 @@ def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] 
     if mesh is None:
         return x
 
+    if is_on_mac_metal():
+        warnings.warn("Sharding constraints are not supported in jit on metal", RuntimeWarning)
+        return x
+
     def _do_device_put(x):
         if not is_named_array(x):
             return x
 
         if _is_jit_tracer(x.array):
             pspec = pspec_for_axis(x.axes, mapping)
-            if is_on_mac_metal():
-                warnings.warn("Sharding constraints are not supported in jit on metal", RuntimeWarning)
-                return x
             return with_sharding_constraint(x, pspec)
         elif not is_jax_array_like(x.array):
             # this happens when we filter out params for things like lora
+            # or things like `Dropout.inference` We could use a filter but eh.
             return x
         else:
             raw_x = x.array
             current_sharding = raw_x.sharding
 
-            desired_sharding = infer_resource_partitions(
-                x, mapping, mesh=mesh, preserve_existing_shardings=False
-            ).array
+            desired_sharding = infer_resource_partitions(x, mapping, mesh=mesh, preserve_existing_shardings=False)
+
+            return with_sharding_constraint(raw_x, desired_sharding)
 
             if current_sharding.is_equivalent_to(desired_sharding, ndim=raw_x.ndim):
                 return x
@@ -214,10 +216,10 @@ def infer_resource_partitions(
                 current_sharding = None
 
             if current_sharding is not None:
-                return NamedArray(current_sharding, node.axes)  # type: ignore
+                return current_sharding
             else:
                 sharding = NamedSharding(mesh, pspec_for_axis(node.axes, resource_mapping))
-                return NamedArray(sharding, node.axes)  # type: ignore
+                return sharding
         elif is_jax_array_like(node):
             sharding = getattr(node, "sharding", None)
             # TODO: these are usually replicated. Is there a better way to tell?
