@@ -151,6 +151,7 @@ def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] 
             desired_sharding = infer_resource_partitions(x, mapping, mesh=mesh, preserve_existing_shardings=False)
 
             raw_x = with_sharding_constraint(raw_x, desired_sharding)
+            raise NotImplementedError("This is not yet implemented")
 
             return NamedArray(raw_x, x.axes)
 
