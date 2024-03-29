@@ -123,7 +123,7 @@ def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] 
         if mesh.empty:
             return x
 
-    if is_on_mac_metal():
+    if is_in_jit() and is_on_mac_metal():
         warnings.warn("Sharding constraints are not supported in jit on metal", RuntimeWarning)
         return x
 
