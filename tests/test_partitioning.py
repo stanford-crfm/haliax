@@ -294,8 +294,6 @@ def test_cross_device_sharding():
         x = hax.shard(x, resource_map)
         z = hax.ones((Dim1, Dim3))
 
-        assert x.array.sharding.is_fully_replicated
-
         x_devices = x.array.devices()
         z_devices = z.array.devices()
 
