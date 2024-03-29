@@ -123,12 +123,12 @@ def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] 
         if mesh.empty:
             return x
 
-    if is_on_mac_metal():
+    if is_in_jit() and is_on_mac_metal():
         warnings.warn("Sharding constraints are not supported in jit on metal", RuntimeWarning)
         return x
 
     def _do_device_put(x):
-        if not is_named_array(x):
+        if not isinstance(x, NamedArray):
             return x
 
         if not is_jax_array_like(x.array):
@@ -137,8 +137,12 @@ def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] 
             return x
 
         sharding = infer_resource_partitions(x, mapping, mesh=mesh, preserve_existing_shardings=False)
-
-        return with_sharding_constraint(x, sharding)
+        assert isinstance(sharding, NamedSharding)
+        if is_in_jit():
+            return with_sharding_constraint(x, sharding)
+        else:
+            sharded_array = jax.device_put(x.array, sharding)
+            return NamedArray(sharded_array, x.axes)
 
     return htu.tree_map(_do_device_put, x)
 

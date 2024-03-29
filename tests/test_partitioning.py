@@ -280,3 +280,21 @@ def test_jit_lower_doesnt_blow_up():
             assert lowered
             lowered.cost_analysis()
             lowered.as_text()
+
+
+def test_cross_device_sharding():
+    # this doesn't actually do anything interesting on CPU
+    cpu_device = jax.local_devices(backend="cpu")[0]
+    with jax.default_device(cpu_device):
+        x = hax.ones((Dim1, Dim2))
+
+    with axis_mapping(resource_map), Mesh(
+        np.array(jax.devices()).reshape(-1, 1), (ResourceAxis.DATA, ResourceAxis.MODEL)
+    ):
+        x = hax.shard(x, resource_map)
+        z = hax.ones((Dim1, Dim3))
+
+        x_devices = x.array.devices()
+        z_devices = z.array.devices()
+
+        assert set(d.platform for d in x_devices) == set(d.platform for d in z_devices)
