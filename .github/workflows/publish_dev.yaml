@@ -1,0 +1,39 @@
+name: Publish Dev Build
+
+on:
+  workflow_run:
+    workflows: ["Run Tests"]
+    types:
+      - completed
+    branches: [main]
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Calculate Version and Build Number
+        run: |
+          echo "VERSION=1.2.0.dev$(git rev-list --count HEAD)" >> $GITHUB_ENV
+
+      - name: Update pyproject.toml version
+        run: |
+          poetry version ${{ env.VERSION }}
+
+      - name: Build package
+        run: poetry build
+
+      - name: Publish package
+        uses: actions/upload-artifact@v2
+        with:
+          name: package
+          path: dist/*
