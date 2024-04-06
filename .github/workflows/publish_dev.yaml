@@ -6,13 +6,18 @@ on:
     types:
       - completed
     branches: [main]
+  workflow_dispatch:
 
 jobs:
-  build-and-publish:
+  build-package:
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    # if workflow_run.conclusion is not 'success', the job will not run
+    # if it's workflow_dispatch, it will run regardless
+    if: ${{  github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'}}
     steps:
       - uses: actions/checkout@v2
+        with:
+          depth: 0  # for rev-list to work.
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
@@ -35,8 +40,27 @@ jobs:
       - name: Build package
         run: poetry build
 
-      - name: Publish package
+      - name: Upload package
         uses: actions/upload-artifact@v2
         with:
           name: package
-          path: dist/*
+          path: dist/
+
+
+  publish-dev:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - name: Retrieve release distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: package
+          path: dist/
+
+      - name: Publish release distributions to PyPI Test
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+
