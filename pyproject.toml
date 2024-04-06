@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "haliax"
-version = "1.2.0"
+version = "1.3"
 description = "Named Tensors for Legible Deep Learning in JAX"
 authors = ["David Hall <dlwh@stanford.edu>"]
 license = "Apache-2.0"
