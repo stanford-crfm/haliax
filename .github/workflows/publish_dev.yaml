@@ -15,7 +15,8 @@ jobs:
     # if it's workflow_dispatch, it will run regardless
     if: ${{  github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'}}
     steps:
-      - uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v2
         with:
           depth: 0  # for rev-list to work.
       - name: Set up Python
