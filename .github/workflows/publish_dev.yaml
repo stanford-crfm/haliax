@@ -16,7 +16,7 @@ jobs:
     if: ${{  github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'}}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           depth: 1000  # for rev-list to work.
       - name: Set up Python
@@ -26,6 +26,7 @@ jobs:
 
       - name: Calculate Version and Build Number
         run: |
+          echo "We are commit $GITHUB_SHA"
           PROJECT_VERSION=$(sed -n 's/__version__ = "\(.*\)"/\1/p' src/haliax/__about__.py)
           BUILD_NUMBER=$(git rev-list --count HEAD)
           FULL_VERSION="${PROJECT_VERSION}.dev${BUILD_NUMBER}"
