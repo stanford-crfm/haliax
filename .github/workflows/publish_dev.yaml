@@ -18,28 +18,28 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
         with:
-          depth: 0  # for rev-list to work.
+          depth: 1000  # for rev-list to work.
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
           python-version: '3.x'
 
-      - name: Install Poetry
-        run: pip install poetry
-
       - name: Calculate Version and Build Number
         run: |
-          PROJECT_VERSION=$(poetry version | cut -d ' ' -f2)
+          PROJECT_VERSION=$(sed -n 's/__version__ = "\(.*\)"/\1/p' src/haliax/__about__.py)
           BUILD_NUMBER=$(git rev-list --count HEAD)
           FULL_VERSION="${PROJECT_VERSION}.dev${BUILD_NUMBER}"
           echo "FULL_VERSION=${FULL_VERSION}" >> $GITHUB_ENV
           echo "Calculated version with build number: $FULL_VERSION"
       - name: Update pyproject.toml version
         run: |
-          poetry version ${{ env.FULL_VERSION }}
-
+          # replace the version in __about__.py
+          sed -i "s/__version__ = \".*\"/__version__ = \"$FULL_VERSION\"/g" src/haliax/__about__.py
       - name: Build package
-        run: poetry build
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+          python -m build
 
       - name: Upload package
         uses: actions/upload-artifact@v4
@@ -62,9 +62,10 @@ jobs:
           name: package
           path: dist/
 
-      - name: Publish release distributions to PyPI Test
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          repository-url: https://test.pypi.org/legacy/
+# temporarily disabled for testing
+#      - name: Publish release distributions to PyPI Test
+#        uses: pypa/gh-action-pypi-publish@release/v1
+#        with:
+#          repository-url: https://test.pypi.org/legacy/
 
 
