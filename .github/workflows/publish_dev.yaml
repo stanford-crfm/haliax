@@ -67,10 +67,9 @@ jobs:
           name: package
           path: dist/
 
-# temporarily disabled for testing
-#      - name: Publish release distributions to PyPI Test
-#        uses: pypa/gh-action-pypi-publish@release/v1
-#        with:
-#          repository-url: https://test.pypi.org/legacy/
+      - name: Publish release distributions to PyPI Test
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
 
 
