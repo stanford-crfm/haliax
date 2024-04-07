@@ -19,6 +19,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           depth: 1000  # for rev-list to work.
+        run: |
+          # use a git fetch but we only need all commits leading to the current one
+          git fetch --depth=1000 --unshallow
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
