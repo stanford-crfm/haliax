@@ -23,7 +23,7 @@ jobs:
       - name: Fetch all history
         run: |
           # use a git fetch but we only need all commits leading to the current one
-          git fetch --depth=10000 --unshallow
+          git fetch --depth=10000
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
