@@ -27,6 +27,7 @@ dependencies = [
     "jaxtyping>=0.2.20",
     "jmp>=0.0.4",
 ]
+dynamic =[ "version" ]
 
 [project.optional-dependencies]
 dev=["pytest >= 7.4.0", "mypy >= 0.910", "mkdocs >= 1.4.3", "mkdocs-material >= 7.3.3", "mkdocstrings >= 0.22.0",
