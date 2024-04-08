@@ -16,7 +16,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1000
+          fetch-depth: 0
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
@@ -24,7 +24,6 @@ jobs:
 
       - name: Calculate Version and Build Number
         run: |
-          echo "We are commit $GITHUB_SHA"
           PROJECT_VERSION=$(sed -n 's/__version__ = "\(.*\)"/\1/p' src/haliax/__about__.py)
           BUILD_NUMBER=$(git rev-list --count HEAD)
           FULL_VERSION="${PROJECT_VERSION}.dev${BUILD_NUMBER}"
@@ -64,6 +63,6 @@ jobs:
       - name: Publish release distributions to PyPI Test
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          repository-url: https://test.pypi.org/legacy/
+          repository-url: https://pypi.org/legacy/
 
 
