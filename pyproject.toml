@@ -50,3 +50,20 @@ documentation = "https://haliax.readthedocs.io"
 [tool.pdm.version]
 source = "file"
 path = "src/haliax/__about__.py"
+
+
+[tool.black]
+line-length = 119
+target-version = ["py310"]
+preview = true
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+lines_after_imports = 2
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+line_length = 119
+src_paths = ["src", "tests"]
