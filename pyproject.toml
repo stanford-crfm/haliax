@@ -1,67 +1,52 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
 
 [project]
 name = "haliax"
-# Set for release builds
-version = "1.3"
-authors = [
-  { name="David Hall", email="dlwh@cs.stanford.edu" },
-]
+#version = "1.3"
+dynamic = ["version"]
 description = "Named Tensors for Legible Deep Learning in JAX"
+authors = [
+  { name = "David Hall", email = "dlwh@cs.stanford.edu" },
+]
 readme = "README.md"
 requires-python = ">=3.10"
 classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: Apache Software License",
-    "Operating System :: POSIX :: Linux",
-    "Operating System :: MacOS :: MacOS X",
-    "Development Status :: 4 - Beta",
-    "Intended Audience :: Science/Research",
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: Apache Software License",
+  "Operating System :: POSIX :: Linux",
+  "Operating System :: MacOS :: MacOS X",
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
 ]
 dependencies = [
-    # we require that you install jax yourself, since the extras vary by system.
-    # jax = {version = ">=0.4.19,<0.5.0"}
-    "equinox>=0.10.6",
-    "jaxtyping>=0.2.20",
-    "jmp>=0.0.4",
+  "equinox>=0.10.6",
+  "jaxtyping>=0.2.20",
+  "jmp>=0.0.4",
 ]
 
 [project.optional-dependencies]
-dev=["pytest >= 7.4.0", "mypy >= 0.910", "mkdocs >= 1.4.3", "mkdocs-material >= 7.3.3", "mkdocstrings >= 0.22.0",
-    "mkdocs-literate-nav >= 0.6.0", "mkdocs-macros-plugin >= 0.7.0", "mkdocstrings-python >= 1.1.2",
-    "mkdocs-include-markdown-plugin",
-    "pymdown-extensions",
-    "pygments",
-    "pymdown-extensions",
+dev = [
+  "pytest>=7.4.0",
+  "mypy>=0.910",
+  "mkdocs>=1.4.3",
+  "mkdocs-material>=7.3.3",
+  "mkdocstrings>=0.22.0",
+  "mkdocs-literate-nav>=0.6.0",
+  "mkdocs-macros-plugin>=0.7.0",
+  "mkdocstrings-python>=1.1.2",
+  "mkdocs-include-markdown-plugin",
+  "pymdown-extensions",
+  "pygments",
 ]
 
-[tool.hatch.version]
-path = "src/haliax/__about__.py"
-
-[options]
-packages = ["haliax", "haliax.*"]
-
-[options.package_data]
-haliax = ["src/haliax/*"]
-
-[tool.black]
-line-length = 119
-target-version = ["py310"]
-preview = true
-
-[tool.isort]
-profile = "black"
-multi_line_output = 3
-lines_after_imports = 2
-include_trailing_comma = true
-force_grid_wrap = 0
-use_parentheses = true
-ensure_newline_before_comments = true
-line_length = 119
-src_paths = ["src", "tests"]
-
 [project.urls]
-"Homepage" = "https://github.com/stanford-crfm/haliax"
-"Bug Tracker" = "https://github.com/stanford-crfm/haliax/issues/"
+homepage = "https://github.com/stanford-crfm/haliax"
+repository = "https://github.com/stanford-crfm/haliax"
+documentation = "https://haliax.readthedocs.io"
+
+
+[tool.pdm.version]
+source = "file"
+path = "src/haliax/__about__.py"

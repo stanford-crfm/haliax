@@ -105,7 +105,64 @@ You can find us in the #levanter channel on the unofficial [Jax LLM Discord](htt
 
 <!--haliax-intro-end-->
 
+## Installation
+
+### Release Version
+
+You can install the latest release of Haliax from PyPI:
+
+```bash
+pip install haliax
+```
+
+### Development Version
+
+You can always install directly from the main branch on GitHub:
+
+```bash
+pip install git+https://github.com/stanford-crfm/haliax.git@main
+```
+
+Development builds of `main` are available on PyPI testing. To install the latest development version, run:
+
+```bash
+pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ haliax
+```
+
+You can also add this to your pyproject.toml, for certain build systems:
+
+#### PDM
+
+Haliax uses PDM for dependency management. If you're using PDM, you can add development builds of
+Haliax to your project with:
+
+```toml
+dependencies = [
+    "haliax",
+    ...
+]
+
+[[tool.pdm.source]]
+name = "testpypi"
+url = "https://test.pypi.org/simple"
+include_packages = ["haliax"]  # and any other packages you want to install from testpypi
+```
+
+
+#### Poetry
+
+```toml
+[tool.poetry.dependencies]
+haliax = {version = "*", index = "testpypi"}
+
+[[tool.poetry.source]]
+name = "testpypi
+url = "https://test.pypi.org/simple"
+```
+
+
 ## Documentation
+
 
 ### Tutorials
 
