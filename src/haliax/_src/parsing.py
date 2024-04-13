@@ -237,8 +237,14 @@ class AliasTable:
             if self.bindings[alias] != axis:
                 raise_parse_error(f"Alias {alias} is assigned to more than one axis", expr, char_range)
         elif alias in self.bindings:
-            if self.bindings[alias] != axis:
+            current = self.bindings[alias]
+            if isinstance(current, Axis):
+                if current != axis:
+                    raise_parse_error(f"Alias {alias} is assigned to more than one axis", expr, char_range)
+            elif current != axis.name:
                 raise_parse_error(f"Alias {alias} is assigned to more than one axis", expr, char_range)
+            else:
+                self.bindings[alias] = axis
         else:
             self.bindings[alias] = axis
 
