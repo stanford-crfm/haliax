@@ -37,6 +37,28 @@ def test_einsum_basic_positional():
     )
 
 
+def test_einsum_positional_aliases():
+    Height = Axis("Height", 2)
+    Width = Axis("Width", 3)
+    Depth = Axis("Depth", 4)
+
+    m1 = NamedArray(jnp.ones((Height.size, Width.size, Depth.size)), (Height, Width, Depth))
+    m2 = NamedArray(jnp.ones((Depth.size, Width.size, Height.size)), (Depth, Width, Height))
+
+    assert jnp.all(
+        jnp.equal(einsum("i j k,k j i-> j k", m1, m2, i=Height).array, jnp.einsum("ijk,kji->jk", m1.array, m2.array))
+    )
+
+    with pytest.raises(ValueError):
+        einsum("i j k,k j i-> j k", m1, m2, i=Width)
+
+    with pytest.raises(ValueError):
+        einsum("i j k,q j i-> j k", m1, m2, i=Height, q=Height)
+
+    with pytest.raises(ValueError):
+        einsum("i j k,k j i-> j k", m1, m2, i=Height, q=Height)
+
+
 def test_einsum_basic_named():
     Height = Axis("Height", 2)
     Width = Axis("Width", 3)
@@ -146,6 +168,32 @@ def test_einsum_unordered_ellipses():
             jnp.einsum("ijk,kji->ijk", m1.array, m2.array),
         )
     )
+
+
+def test_einsum_unordered_aliases():
+    Height = Axis("Height", 2)
+    Width = Axis("Width", 3)
+    Depth = Axis("Depth", 4)
+
+    m1 = hax.ones((Height, Width, Depth))
+    m2 = hax.ones((Depth, Width, Height))
+
+    assert jnp.all(
+        jnp.equal(
+            einsum("{h w d} -> h w", m1, m2, h=Height, w=Width, d=Depth).array,
+            jnp.einsum("ijk,kji->ij", m1.array, m2.array),
+        )
+    )
+
+    # test error cases:
+
+    # Missing alias
+    with pytest.raises(ValueError, match="Axis d not present"):
+        einsum("{h w d} -> h w", m1, m2, h=Height, w=Width)
+
+    # Extra alias
+    with pytest.raises(ValueError, match="Axis alias d not used"):
+        einsum("{h w} -> h w", m1, m2, h=Height, w=Width, d=Depth)
 
 
 def test_einsum_ordered_ellipsis():
@@ -272,3 +320,35 @@ def test_einsum_examples():
     hax_out = hax.einsum("{...} -> ", hax_im, hax_w2)
     jnp_out = jnp.einsum("bhwc,ce -> ", im, w2)
     assert jnp.all(jnp.equal(hax_out.array, jnp_out))
+
+
+def test_einsum_output_only_mode():
+    # tests "-> out axes"
+    Height = Axis("Height", 2)
+    Width = Axis("Width", 3)
+    Depth = Axis("Depth", 4)
+
+    m1 = hax.ones((Height, Width, Depth))
+    m2 = hax.ones((Depth, Width, Height))
+    m3 = hax.ones((Height, Depth))
+
+    assert jnp.all(jnp.equal(einsum("-> Height Width", m1, m2).array, jnp.einsum("ijk,kji->ij", m1.array, m2.array)))
+    assert jnp.all(jnp.equal(einsum("-> Height", m1).array, jnp.einsum("ijk->i", m1.array)))
+
+    with pytest.raises(ValueError):
+        einsum("-> Q Width", m1)
+
+    with pytest.raises(ValueError, match=".*Unused aliases from kwargs: Q$"):
+        einsum("-> Height Width", m1, m2, Q=Axis("Q", 2))
+
+    assert jnp.all(jnp.equal(einsum("-> h w", m1, h=Height, w=Width).array, jnp.einsum("ijk->ij", m1.array)))
+
+    assert jnp.all(
+        jnp.equal(einsum("-> h w", m1, m3, h=Height, w=Width).array, jnp.einsum("ijk,ik->ij", m1.array, m3.array))
+    )
+
+    with pytest.raises(ValueError, match=".*Size mismatch.*"):
+        einsum("-> h w", m1, h=Height.resize(4), w=Width)
+
+    with pytest.raises(ValueError, match=".*not found in any of the input arrays.*"):
+        einsum("-> h w", m3, h=Height, w=Width.resize(4))
