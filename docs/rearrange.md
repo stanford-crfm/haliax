@@ -54,6 +54,7 @@ If you're used to einops, the syntax should be familiar, with the main differenc
 and the additional "unordered" syntax for selecting dimensions by name.
 
 !!! warning
+
     This syntax is fairly new. It is pretty well-tested, but it is possible that there are bugs.
 
 ### Examples

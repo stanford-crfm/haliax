@@ -1,4 +1,4 @@
-from typing import Any, Protocol, Tuple, TypeAlias, Union
+from typing import Any, Literal, Protocol, Tuple, TypeAlias, Union
 
 import jax.numpy as jnp
 import numpy as np
@@ -28,3 +28,5 @@ Scalar = Union[float, int, jnp.ndarray]  # ndarray b/c array(1) is a scalar
 IntScalar = Union[int, jnp.ndarray]
 
 PrecisionLike = Union[None, str, Precision, Tuple[str, str], Tuple[Precision, Precision]]
+
+GatherScatterModeStr = Literal["promise_in_bounds", "clip", "drop", "fill"]
