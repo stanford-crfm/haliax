@@ -22,7 +22,7 @@ from .types import GatherScatterModeStr, IntScalar, PrecisionLike, Scalar
 
 
 NamedOrNumeric = Union[Scalar, "NamedArray"]
-NamedIndex = Union[int, slice_t, "NamedArray", dslice]
+NamedIndex = Union[int, slice_t, "NamedArray", dslice, list[int], jnp.ndarray]
 
 SliceSpec = Union[
     tuple[AxisSelector, NamedIndex],
@@ -920,23 +920,43 @@ def index(array: NamedArray, slices: Mapping[AxisSelector, NamedIndex]) -> Named
 
 def _compute_new_axes_and_slices_for_index(
     array, slices
-) -> tuple[AxisSpec, list[py_slice | dslice | jnp.ndarray | int]]:
+) -> tuple[AxisSpec, list[py_slice | dslice | jnp.ndarray | int | list[int]]]:
     ordered_slices: list = [py_slice(None, None, None)] * len(array.axes)  # type: ignore
     kept_axes = [True] * len(array.axes)
+    array_slice_indices = []
+
     for axis, slice_ in slices.items():
         axis_index = array._lookup_indices(axis)
         if axis_index is None:
             raise ValueError(f"axis {axis} not found in {array}")
-        ordered_slices[axis_index] = slice_
-        kept_axes[axis_index] = isinstance(slice_, py_slice) or isinstance(slice_, dslice) or is_pallas_dslice(slice_)
-
-        if not kept_axes[axis_index] and not isinstance(slice_, NamedArray) and not isinstance(slice_, int):
-            raise ValueError(f"Only NamedArrays can be used for advanced indexing. Got {slice_} for axis {axis}")
-
-    array_slice_indices = []
-    for axis_index, slice_ in enumerate(ordered_slices):
-        if isinstance(slice_, NamedArray):
+        if isinstance(slice_, py_slice) or isinstance(slice_, dslice) or is_pallas_dslice(slice_):
+            ordered_slices[axis_index] = slice_
+            kept_axes[axis_index] = True
+        elif isinstance(slice_, int):
+            ordered_slices[axis_index] = slice_
+            kept_axes[axis_index] = False
+        elif isinstance(slice_, NamedArray):
+            ordered_slices[axis_index] = slice_
             array_slice_indices.append(axis_index)
+            kept_axes[axis_index] = False
+        elif isinstance(slice_, list):
+            # we'll let JAX complain if this is wrong
+            ordered_slices[axis_index] = slice_
+        elif isinstance(slice_, jnp.ndarray):
+            # we allow this if it's a 0-d or 1-d array
+            if slice_.ndim == 0:
+                ordered_slices[axis_index] = slice_
+            elif slice_.ndim == 1:
+                # we allow this if it's a 1-d array, in which case we treat it as sugar for NamedArray(slice_, sliced-axis)
+                ordered_slices[axis_index] = haliax.named(slice_, axis_name(axis))
+                kept_axes[axis_index] = False
+                array_slice_indices.append(axis_index)
+            else:
+                raise ValueError(
+                    f"Only 0-d or 1-d unnamed arrays can be used for indexing. Got {slice_} for axis {axis}"
+                )
+        else:
+            raise ValueError(f"Only NamedArrays can be used for advanced indexing. Got {slice_} for axis {axis}")
 
     # advanced indexing
     if len(array_slice_indices) > 0:

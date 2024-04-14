@@ -37,6 +37,36 @@ Otherwise, the idea is pretty straightforward: any unspecified axes are treated 
 slices are kept in reduced dimensions, and integers eliminate dimensions. If all dimensions are eliminated, a scalar
 JAX ndarray is returned.
 
+The following types are supported for indexing:
+
+* Integers, including scalar JAX arrays
+* Slices
+* [haliax.dslice][] objects (See [Dynamic Slices](#dynamic-slices) below.)
+* Lists of integers
+* Named arrays (See [Advanced Indexing](#advanced-indexing) below.)
+* 1-D JAX Arrays of integers
+
+1-D JAX Arrays are interpreted as NamedArrays with a single axis with the same name as
+the one they are slicing. That is:
+
+```python
+import haliax as hax
+import jax
+import jax.numpy as jnp
+
+X = hax.Axis("X", 10)
+Y = hax.Axis("Y", 20)
+
+a = hax.random.uniform(jax.random.PRNGKey(0), (X, Y))
+
+sliced = a["X", jnp.array([1, 2, 3])]
+
+# same as
+a.array[jnp.array([1, 2, 3]), :]
+```
+
+Note that boolean arrays are not supported, as JAX does not support them in JIT-compiled code. You
+can use [haliax.where][] for most of the same functionality, though.
 
 ### Shapes in JAX
 

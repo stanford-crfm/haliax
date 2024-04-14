@@ -649,6 +649,34 @@ def test_slice_nd_array_present_dims():
     assert jnp.all(jnp.equal(named1[{"H": index2}].array, named1.array[index2.array, :, :]))
 
 
+def test_slice_nd_array_unnamed_slice():
+    # tests slicing with arrays that are already present in the named array, which is sometimes ok
+    H = Axis("H", 10)
+    W = Axis("W", 20)
+    D = Axis("D", 30)
+
+    named1 = hax.random.uniform(PRNGKey(0), (H, W, D))
+
+    index1 = jax.random.randint(PRNGKey(1), (4,), 0, H.size)
+    assert jnp.all(jnp.equal(named1[{"H": index1}].array, named1.array[index1, :, :]))
+
+    # hidden behavior: if we also pass in an H index to e.g. D, it is zipped together
+    index2 = hax.random.randint(PRNGKey(2), Axis("H", 4), 0, D.size)
+    assert jnp.all(jnp.equal(named1[{"H": index1, "D": index2}].array, named1.array[index1, :, index2.array]))
+
+    # this is different though:
+    index2r = index2.array
+    assert jnp.all(
+        jnp.equal(
+            named1[{"H": index1, "D": index2r}].array, named1.array[index1.reshape(1, -1), :, index2r.reshape(-1, 1)]
+        )
+    )
+    assert named1[{"H": index1, "D": index2r}].shape != named1[{"H": index1, "D": index2}].shape
+
+    index1 = list(index1)
+    assert jnp.all(jnp.equal(named1[{"H": index1}].array, named1.array[index1, :, :]))
+
+
 def test_full_indexing_returns_named_array():
     H = Axis("H", 10)
     W = Axis("W", 20)
