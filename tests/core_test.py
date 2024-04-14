@@ -649,6 +649,34 @@ def test_slice_nd_array_present_dims():
     assert jnp.all(jnp.equal(named1[{"H": index2}].array, named1.array[index2.array, :, :]))
 
 
+def test_slice_nd_array_unnamed_slice():
+    # tests slicing with arrays that are already present in the named array, which is sometimes ok
+    H = Axis("H", 10)
+    W = Axis("W", 20)
+    D = Axis("D", 30)
+
+    named1 = hax.random.uniform(PRNGKey(0), (H, W, D))
+
+    index1 = jax.random.randint(PRNGKey(1), (4,), 0, H.size)
+    assert jnp.all(jnp.equal(named1[{"H": index1}].array, named1.array[index1, :, :]))
+
+    # hidden behavior: if we also pass in an H index to e.g. D, it is zipped together
+    index2 = hax.random.randint(PRNGKey(2), Axis("H", 4), 0, D.size)
+    assert jnp.all(jnp.equal(named1[{"H": index1, "D": index2}].array, named1.array[index1, :, index2.array]))
+
+    # this is different though:
+    index2r = index2.array
+    assert jnp.all(
+        jnp.equal(
+            named1[{"H": index1, "D": index2r}].array, named1.array[index1.reshape(1, -1), :, index2r.reshape(-1, 1)]
+        )
+    )
+    assert named1[{"H": index1, "D": index2r}].shape != named1[{"H": index1, "D": index2}].shape
+
+    index1 = list(index1)
+    assert jnp.all(jnp.equal(named1[{"H": index1}].array, named1.array[index1, :, :]))
+
+
 def test_full_indexing_returns_named_array():
     H = Axis("H", 10)
     W = Axis("W", 20)
@@ -847,3 +875,82 @@ def test_named_arrays_work_in_eqxi_while_loop():
     grad_fun = eqx.filter_value_and_grad(loss_fun)
 
     grad_fun(named1)
+
+
+def test_at_for_in_placeish():
+    H = Axis("H", 10)
+    W = Axis("W", 20)
+
+    named1 = hax.random.uniform(PRNGKey(0), (H, W))
+
+    named1_at = named1.at[H, 0].set(0)
+
+    assert jnp.all(jnp.equal(named1_at[H, 0].array, 0))
+    assert jnp.all(named1_at[H, 1:].array == named1[H, 1:].array)
+
+    # test add, multiply, power, etc.
+    named1_at = named1.at[H, 0].add(1)
+    assert jnp.all(named1_at.array == named1.array.at[0].add(1))
+
+    named1_at = named1.at[H, 0].multiply(2)
+    assert jnp.all(named1_at.array == named1.array.at[0].multiply(2))
+
+    named1_at = named1.at[H, 0].power(2)
+    assert jnp.all(named1_at.array == named1.array.at[0].power(2))
+
+    named1_at = named1.at[H, 0].divide(2)
+    assert jnp.all(named1_at.array == named1.array.at[0].divide(2))
+
+    named1_at = named1.at[H, 0].apply(hax.square)
+    assert jnp.all(named1_at.array == named1.array.at[0].apply(jnp.square))
+
+    named1_at = named1.at[H, 0].max(0.5)
+    assert jnp.all(named1_at.array == named1.array.at[0].max(0.5))
+
+    named1_at = named1.at[H, 0].min(0.5)
+    assert jnp.all(named1_at.array == named1.array.at[0].min(0.5))
+
+
+def test_at_with_fancy_indexing():
+    H = Axis("H", 10)
+    W = Axis("W", 20)
+    I0 = Axis("I0", 5)
+    I1 = Axis("I1", 5)
+
+    named1 = hax.random.uniform(PRNGKey(0), (H, W))
+    ind1 = hax.random.randint(PRNGKey(0), (I0,), 0, H.size)
+    ind2 = hax.random.randint(PRNGKey(0), (I1,), 0, W.size)
+
+    named1_at = named1.at[H, ind1].set(0)
+    assert jnp.all(named1_at.array == named1.array.at[ind1.array].set(0))
+
+    named1_at = named1.at[H, ind1].add(1, mode="clip")
+    assert jnp.all(named1_at.array == named1.array.at[ind1.array].add(1, mode="clip"))
+
+    named1_at = named1.at[H, ind1, W, ind2].set(0)
+    assert jnp.all(named1_at.array == named1.array.at[ind1.array.reshape(-1, 1), ind2.array.reshape(1, -1)].set(0))
+
+    # dslices
+    from haliax import ds
+
+    named1_at = named1.at[H, ds(3, 5)].set(0)
+    assert jnp.all(named1_at.array == named1.array.at[3:8].set(0))
+
+    named1_at = named1.at[H, ds(3, 5), W, ind2].power(2)
+    assert jnp.all(named1_at.array == named1.array.at[3:8, ind2.array].power(2))
+
+
+def test_slice_dslice_and_array():
+    H = Axis("H", 10)
+    W = Axis("W", 20)
+    I0 = Axis("I0", 5)
+
+    named1 = hax.random.uniform(PRNGKey(0), (H, W))
+    ind2 = hax.random.randint(PRNGKey(0), (I0,), 0, W.size)
+
+    from haliax import ds
+
+    named1.array.at[3:8, ind2.array].add(jnp.full((5, 5), 2))
+
+    named1_at = named1.at[H, ds(3, 5), W, ind2].add(2)
+    assert jnp.all(named1_at.array == named1.array.at[3:8, ind2.array].add(2))

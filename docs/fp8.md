@@ -1,7 +1,8 @@
 # FP8 Training
 
 !!! warning
-        FP8 training in Haliax is currently experimental and may change in the future.
+
+    FP8 training in Haliax is currently experimental and may change in the future.
 
 FP8 refers to 8-bit floating point numbers. FP8 is a massively reduced precision compared to the 32-bit floating point numbers
 or 16-bit floating point numbers that are typically used in deep learning: there are only 256 possible values in FP8, compared to
@@ -123,7 +124,7 @@ you will get the gradient computation as normal, but you'll also get the updated
 This updated state needs to directly replace the state in the module (rather than be used for a gradient step), which is
 why you need to use the `partition_for_grad_overwrite`
 
-The FP8 `dot_general` module is implemented in [haliax.quantization.Fp8DotGeneral][]. It's actually not that complicated:
+The FP8 `dot_general` module is implemented in [haliax.quantization.Fp8DotGeneralOp][]. It's actually not that complicated:
 
 1) It holds a scaling factor and history of maximum values for each of (lhs, rhs, output) and updates them based on the
 gradients.

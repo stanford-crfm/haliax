@@ -9,7 +9,6 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import jax
 import jax.numpy as jnp
-import numpy
 import numpy as np
 
 import haliax
@@ -18,22 +17,21 @@ from haliax.jax_utils import is_jax_array_like, is_pallas_dslice
 from haliax.util import ensure_tuple
 
 from ._src.util import index_where, py_slice, slice_t
-from .axis import (
-    Axis,
-    AxisSelection,
-    AxisSelector,
-    AxisSpec,
-    axis_name,
-    dslice,
-    eliminate_axes,
-    selects_axis,
-    union_axes,
-)
-from .types import DTypeLike, IntScalar, PrecisionLike, Scalar
+from .axis import Axis, AxisSelection, AxisSelector, AxisSpec, axis_name, dslice, eliminate_axes, selects_axis
+from .types import GatherScatterModeStr, IntScalar, PrecisionLike, Scalar
 
 
 NamedOrNumeric = Union[Scalar, "NamedArray"]
-NamedIndex = Union[int, slice_t, "NamedArray", dslice]
+NamedIndex = Union[int, slice_t, "NamedArray", dslice, list[int], jnp.ndarray]
+
+SliceSpec = Union[
+    tuple[AxisSelector, NamedIndex],
+    tuple[AxisSelector, NamedIndex, AxisSelector, NamedIndex],
+    tuple[AxisSelector, NamedIndex, AxisSelector, NamedIndex, AxisSelector, NamedIndex],
+    tuple[AxisSelector | NamedOrNumeric, ...],
+    Mapping[AxisSelector, NamedIndex],
+]
+
 
 _ENABLE_SHAPE_CHECKS = True
 
@@ -330,19 +328,47 @@ class NamedArray:
     def take(self, axis: AxisSelector, index: Union[int, "NamedArray"]) -> "NamedArray":
         return haliax.take(self, axis=axis, index=index)
 
-    @overload
-    def __getitem__(self, item: Tuple[AxisSelector, NamedIndex]) -> "NamedArray":
-        ...
+    @property
+    def at(self) -> "_NamedIndexUpdateHelper":
+        """
+                Named analog of [jax's at method](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.ndarray.at.html).
 
-    @overload
-    def __getitem__(self, item: Tuple[AxisSelector, NamedIndex, AxisSelector, NamedIndex]) -> "NamedArray":
-        ...
+                Docs from the JAX docs:
 
-    @overload
-    def __getitem__(self, item: Mapping[AxisSelector, NamedIndex]) -> "NamedArray":
-        ...
+                The at property provides a functionally pure equivalent of in-place array modifications.
 
-    def __getitem__(self, idx) -> "NamedArray":
+                In particular:
+
+        | Alternate syntax | Equivalent In-place expression |
+        |------------------|-------------------------------|
+        | `x = x.at[idx].set(y)` | `x[idx] = y` |
+        | `x[idx] = y` | `x = x.at[idx].set(y)` |
+        | `x = x.at[idx].add(y)` | `x[idx] += y`|
+        | `x = x.at[idx].multiply(y)` | `x[idx] *= y`|
+        | `x = x.at[idx].divide(y)` | `x[idx] /= y`|
+        | `x = x.at[idx].power(y)` | `x[idx] **= y`|
+        | `x = x.at[idx].min(y)` | `x[idx] = minimum(x[idx], y)`|
+        | `x = x.at[idx].max(y)` | `x[idx] = maximum(x[idx], y)`|
+        | `x = x.at[idx].apply(ufunc)` | `ufunc.at(x, idx)`|
+
+        x = x.at[idx].get()
+
+
+        x = x[idx]
+
+        None of the x.at expressions modify the original x; instead they return a modified copy of x. However, inside a jit() compiled function, expressions like x = x.at[idx].set(y) are guaranteed to be applied in-place.
+
+        Unlike NumPy in-place operations such as x[idx] += y, if multiple indices refer to the same location, all updates will be applied (NumPy would only apply the last update, rather than applying all updates.) The order in which conflicting updates are applied is implementation-defined and may be nondeterministic (e.g., due to concurrency on some hardware platforms).
+
+        By default, JAX assumes that all indices are in-bounds. Alternative out-of-bound index semantics can be specified via the mode parameter (see below).
+
+
+                Returns:
+
+        """
+        return _NamedIndexUpdateHelper(self)
+
+    def __getitem__(self, idx: SliceSpec) -> "NamedArray":
         """Syntactic sugar for [haliax.index][], which is the actual implementation.
 
         Supports indexing like:
@@ -366,17 +392,8 @@ class NamedArray:
 
         This returns a NamedArray if any axes remain, or a scalar (0-dimensional) jnp.ndarray if all axes are indexed out.
         """
-        if isinstance(idx, tuple):
-            if len(idx) == 1:
-                idx = idx[0]
-            else:
-                if len(idx) % 2 != 0:
-                    raise ValueError(
-                        "Must provide an even number of arguments to __getitem__ when using the shorthand syntax."
-                    )
-                idx = {idx[i]: idx[i + 1] for i in range(0, len(idx), 2)}
-
-        return index(self, idx)
+        idx_dict = _convert_index_expr_to_dict(idx)
+        return index(self, idx_dict)
 
     # np.ndarray methods:
     def all(self, axis: Optional[AxisSelection] = None, *, where: Optional["NamedArray"] = None) -> "NamedArray":
@@ -886,28 +903,60 @@ def index(array: NamedArray, slices: Mapping[AxisSelector, NamedIndex]) -> Named
     you might use `array[{"batch": slice(0, 10)}]` or `array["batch", 0:10]` to select the first 10 elements
     of the 'batch' axis.
 
+    See Also:
+        * [haliax.NamedArray.at][] for a functional equivalent of in-place array modifications.
+
     Returns:
         NamedArray or jnp.ndarray: A NamedArray is returned if there are any axes remaining after selection,
         otherwise a scalar (0-dimensional) jnp.ndarray is returned if all axes are indexed out.
     """
     # indices where we have array args
-    array_slice_indices = []
-    dslice_indices = []
+    new_axes, ordered_slices = _compute_new_axes_and_slices_for_index(array, slices)
+    sliced, ordered_slices = _handle_dynamic_slices(array.array, ordered_slices)
+    sliced = sliced[tuple(ordered_slices)]
+
+    return haliax.named(sliced, new_axes)
+
+
+def _compute_new_axes_and_slices_for_index(
+    array, slices
+) -> tuple[AxisSpec, list[py_slice | dslice | jnp.ndarray | int | list[int]]]:
     ordered_slices: list = [py_slice(None, None, None)] * len(array.axes)  # type: ignore
     kept_axes = [True] * len(array.axes)
+    array_slice_indices = []
+
     for axis, slice_ in slices.items():
         axis_index = array._lookup_indices(axis)
         if axis_index is None:
             raise ValueError(f"axis {axis} not found in {array}")
-        ordered_slices[axis_index] = slice_
-
-        kept_axes[axis_index] = isinstance(slice_, py_slice) or isinstance(slice_, dslice) or is_pallas_dslice(slice_)
-
-        if isinstance(slice_, NamedArray):
+        if isinstance(slice_, py_slice) or isinstance(slice_, dslice) or is_pallas_dslice(slice_):
+            ordered_slices[axis_index] = slice_
+            kept_axes[axis_index] = True
+        elif isinstance(slice_, int):
+            ordered_slices[axis_index] = slice_
+            kept_axes[axis_index] = False
+        elif isinstance(slice_, NamedArray):
+            ordered_slices[axis_index] = slice_
             array_slice_indices.append(axis_index)
-
-        if isinstance(slice_, dslice) or is_pallas_dslice(slice_):
-            dslice_indices.append(axis_index)
+            kept_axes[axis_index] = False
+        elif isinstance(slice_, list):
+            # we'll let JAX complain if this is wrong
+            ordered_slices[axis_index] = slice_
+        elif isinstance(slice_, jnp.ndarray):
+            # we allow this if it's a 0-d or 1-d array
+            if slice_.ndim == 0:
+                ordered_slices[axis_index] = slice_
+            elif slice_.ndim == 1:
+                # we allow this if it's a 1-d array, in which case we treat it as sugar for NamedArray(slice_, sliced-axis)
+                ordered_slices[axis_index] = haliax.named(slice_, axis_name(axis))
+                kept_axes[axis_index] = False
+                array_slice_indices.append(axis_index)
+            else:
+                raise ValueError(
+                    f"Only 0-d or 1-d unnamed arrays can be used for indexing. Got {slice_} for axis {axis}"
+                )
+        else:
+            raise ValueError(f"Only NamedArrays can be used for advanced indexing. Got {slice_} for axis {axis}")
 
     # advanced indexing
     if len(array_slice_indices) > 0:
@@ -958,23 +1007,39 @@ def index(array: NamedArray, slices: Mapping[AxisSelector, NamedIndex]) -> Named
             # the advanced indices are not contiguous, so we need to insert the new axes at the front
             new_axes = broadcasted_axes + tuple(ax for i, ax in enumerate(array.axes) if kept_axes[i])
     else:
-        new_axes = tuple(axis.name for axis, keep in zip(array.axes, kept_axes) if keep)
+        new_axes = tuple(axis for axis, keep in zip(array.axes, kept_axes) if keep)
 
-    sliced = array.array
+    new_axes = tuple(axis_name(ax) for ax in new_axes)
+    return new_axes, ordered_slices
 
-    if len(dslice_indices) > 0:
-        # dynamic slice out the dslices
-        indices = [0] * len(array.axes)
-        lengths = [ax.size for ax in array.axes]
+
+def _handle_dynamic_slices(array: jnp.ndarray, slices):
+    """
+    Helper function to handle dynamic slices in the array. These have to be handled with jax.lax.dynamic_slice,
+    which is for when the start index is not known at compile time. (Sizes must always be known at compile time.)
+
+    Notes:
+        **MUTATES `slices` IN PLACE**
+
+    Returns:
+        array.array: the sliced array
+
+    """
+    indices_for_dslice = [0] * array.ndim
+    lengths_for_dslice = list(array.shape)
+    dslice_indices = []
+    need_to_slice = False
+    for axis_index, slice_ in enumerate(slices):
+        if isinstance(slice_, dslice) or is_pallas_dslice(slice_):
+            dslice_indices.append(axis_index)
+            indices_for_dslice[axis_index] = slice_.start
+            lengths_for_dslice[axis_index] = slice_.size
+            need_to_slice = True
+    if need_to_slice:
+        array = jax.lax.dynamic_slice(array, indices_for_dslice, lengths_for_dslice)
         for i in dslice_indices:
-            indices[i] = ordered_slices[i].start
-            lengths[i] = ordered_slices[i].size
-        sliced = jax.lax.dynamic_slice(sliced, indices, lengths)
-        for i in dslice_indices:
-            ordered_slices[i] = py_slice(None, None, None)
-
-    sliced = sliced[tuple(ordered_slices)]
-    return haliax.named(sliced, new_axes)
+            slices[i] = py_slice(None, None, None)
+    return array, slices
 
 
 def split(a: NamedArray, axis: AxisSelector, new_axes: Sequence[Axis]) -> Sequence[NamedArray]:
@@ -1443,6 +1508,208 @@ def flatten_all_axes_but(
         return new_a.rearrange(out_axes)
 
     return result, unflatten
+
+
+class _NamedIndexUpdateHelper:
+    def __init__(self, array: NamedArray):
+        self.array = array
+
+    def __getitem__(self, slices: SliceSpec) -> "_NamedIndexUpdateRef":
+        return _NamedIndexUpdateRef(self.array, _convert_index_expr_to_dict(slices))
+
+
+class _NamedIndexUpdateRef:
+    def __init__(self, array: NamedArray, slices: SliceSpec):
+        self._array = array
+        self._slices = slices
+
+    def get(
+        self,
+        *,
+        indices_are_sorted: bool = False,
+        unique_indices: bool = False,
+        mode: Optional[GatherScatterModeStr] = None,
+        fill_value: Optional[Scalar] = None,
+    ) -> NamedArray:
+        slices, sliced_axes = _raw_indices_for_at(self._array, self._slices)
+        new_array = self._array.array.at[tuple(slices)].get(
+            indices_are_sorted=indices_are_sorted, unique_indices=unique_indices, mode=mode, fill_value=fill_value
+        )
+        return NamedArray(new_array, sliced_axes)
+
+    def set(
+        self,
+        update: NamedOrNumeric,
+        *,
+        indices_are_sorted: bool = False,
+        unique_indices: bool = False,
+        mode: Optional[GatherScatterModeStr] = None,
+    ) -> NamedArray:
+        slices, sliced_axes = _raw_indices_for_at(self._array, self._slices)
+        update = haliax.broadcast_to(update, sliced_axes, enforce_no_extra_axes=True)
+        new_array = self._array.array.at[tuple(slices)].set(
+            update.array, indices_are_sorted=indices_are_sorted, unique_indices=unique_indices, mode=mode
+        )
+        return NamedArray(new_array, self._array.axes)
+
+    def add(
+        self,
+        update: NamedOrNumeric,
+        *,
+        indices_are_sorted: bool = False,
+        unique_indices: bool = False,
+        mode: Optional[GatherScatterModeStr] = None,
+    ) -> NamedArray:
+        slices, sliced_axes = _raw_indices_for_at(self._array, self._slices)
+        update = haliax.broadcast_to(update, sliced_axes, enforce_no_extra_axes=True)
+        new_array = self._array.array.at[tuple(slices)].add(
+            update.array, indices_are_sorted=indices_are_sorted, unique_indices=unique_indices, mode=mode
+        )
+        return NamedArray(new_array, self._array.axes)
+
+    def multiply(
+        self,
+        update: NamedOrNumeric,
+        *,
+        indices_are_sorted: bool = False,
+        unique_indices: bool = False,
+        mode: Optional[GatherScatterModeStr] = None,
+    ) -> NamedArray:
+        slices, sliced_axes = _raw_indices_for_at(self._array, self._slices)
+        update = haliax.broadcast_to(update, sliced_axes, enforce_no_extra_axes=True)
+        new_array = self._array.array.at[tuple(slices)].multiply(
+            update.array, indices_are_sorted=indices_are_sorted, unique_indices=unique_indices, mode=mode
+        )
+        return NamedArray(new_array, self._array.axes)
+
+    def divide(
+        self,
+        update: NamedOrNumeric,
+        *,
+        indices_are_sorted: bool = False,
+        unique_indices: bool = False,
+        mode: Optional[GatherScatterModeStr] = None,
+    ) -> NamedArray:
+        slices, sliced_axes = _raw_indices_for_at(self._array, self._slices)
+        update = haliax.broadcast_to(update, sliced_axes, enforce_no_extra_axes=True)
+        new_array = self._array.array.at[tuple(slices)].divide(
+            update.array, indices_are_sorted=indices_are_sorted, unique_indices=unique_indices, mode=mode
+        )
+        return NamedArray(new_array, self._array.axes)
+
+    def max(
+        self,
+        update: NamedOrNumeric,
+        *,
+        indices_are_sorted: bool = False,
+        unique_indices: bool = False,
+        mode: Optional[GatherScatterModeStr] = None,
+    ) -> NamedArray:
+        slices, sliced_axes = _raw_indices_for_at(self._array, self._slices)
+        update = haliax.broadcast_to(update, sliced_axes, enforce_no_extra_axes=True)
+        new_array = self._array.array.at[tuple(slices)].max(
+            update.array, indices_are_sorted=indices_are_sorted, unique_indices=unique_indices, mode=mode
+        )
+        return NamedArray(new_array, self._array.axes)
+
+    def min(
+        self,
+        update: NamedOrNumeric,
+        *,
+        indices_are_sorted: bool = False,
+        unique_indices: bool = False,
+        mode: Optional[GatherScatterModeStr] = None,
+    ) -> NamedArray:
+        slices, sliced_axes = _raw_indices_for_at(self._array, self._slices)
+        update = haliax.broadcast_to(update, sliced_axes, enforce_no_extra_axes=True)
+        new_array = self._array.array.at[tuple(slices)].min(
+            update.array, indices_are_sorted=indices_are_sorted, unique_indices=unique_indices, mode=mode
+        )
+        return NamedArray(new_array, self._array.axes)
+
+    def power(
+        self,
+        update: NamedOrNumeric,
+        *,
+        indices_are_sorted: bool = False,
+        unique_indices: bool = False,
+        mode: Optional[GatherScatterModeStr] = None,
+    ) -> NamedArray:
+        slices, sliced_axes = _raw_indices_for_at(self._array, self._slices)
+        update = haliax.broadcast_to(update, sliced_axes, enforce_no_extra_axes=True)
+        new_array = self._array.array.at[tuple(slices)].power(
+            update.array, indices_are_sorted=indices_are_sorted, unique_indices=unique_indices, mode=mode
+        )
+        return NamedArray(new_array, self._array.axes)
+
+    def apply(
+        self,
+        func,
+        *,
+        indices_are_sorted: bool = False,
+        unique_indices: bool = False,
+        mode: Optional[GatherScatterModeStr] = None,
+    ) -> NamedArray:
+        # It's not really documented, but func can be any callable that takes a scalar array and returns a scalar array
+        slices, sliced_axes = _raw_indices_for_at(self._array, self._slices)
+        new_array = self._array.array.at[tuple(slices)].apply(
+            func, indices_are_sorted=indices_are_sorted, unique_indices=unique_indices, mode=mode
+        )
+        return NamedArray(new_array, self._array.axes)
+
+
+def _raw_indices_for_at(array, indexes):
+    sliced_axes, ordered_slices = _compute_new_axes_and_slices_for_index(array, indexes)
+    del sliced_axes
+    # this isn't the fastest (it does the _compute_new_axes_and_slices_for_index twice)
+    # but it's easy
+    _sliced = index(array, indexes)
+    # we have to handle dslices differently than for normal indexing, because we can't use
+    # extra dynamic_slices...
+    # we'd like to just replace these with iota, but we have account for broadcasting semantics
+    # for the other arrays
+    dslice_sizes = tuple(x.size for x in ordered_slices if isinstance(x, dslice) or is_pallas_dslice(x))  # type: ignore
+    current_array_slice_shape = next((x.shape for x in ordered_slices if is_jax_array_like(x)), None)  # type: ignore
+    dims_to_expand = list(range(len(dslice_sizes)))
+    if current_array_slice_shape is not None:
+        iota_shape = dslice_sizes + current_array_slice_shape
+    else:
+        iota_shape = dslice_sizes
+
+    def iota_for_dslice(dslice, cur_dynamic_slice):
+        return jax.lax.broadcasted_iota(int, iota_shape, cur_dynamic_slice) + dslice.start
+
+    if len(dslice_sizes) > 0:
+        cur_dynamic_slice = 0
+        for i in range(len(ordered_slices)):
+            if isinstance(ordered_slices[i], dslice) or is_pallas_dslice(ordered_slices[i]):
+                ordered_slices[i] = iota_for_dslice(ordered_slices[i], cur_dynamic_slice)
+                cur_dynamic_slice += 1
+            elif is_jax_array_like(ordered_slices[i]):
+                # prepend array slices with one 1 for each dynamic slice
+                ordered_slices[i] = jnp.expand_dims(ordered_slices[i], axis=dims_to_expand)
+
+        assert cur_dynamic_slice == len(dslice_sizes)
+
+    # ok the ordered slices are now correct
+    return ordered_slices, _sliced.axes
+
+
+def _convert_index_expr_to_dict(idx) -> dict[AxisSelector, NamedIndex]:
+    if isinstance(idx, tuple):
+        if len(idx) == 1:
+            idx = idx[0]
+        else:
+            if len(idx) % 2 != 0:
+                raise ValueError(
+                    "Must provide an even number of arguments to __getitem__ when using the shorthand syntax."
+                )
+            idx = {idx[i]: idx[i + 1] for i in range(0, len(idx), 2)}
+    elif isinstance(idx, dict):
+        pass
+    else:
+        raise ValueError(f"Invalid index type {type(idx)}")
+    return idx
 
 
 __all__ = [
