@@ -225,8 +225,9 @@ class AliasTable:
 
     def __init__(self, bindings=None):
         if bindings is None:
-            bindings = {}
-        self.bindings = bindings
+            self.bindings = {}
+        else:
+            self.bindings = {**bindings}
 
     def dealias_binding(self, binding: str) -> Optional[AxisSelector]:
         return self.bindings.get(binding, None)
@@ -235,6 +236,15 @@ class AliasTable:
         if axis.name in self.bindings:
             if self.bindings[alias] != axis:
                 raise_parse_error(f"Alias {alias} is assigned to more than one axis", expr, char_range)
+        elif alias in self.bindings:
+            current = self.bindings[alias]
+            if isinstance(current, Axis):
+                if current != axis:
+                    raise_parse_error(f"Alias {alias} is assigned to more than one axis", expr, char_range)
+            elif current != axis.name:
+                raise_parse_error(f"Alias {alias} is assigned to more than one axis", expr, char_range)
+            else:
+                self.bindings[alias] = axis
         else:
             self.bindings[alias] = axis
 

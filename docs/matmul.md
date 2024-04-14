@@ -3,7 +3,10 @@
 Haliax has two ways to do matrix multiplication (and tensor contractions more generally):
 [haliax.dot][] and [haliax.einsum][]. [haliax.dot][] and [haliax.einsum][]
 can both express any tensor contraction, though in different situations one or the other may be
-more suitable for expressing a particular contraction.
+more suitable for expressing a particular contraction In general:
+
+- Use [haliax.dot][] when you want to express a simple matrix multiplication over one or a few axes.
+- Use [haliax.einsum][] when you want to express a more complex tensor contraction.
 
 See also the API reference for [haliax.dot][] and [haliax.einsum][] and the
 [cheat sheet section](cheatsheet.md#matrix-multiplication).
@@ -68,6 +71,9 @@ Haliax's version of `einsum` comes in three modes: "ordered", "unordered", and "
 These modes are all accessible through the same function without any flags: the syntax
 of the `einsum` string determines which mode is used.
 
+The syntax for Haliax's `einsum` is similar to [`haliax.rearrange`](rearrange.md), which
+is in turn similar to [einops.rearrange](https://einops.rocks/api/rearrange/).
+
 #### Ordered Mode
 
 Haliax's `einsum` has an "ordered" mode that is similar to `einops.einsum`'s behavior.
@@ -119,6 +125,22 @@ y = hax.einsum("{H ...} -> ...", x)  # shape is (W, D)
 
 This mode is most similar to [haliax.dot][]'s behavior, though it's a bit more expressive.
 
+You can also use axis aliases in the `einsum` string, which can be useful for expressing contractions
+in library code or just for shortening the string:
+
+```python
+Height = hax.Axis("Height", 3)
+Width = hax.Axis("Width", 4)
+Depth = hax.Axis("Depth", 5)
+
+x = hax.ones((Height, Width, Depth))
+w = hax.ones((Depth,))
+
+y = hax.einsum("{H W D} -> H W", x, H=Height, W=Width, D=Depth)  # shape is (Height, Width)
+y = hax.einsum("{D} -> ", w, D=Depth)  # shape is (Height, Width)
+```
+
+
 #### Output Axes Mode
 
 In "output axes" mode, you only specify the axes that should be in the output. All other
@@ -142,3 +164,16 @@ y = hax.einsum("-> D", w)  # shape is (D,)
 
 We don't recommend using this mode except in cases when you're sure of the full shape of the input arrays
 or you are sure you don't want to let users implicitly batch over any axes.
+
+Output axes mode also supports axis aliases:
+
+```python
+Height = hax.Axis("Height", 3)
+Width = hax.Axis("Width", 4)
+Depth = hax.Axis("Depth", 5)
+
+x = hax.ones((Height, Width, Depth))
+w = hax.ones((Depth,))
+y = hax.einsum("-> Height Width", x, Height=Height, Width=Width, Depth=Depth)  # shape is (Height, Width)
+y = hax.einsum("-> Depth", w, Depth=Depth)  # shape is (Depth,)
+```

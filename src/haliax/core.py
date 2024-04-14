@@ -184,6 +184,8 @@ class NamedArray:
         """
         Returns the axes corresponding to the given axis selection.
         That is, it return the [haliax.Axis][] values themselves, not just their names.
+
+        Raises a ValueError if any of the axes are not found.
         """
         indices = self._lookup_indices(axes)
         if isinstance(indices, int):
