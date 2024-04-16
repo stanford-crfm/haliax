@@ -5,7 +5,7 @@ import jax
 import jax.numpy as jnp
 
 from .axis import Axis, AxisSelector
-from .core import NamedArray, NamedOrNumeric, broadcast_arrays, broadcast_arrays_and_return_axes
+from .core import NamedArray, NamedOrNumeric, broadcast_arrays, broadcast_arrays_and_return_axes, named
 from .jax_utils import is_scalarish
 
 
@@ -70,9 +70,21 @@ def where(
             for idx in jnp.where(condition.array, size=new_axis.size, fill_value=fill_value)
         )
 
+    # if x or y is a NamedArray, the other must be as well. wrap as needed for scalars
+
     if is_scalarish(condition):
-        if x is None:
+        if x is None or y is None:
             raise ValueError("Must specify x and y when condition is a scalar")
+
+        if isinstance(x, NamedArray) and not isinstance(y, NamedArray):
+            if not is_scalarish(y):
+                raise ValueError("y must be a NamedArray or scalar if x is a NamedArray")
+            y = named(y, ())
+        elif isinstance(y, NamedArray) and not isinstance(x, NamedArray):
+            if not is_scalarish(x):
+                raise ValueError("x must be a NamedArray or scalar if y is a NamedArray")
+            x = named(x, ())
+        x, y = broadcast_arrays(x, y)
         return jax.lax.cond(condition, lambda _: x, lambda _: y, None)
 
     condition, x, y = broadcast_arrays(condition, x, y)  # type: ignore

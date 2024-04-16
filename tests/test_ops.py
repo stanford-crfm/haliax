@@ -1,3 +1,5 @@
+from typing import Callable
+
 import jax.numpy as jnp
 import pytest
 from jax.random import PRNGKey
@@ -105,19 +107,27 @@ def test_add_no_overlap():
 # TODO: tests for other ops:
 
 
-def test_where():
+@pytest.mark.parametrize("use_jit", [False, True])
+def test_where(use_jit):
     Height = Axis("Height", 10)
     Width = Axis("Width", 3)
     Depth = Axis("Depth", 4)
 
+    hax_where: Callable = hax.where
+    if use_jit:
+        hax_where = hax.named_jit(hax_where)
+
     named1 = hax.random.uniform(PRNGKey(0), (Height, Width, Depth))
     named2 = hax.random.uniform(PRNGKey(1), (Height, Width, Depth))
 
-    named3 = hax.where(named1 > named2, named1, named2)
+    hax_where(0.0, named1, 0.0)
+
+    named3 = hax_where(named1 > named2, named1, named2)
+
     assert jnp.all(jnp.isclose(named3.array, jnp.where(named1.array > named2.array, named1.array, named2.array)))
 
     named2_reorder = named2.rearrange((Width, Height, Depth))
-    named4 = hax.where(named1 > named2_reorder, named1, named2_reorder)
+    named4 = hax_where(named1 > named2_reorder, named1, named2_reorder)
     named4 = named4.rearrange((Height, Width, Depth))
     assert jnp.all(jnp.isclose(named4.array, jnp.where(named1.array > named2.array, named1.array, named2.array)))
 
@@ -125,7 +135,7 @@ def test_where():
     named5 = hax.random.uniform(PRNGKey(1), (Height, Width))
     named6 = hax.random.uniform(PRNGKey(2), Width)
 
-    named7 = hax.where(named5 > named6, named5, named6)
+    named7 = hax_where(named5 > named6, named5, named6)
     named7 = named7.rearrange((Height, Width))
     assert jnp.all(jnp.isclose(named7.array, jnp.where(named5.array > named6.array, named5.array, named6.array)))
 
@@ -134,12 +144,12 @@ def test_where():
     named6 = hax.random.uniform(PRNGKey(2), (Width, Depth))
 
     with pytest.raises(ValueError):
-        _ = hax.where(named5 > named6, named5, named6)
+        _ = hax_where(named5 > named6, named5, named6)
 
     # now single argument mode
     Volume = hax.Axis("Volume", Height.size * Width.size * Depth.size)
     named7 = hax.random.uniform(PRNGKey(0), (Height, Width, Depth))
-    named8, named9, named10 = hax.where(named7 > 0.5, fill_value=-1, new_axis=Volume)
+    named8, named9, named10 = hax_where(named7 > 0.5, fill_value=-1, new_axis=Volume)
     assert jnp.all((named7[{"Height": named8, "Width": named9, "Depth": named10}] > 0.5).array)
 
 
