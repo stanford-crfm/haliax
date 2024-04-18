@@ -153,9 +153,11 @@ It's not a huge improvement, but it's a bit more convenient.
 ## Advanced Indexing
 
 NumPy's [Advanced Indexing](https://numpy.org/doc/stable/user/basics.indexing.html#advanced-indexing) is supported, though we use named arrays for the indices instead of normal arrays.
-In NumPy, the indexed arrays much be broadcastable to the same shape.Advanced indexing in Haliax is similar, except that
-they follow Haliax's broadcasting rules, meaning that the axis names determine broadcasting.Axes with the same name must
-have the same size.
+(Though, as noted above, you can use 1-D JAX arrays of integers as well.)
+In NumPy, the indexed arrays must be broadcastable to the same shape. Advanced indexing in Haliax is similar,
+except that it follows Haliax's broadcasting rules, meaning that shared names are broadcasted together,
+while non-shared names are treated as separate axes and are cross-producted.
+In particular, axes with the same name must have the same size.
 
 ```python
 import haliax as hax
