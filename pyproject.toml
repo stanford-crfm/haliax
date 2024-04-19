@@ -26,6 +26,7 @@ dependencies = [
     "equinox>=0.10.6",
     "jaxtyping>=0.2.20",
     "jmp>=0.0.4",
+    "safetensors>=0.4.3"
 ]
 dynamic =[ "version" ]
 
@@ -66,3 +67,4 @@ src_paths = ["src", "tests"]
 [project.urls]
 "Homepage" = "https://github.com/stanford-crfm/haliax"
 "Bug Tracker" = "https://github.com/stanford-crfm/haliax/issues/"
+"Documentation" = "https://haliax.readthedocs.io/en/latest/"
