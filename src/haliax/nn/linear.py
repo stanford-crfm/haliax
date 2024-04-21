@@ -1,12 +1,11 @@
-from typing import Callable, Optional
+from typing import Optional
 
 import equinox as eqx
-import jax.lax
 from jaxtyping import PRNGKeyArray
 
 import haliax as hax
-from .._src.state_dict import ModuleWithStateDictSerialization, StateDict, apply_prefix
 
+from .._src.state_dict import ModuleWithStateDictSerialization, StateDict, apply_prefix
 from ..axis import AxisSpec
 from ..core import NamedArray
 from ..jax_utils import named_call
@@ -25,14 +24,20 @@ class Linear(ModuleWithStateDictSerialization):
     Out: AxisSpec = eqx.static_field()
     dot_general: DotGeneralOp = eqx.field(default_factory=DotGeneralOp.default)
 
-    flatten_for_state_dict = eqx.static_field(default=True)
+    flatten_for_state_dict: bool = eqx.static_field(default=True)
     """Whether to flatten the input axes in state_dict serialization. This is useful for serializing to be
     compatible with other libraries like PyTorch."""
 
     @staticmethod
     def init(
-        In: AxisSpec, Out: AxisSpec, *, key, use_bias=True, out_first: bool = False, dot_general=None,
-        flatten_for_state_dict: bool = True
+        In: AxisSpec,
+        Out: AxisSpec,
+        *,
+        key,
+        use_bias=True,
+        out_first: bool = False,
+        dot_general=None,
+        flatten_for_state_dict: bool = True,
     ) -> "Linear":
         """
 
@@ -78,12 +83,18 @@ class Linear(ModuleWithStateDictSerialization):
         else:
             return self.weight.axes[-len(self.Out) :] != self.Out
 
-    def from_state_dict(self, state_dict: StateDict, prefix: Optional[str] = None) -> 'Linear':
+    def from_state_dict(self, state_dict: StateDict, prefix: Optional[str] = None) -> "Linear":
         if self.flatten_for_state_dict:
-            weight, bias = _unflatten_linear(self, state_dict, prefix)
-        else:
             weight = state_dict[apply_prefix(prefix, "weight")]
             bias = state_dict.get(apply_prefix(prefix, "bias"), None)
+            weight, bias = _unflatten_linear(self, weight, bias)
+        else:
+            raw_weight = state_dict[apply_prefix(prefix, "weight")]
+
+            weight = hax.named(raw_weight, self.weight.axes)
+            if self.bias is not None:
+                raw_bias = state_dict.get(apply_prefix(prefix, "bias"), None)
+                bias = hax.named(raw_bias, self.bias.axes) if raw_bias is not None else None
 
         if bias is None:
             if self.bias is not None:
@@ -92,16 +103,22 @@ class Linear(ModuleWithStateDictSerialization):
             if self.bias is None:
                 raise ValueError("Bias is not None in the state_dict, but not found in the module")
 
-        return Linear(weight, bias, self.In, self.Out, dot_general=self.dot_general, flatten_for_state_dict=self.flatten_for_state_dict)
-
-
+        return Linear(
+            weight,
+            bias,
+            self.In,
+            self.Out,
+            dot_general=self.dot_general,
+            flatten_for_state_dict=self.flatten_for_state_dict,
+        )
 
     def update_state_dict(self, state_dict: StateDict, prefix: Optional[str] = None) -> StateDict:
         if self.flatten_for_state_dict:
-            weight, bias = _flatten_linear(self, prefix)
+            weight, bias = _flatten_linear(self)
         else:
-            weight = self.weight
-            bias = self.bias
+            weight = self.weight.array
+            if self.bias is not None:
+                bias = self.bias.array
 
         state_dict[apply_prefix(prefix, "weight")] = weight
 
@@ -111,11 +128,26 @@ class Linear(ModuleWithStateDictSerialization):
         return state_dict
 
 
+def _flatten_linear(layer, *, out_dims_first_in_dict=None):
+    weight = layer.weight
+    bias = layer.bias
 
- def _unflatten_linear(layer, statedict, prefix, *, out_dims_first_in_dict=None):
-    weight = statedict[apply_prefix(prefix, "weight")]
-    bias = statedict.get(apply_prefix(prefix, "bias"), None)
+    if weight.array is not None:
+        weight = weight.flatten_axes(layer.Out, "__OUT__").flatten_axes(layer.In, "__IN__")
+        if bias is not None:
+            bias = bias.flatten_axes(layer.Out, "__OUT__")
 
+        if out_dims_first_in_dict is True:
+            weight = weight.rearrange((..., "__OUT__", "__IN__"))
+        elif out_dims_first_in_dict is False:
+            weight = weight.rearrange((..., "__IN__", "__OUT__"))
+        else:
+            pass
+
+    return weight.array, bias.array
+
+
+def _unflatten_linear(layer, weight, bias, *, out_dims_first_in_dict=None):
     Out = ensure_tuple(layer.Out)
     In = ensure_tuple(layer.In)
     InOut = In + Out

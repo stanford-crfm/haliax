@@ -1,6 +1,7 @@
 # Module to support torch-style "state dict" serialization via safetensors
 import dataclasses
 import re
+import typing
 from typing import Any, Optional, Sequence, TypeVar, cast
 
 import equinox as eqx
@@ -27,6 +28,21 @@ except ImportError:
 
 StateDict = dict[str, Any]
 Mod = TypeVar("Mod", bound=eqx.Module)
+
+
+@typing.overload
+def apply_prefix(prefix: str | None, leaf: str) -> str:
+    ...
+
+
+@typing.overload
+def apply_prefix(prefix: str, leaf: None) -> str:
+    ...
+
+
+@typing.overload
+def apply_prefix(prefix: Optional[str], leaf: Optional[str]) -> Optional[str]:
+    ...
 
 
 def apply_prefix(prefix: Optional[str], leaf: Optional[str]) -> Optional[str]:
