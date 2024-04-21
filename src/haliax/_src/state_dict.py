@@ -28,6 +28,7 @@ except ImportError:
 
 StateDict = dict[str, Any]
 Mod = TypeVar("Mod", bound=eqx.Module)
+T = TypeVar("T")
 
 
 @typing.overload
@@ -58,7 +59,7 @@ class ModuleWithStateDictSerialization(eqx.Module):
     """An eqx.Module that can be serialized to a torch-style state dict."""
 
     def to_state_dict(self, prefix: Optional[str] = None) -> StateDict:
-        return state_dict_to_jax_tree(self, prefix)
+        return tree_to_state_dict(self, prefix)
 
     def from_state_dict(self: Mod, state_dict: StateDict, prefix: Optional[str] = None) -> Mod:
         return default_eqx_module_from_state_dict(self, state_dict, prefix)
@@ -71,7 +72,20 @@ class ModuleWithStateDictSerialization(eqx.Module):
         return {}
 
 
-def jax_tree_from_state_dict(tree: PyTree, state_dict: StateDict, prefix: Optional[str] = None) -> PyTree:
+def tree_from_state_dict(tree: T, state_dict: StateDict, prefix: Optional[str] = None) -> T:
+    """
+    Given a (template) tree and a state dict, return a new tree with the same structure as the input tree, but with
+    the values from the state dict.
+
+    Args:
+        tree: The template tree
+        state_dict: The state dict
+        prefix: The prefix to use when looking up keys in the state dict
+
+    Returns:
+        A new tree with the same structure as the input tree, but with the values from the state dict.
+
+    """
     # TODO: assert compatibility of old and new values (type, shape, etc.)
     if isinstance(tree, eqx.Module):
         if hasattr(tree, "from_state_dict"):
@@ -79,11 +93,9 @@ def jax_tree_from_state_dict(tree: PyTree, state_dict: StateDict, prefix: Option
         else:
             return default_eqx_module_from_state_dict(tree, state_dict, prefix)
     elif isinstance(tree, list):
-        return [
-            jax_tree_from_state_dict(item, state_dict, apply_prefix(prefix, str(i))) for i, item in enumerate(tree)
-        ]
+        return [tree_from_state_dict(item, state_dict, apply_prefix(prefix, str(i))) for i, item in enumerate(tree)]  # type: ignore
     elif isinstance(tree, dict):
-        return {k: jax_tree_from_state_dict(v, state_dict, prefix=apply_prefix(prefix, k)) for k, v in tree.items()}
+        return {k: tree_from_state_dict(v, state_dict, prefix=apply_prefix(prefix, k)) for k, v in tree.items()}  # type: ignore
     elif isinstance(tree, NamedArray):
         if prefix is None:
             raise ValueError("Cannot extract a leaf value from a torch dict without a prefix")
@@ -116,7 +128,7 @@ def jax_tree_from_state_dict(tree: PyTree, state_dict: StateDict, prefix: Option
         return state_dict.get(prefix, tree)
 
 
-def update_state_dict_with_jax_tree(tree: PyTree, state_dict: StateDict, prefix: Optional[str] = None) -> None:
+def update_state_dict_with_tree(tree: PyTree, state_dict: StateDict, prefix: Optional[str] = None) -> None:
     if isinstance(tree, eqx.Module):
         if hasattr(tree, "update_state_dict"):
             tree.update_state_dict(state_dict, prefix)
@@ -124,10 +136,10 @@ def update_state_dict_with_jax_tree(tree: PyTree, state_dict: StateDict, prefix:
             default_update_state_dict_with_eqx_module(state_dict, tree, prefix)
     elif isinstance(tree, list):
         for i, item in enumerate(tree):
-            update_state_dict_with_jax_tree(item, state_dict, prefix=apply_prefix(prefix, str(i)))
+            update_state_dict_with_tree(item, state_dict, prefix=apply_prefix(prefix, str(i)))
     elif isinstance(tree, dict):
         for k, v in tree.items():
-            update_state_dict_with_jax_tree(v, state_dict, prefix=apply_prefix(prefix, k))
+            update_state_dict_with_tree(v, state_dict, prefix=apply_prefix(prefix, k))
     elif isinstance(tree, NamedArray):
         assert prefix is not None
         state_dict[prefix] = tree.array
@@ -141,9 +153,9 @@ def update_state_dict_with_jax_tree(tree: PyTree, state_dict: StateDict, prefix:
         pass
 
 
-def state_dict_to_jax_tree(tree: PyTree, prefix: Optional[str] = None) -> StateDict:
+def tree_to_state_dict(tree: PyTree, prefix: Optional[str] = None) -> StateDict:
     state_dict: StateDict = {}
-    update_state_dict_with_jax_tree(tree, state_dict, prefix)
+    update_state_dict_with_tree(tree, state_dict, prefix)
     return state_dict
 
 
@@ -157,7 +169,7 @@ def default_eqx_module_from_state_dict(mod: Mod, state_dict: StateDict, prefix: 
         key = key_map.get(field.name, field.name)
         value = getattr(mod, field.name)
         # TODO: might want to add a flag that allows missing keys?
-        new = jax_tree_from_state_dict(value, state_dict, apply_prefix(prefix, key))
+        new = tree_from_state_dict(value, state_dict, apply_prefix(prefix, key))
         # Do not try to update parameters that are never defined
         if value is None and new is None:
             continue
@@ -181,7 +193,7 @@ def default_update_state_dict_with_eqx_module(
             continue
         key = key_map.get(field.name, field.name)
         value = getattr(mod, field.name)
-        update_state_dict_with_jax_tree(value, state_dict, apply_prefix(prefix, key))
+        update_state_dict_with_tree(value, state_dict, apply_prefix(prefix, key))
     return state_dict
 
 
@@ -263,7 +275,7 @@ def to_numpy_state_dict(model, prefix: Optional[str] = None) -> StateDict:
         # need to make sure the model is on *this machine* and *this machine's CPU* before saving
         model = jax.tree_util.tree_map(lambda arr: get_to_cpu(arr), model)
         # TODO: it would be nice if safetensors supported an iterator or something so we could do the allgather one at a time
-        state_dict = model.to_state_dict(prefix=prefix)
+        state_dict = model.tree_to_state_dict(prefix=prefix)
         return state_dict
 
 
@@ -341,3 +353,80 @@ def unstack_state_dict(state_dict: StateDict, prefix: Optional[str] = None) -> S
             new_dict[k] = v
 
     return new_dict
+
+
+def flatten_linear_layers(tree: T) -> T:
+    """
+    In PyTorch, linear layers are stored as a 2d weight matrix and a 1d bias vector. In Haliax,
+    linear layers can have arbitrary dimensions, grouped into input and output axes. This function
+    flattens the linear layers in a tree to be compatible with PyTorch-style state dicts.
+
+    :param tree:
+    """
+    from haliax.nn import Linear
+
+    def _flatten_linear(layer):
+        if not isinstance(layer, Linear):
+            return layer
+
+        weight = layer.weight
+        bias = layer.bias
+
+        if weight.array is not None:
+            out_first = layer.out_first
+            weight = weight.flatten_axes(layer.Out, "__OUT__").flatten_axes(layer.In, "__IN__")
+
+            if out_first:
+                weight = weight.rearrange((..., "__OUT__", "__IN__"))
+            else:
+                weight = weight.rearrange((..., "__IN__", "__OUT__"))
+
+            if bias is not None:
+                bias = bias.flatten_axes(layer.Out, "__OUT__")
+
+            In = weight.resolve_axis("__IN__")
+            Out = weight.resolve_axis("__OUT__")
+
+            return dataclasses.replace(layer, weight=weight, bias=bias, In=In, Out=Out)  # type: ignore
+        else:
+            return layer
+
+    return jax.tree_map(_flatten_linear, tree, is_leaf=lambda x: isinstance(x, Linear))
+
+
+def unflatten_linear_layers(template: T, tree_with_flattened_linears: T) -> T:
+    """
+    Unflattens linear layers in a tree that was flattened with [flatten_linear_layers][].
+    Template has the same structure as the tree that was flattened, but with the original (unflattened)
+    linear layers.
+
+    Returns:
+        The same tree as `tree_with_flattened_linears`, but with the linear layers unflattened to match
+        the structure of `template`.
+    """
+
+    from haliax.nn import Linear
+
+    def _unflatten_linear(template, flattened):
+        assert isinstance(template, Linear) == isinstance(flattened, Linear)
+
+        if not isinstance(template, Linear):
+            return flattened
+
+        weight = flattened.weight
+        bias = flattened.bias
+
+        if weight.array is not None:
+            weight = weight.unflatten_axis("__OUT__", template.Out).unflatten_axis("__IN__", template.In)
+            weight = weight.rearrange(template.weight.axes)
+
+        if bias is not None:
+            bias = bias.unflatten_axis("__OUT__", template.Out)
+            assert template.bias is not None, "Flattened bias but template has no bias"
+            bias = bias.rearrange(template.bias.axes)
+
+        return dataclasses.replace(template, weight=weight, bias=bias)  # type: ignore
+
+    return jax.tree_map(
+        _unflatten_linear, template, tree_with_flattened_linears, is_leaf=lambda x: isinstance(x, Linear)
+    )
