@@ -108,7 +108,6 @@ def test_pjit_class_init_with_args():
 def test_infer_resource_partition_gda_bug():
     devices = jax.devices()
     with Mesh(np.array(devices).reshape(-1, 1), (ResourceAxis.DATA, ResourceAxis.MODEL)):
-        jax.config.update("jax_parallel_functions_output_gda", True)
         try:
 
             def foo():
