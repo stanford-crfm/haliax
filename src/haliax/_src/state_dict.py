@@ -148,7 +148,7 @@ def update_state_dict_with_tree(tree: PyTree, state_dict: StateDict, prefix: Opt
             if tree is not None:
                 state_dict[prefix] = tree  # type: ignore
         else:
-            raise ValueError("Cannot update torch dict with a leaf value.")
+            raise ValueError("Cannot update state dict with a leaf value.")
     else:
         pass
 
@@ -178,7 +178,7 @@ def default_eqx_module_from_state_dict(mod: Mod, state_dict: StateDict, prefix: 
     return eqx.tree_at(lambda m: [getattr(m, name) for name in names], mod, values)
 
 
-def default_state_dict_from_eqx_module(mod: eqx.Module, prefix: Optional[str] = None) -> StateDict:
+def default_module_to_state_dict(mod: eqx.Module, prefix: Optional[str] = None) -> StateDict:
     state_dict: StateDict = {}
     default_update_state_dict_with_eqx_module(state_dict, mod, prefix)
     return state_dict
