@@ -8,9 +8,8 @@ import equinox as eqx
 import jax
 import jax.numpy as jnp
 import numpy as np
-from jax import NamedSharding
 from jax.experimental.multihost_utils import sync_global_devices
-from jax.sharding import Mesh, PartitionSpec
+from jax.sharding import Mesh, NamedSharding, PartitionSpec
 from jax.tree_util import DictKey, FlattenedIndexKey, GetAttrKey, SequenceKey
 from jaxtyping import PyTree
 
