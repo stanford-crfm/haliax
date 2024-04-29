@@ -58,7 +58,7 @@ class ModuleWithStateDictSerialization(eqx.Module):
     """An eqx.Module that can be serialized to a torch-style state dict."""
 
     def to_state_dict(self, prefix: Optional[str] = None) -> StateDict:
-        return tree_to_state_dict(self, prefix)
+        return default_eqx_module_to_state_dict(self, prefix)
 
     def from_state_dict(self: Mod, state_dict: StateDict, prefix: Optional[str] = None) -> Mod:
         return default_eqx_module_from_state_dict(self, state_dict, prefix)
@@ -177,7 +177,7 @@ def default_eqx_module_from_state_dict(mod: Mod, state_dict: StateDict, prefix: 
     return eqx.tree_at(lambda m: [getattr(m, name) for name in names], mod, values)
 
 
-def default_module_to_state_dict(mod: eqx.Module, prefix: Optional[str] = None) -> StateDict:
+def default_eqx_module_to_state_dict(mod: eqx.Module, prefix: Optional[str] = None) -> StateDict:
     state_dict: StateDict = {}
     default_update_state_dict_with_eqx_module(state_dict, mod, prefix)
     return state_dict
