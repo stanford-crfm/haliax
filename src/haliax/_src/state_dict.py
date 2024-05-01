@@ -8,6 +8,7 @@ import equinox as eqx
 import jax
 import jax.numpy as jnp
 import numpy as np
+from jax import ShapeDtypeStruct
 from jax.experimental.multihost_utils import sync_global_devices
 from jax.sharding import Mesh, NamedSharding, PartitionSpec
 from jax.tree_util import DictKey, FlattenedIndexKey, GetAttrKey, SequenceKey
@@ -28,6 +29,48 @@ except ImportError:
 StateDict = dict[str, Any]
 Mod = TypeVar("Mod", bound=eqx.Module)
 T = TypeVar("T")
+
+
+def to_torch_compatible_state_dict(t: T, *, flatten_linear: bool = True, prefix: Optional[str] = None) -> StateDict:
+    """
+    Convert a tree to a state dict that is compatible with torch-style state dicts.
+
+    This applies [flatten_linear_layers][] followed by [tree_to_state_dict][]
+    """
+    if flatten_linear:
+        t = flatten_linear_layers(t)
+    return to_numpy_state_dict(t, prefix=prefix)
+
+
+def from_torch_compatible_state_dict(
+    t: T, state_dict: StateDict, *, unflatten_linear: bool = True, prefix: Optional[str] = None
+) -> T:
+    """
+    Convert a state dict to a tree that is compatible with the structure of `t`.
+
+    This applies [tree_from_state_dict][] followed by [unflatten_linear_layers][].
+    """
+    if unflatten_linear:
+        t = _flatten_to_unflatten(t, state_dict, prefix)
+    else:
+        t = tree_from_state_dict(t, state_dict, prefix=prefix)
+
+    return t
+
+
+def _flatten_to_unflatten(t, state_dict, prefix):
+    # typically, `t` is a bunch of ShapeDtypeStructs, which can't be transposed etc. so we instead have to zeros()
+    # into real arrays (that aren't actually real b/c this is inside a jit)
+    def _dt_struct_to_array(struct):
+        if not isinstance(struct, ShapeDtypeStruct):
+            return struct
+        return jnp.zeros(struct.shape, struct.dtype)
+
+    t = jax.tree_map(_dt_struct_to_array, t)
+    flat_t = flatten_linear_layers(t)
+    flat_t = tree_from_state_dict(flat_t, state_dict, prefix=prefix)
+    t = unflatten_linear_layers(t, flat_t)
+    return t
 
 
 @typing.overload
@@ -274,7 +317,7 @@ def to_numpy_state_dict(model, prefix: Optional[str] = None) -> StateDict:
         # need to make sure the model is on *this machine* and *this machine's CPU* before saving
         model = jax.tree_util.tree_map(lambda arr: get_to_cpu(arr), model)
         # TODO: it would be nice if safetensors supported an iterator or something so we could do the allgather one at a time
-        state_dict = model.tree_to_state_dict(prefix=prefix)
+        state_dict = model.to_state_dict(prefix=prefix)
         return state_dict
 
 
