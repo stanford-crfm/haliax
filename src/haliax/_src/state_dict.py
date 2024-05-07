@@ -31,17 +31,6 @@ Mod = TypeVar("Mod", bound=eqx.Module)
 T = TypeVar("T")
 
 
-def to_torch_compatible_state_dict(t: T, *, flatten_linear: bool = True, prefix: Optional[str] = None) -> StateDict:
-    """
-    Convert a tree to a state dict that is compatible with torch-style state dicts.
-
-    This applies [flatten_linear_layers][] followed by [tree_to_state_dict][]
-    """
-    if flatten_linear:
-        t = flatten_linear_layers(t)
-    return to_numpy_state_dict(t, prefix=prefix)
-
-
 def from_torch_compatible_state_dict(
     t: T, state_dict: StateDict, *, unflatten_linear: bool = True, prefix: Optional[str] = None
 ) -> T:
@@ -89,6 +78,7 @@ def apply_prefix(prefix: Optional[str], leaf: Optional[str]) -> Optional[str]:
 
 
 def apply_prefix(prefix: Optional[str], leaf: Optional[str]) -> Optional[str]:
+    """Joins two optional path strings in a way comptible with pytorch state dict serialization"""
     if prefix is None:
         return leaf
     elif leaf is None:

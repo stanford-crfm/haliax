@@ -6,15 +6,9 @@ import jax.numpy as jnp
 import pytest
 
 import haliax as hax
-from haliax._src.state_dict import (
-    flatten_linear_layers,
-    stack_state_dict,
-    tree_from_state_dict,
-    tree_to_state_dict,
-    unflatten_linear_layers,
-    unstack_state_dict,
-)
+from haliax._src.state_dict import stack_state_dict, unstack_state_dict
 from haliax.nn import Linear
+from haliax.state_dict import flatten_linear_layers, tree_from_state_dict, tree_to_state_dict, unflatten_linear_layers
 
 
 @pytest.mark.parametrize("out_dims_first", [True, False])
