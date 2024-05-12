@@ -38,6 +38,7 @@ class ResourceAxis(StringHolderEnum):
 
     MODEL = "model"
     DATA = "data"
+    REPLICA = "replica"
 
 
 class _ResourceMappingHolder:
