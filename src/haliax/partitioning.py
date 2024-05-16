@@ -589,9 +589,7 @@ def pspec_for_axis(axis: AxisSelection, mapping: Optional[ResourceMapping] = Non
     phys_axes = []
     for a in axis:
         pa = physical_axis_name(a, mapping)
-        if pa is None:
-            continue
-        elif isinstance(pa, str):
+        if pa is None or isinstance(pa, str):
             phys_axes.append(pa)
         else:
             # I have no way to resolve the mypy check :)
