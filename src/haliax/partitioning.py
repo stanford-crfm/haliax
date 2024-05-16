@@ -3,6 +3,7 @@ import functools
 import threading
 import typing
 import warnings
+from itertools import chain
 from math import prod
 from typing import Callable, ContextManager, Mapping, Optional, ParamSpec, Sequence, TypeVar, Union
 
@@ -585,7 +586,17 @@ def sharding_for_axis(
 def pspec_for_axis(axis: AxisSelection, mapping: Optional[ResourceMapping] = None) -> PartitionSpec:
     """Get the PartitionSpec for a single axis"""
     axis = ensure_tuple(axis)
-    return PartitionSpec(*(physical_axis_name(a, mapping) for a in axis))
+    phys_axes = []
+    for a in axis:
+        pa = physical_axis_name(a, mapping)
+        if pa is None or isinstance(pa, str):
+            phys_axes.append(pa)
+        else:
+            # I have no way to resolve the mypy check :)
+            for i in pa:
+                phys_axes.append(i)
+
+    return PartitionSpec(*phys_axes)
 
 
 def round_axis_for_partitioning(axis: Axis, mapping: Optional[ResourceMapping] = None) -> Axis:
