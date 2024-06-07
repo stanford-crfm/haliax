@@ -3,6 +3,7 @@ import jax.numpy as jnp
 import jax.random as jrandom
 import jax.tree_util
 import numpy as np
+from chex import assert_trees_all_close
 
 import haliax as hax
 from haliax._src.fp8 import compute_scale
@@ -19,18 +20,20 @@ from haliax.quantization import (
 def test_fp8_is_reasonable():
     In = hax.Axis("In", 8)
     Out = hax.Axis("Out", 8)
-    linear = Linear.init(In, Out, key=jrandom.PRNGKey(0))
+    linear = Linear.init(In, Out, key=jrandom.PRNGKey(0), init_scale=0.1)
 
-    fp8_linear = Linear.init(In, Out, key=jrandom.PRNGKey(0), dot_general=hax.quantization.Fp8DotGeneralOp.init())
+    fp8_linear = Linear.init(
+        In, Out, key=jrandom.PRNGKey(0), dot_general=hax.quantization.Fp8DotGeneralOp.init(), init_scale=0.1
+    )
 
-    input = hax.random.normal(jrandom.PRNGKey(0), In) * 10
+    input = hax.random.normal(jrandom.PRNGKey(3), In)
     output = linear(input)
     fp8_output = fp8_linear(input)
 
     assert output.shape == fp8_output.shape
     assert output.dtype == fp8_output.dtype
 
-    assert jnp.allclose(output.array, fp8_output.array, atol=1e-1, rtol=1e-1)
+    assert_trees_all_close(output.array, fp8_output.array, atol=1e-2, rtol=5e-2)
 
 
 # https://github.com/google/flax/blob/6f2b08e024c2fd2f8cec42a6c82408cb35412319/tests/linen/linen_test.py#L1222

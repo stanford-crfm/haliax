@@ -23,14 +23,14 @@ class Embedding(eqx.Module):
     Embed: AxisSpec = eqx.static_field()
 
     @staticmethod
-    def init(Vocab: Axis, Embed: AxisSpec, *, init_std: float = 1, key, initializer_range: Optional[float] = None):
+    def init(Vocab: Axis, Embed: AxisSpec, *, init_scale: float = 1, key, initializer_range: Optional[float] = None):
         if initializer_range is not None:
             warnings.warn("initializer_range is deprecated. Use init_std instead.", DeprecationWarning)
-            init_std = initializer_range
+            init_scale = initializer_range
 
         all_axes = (Vocab,) + ensure_tuple(Embed)
         output_size = hax.axis_size(Embed)
-        weight = hax.random.truncated_normal(key, all_axes, -3, 3) * (init_std / math.sqrt(output_size))
+        weight = hax.random.truncated_normal(key, all_axes, -3, 3) * (init_scale / math.sqrt(output_size))
         return Embedding(weight=weight, Vocab=Vocab, Embed=Embed)
 
     def __call__(self, input_ids, *, key: Optional[PRNGKeyArray] = None):
