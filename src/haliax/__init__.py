@@ -26,6 +26,7 @@ from .axis import (
     AxisSelector,
     AxisSpec,
     axis_name,
+    axis_size,
     concat_axes,
     dblock,
     ds,
