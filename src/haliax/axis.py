@@ -1,5 +1,6 @@
 import typing
 from dataclasses import dataclass
+from math import prod
 from types import EllipsisType
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple, Union, overload
 
@@ -354,6 +355,17 @@ def axis_name(ax: AxisSelection) -> Union[str, Tuple[str, ...]]:
         return tuple(_ax_name(x) for x in ax)
 
 
+def axis_size(ax: AxisSpec) -> int:
+    """
+    Returns the size of the axis or the product of the sizes of the axes in the axis spec
+    """
+
+    if isinstance(ax, Axis):
+        return ax.size
+    else:
+        return prod(axis.size for axis in ensure_tuple(ax))  # type: ignore
+
+
 class dslice(eqx.Module):
     """
     Dynamic slice, comprising a (start, length) pair. Also aliased as ds.
@@ -524,6 +536,7 @@ __all__ = [
     "PartialShapeDict",
     "ShapeDict",
     "axis_name",
+    "axis_size",
     "concat_axes",
     "union_axes",
     "axis_spec_to_shape_dict",

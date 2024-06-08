@@ -441,7 +441,11 @@ class NamedArray:
 
     @typing.overload
     def dot(
-        self, *args, axis: Optional[AxisSelection], precision: PrecisionLike = None, dot_general=jax.lax.dot_general
+        self,
+        *args: "NamedArray",
+        axis: Optional[AxisSelection],
+        precision: PrecisionLike = None,
+        dot_general=jax.lax.dot_general,
     ) -> "NamedArray":
         ...
 
@@ -1143,7 +1147,7 @@ def flatten_axes(array: NamedArray, old_axes: AxisSelection, new_axis: AxisSelec
     """
     old_axes = ensure_tuple(old_axes)
     old_axes = array.resolve_axis(old_axes)
-    total_axis_size = prod(array.axis_size(ax) for ax in old_axes)
+    total_axis_size = haliax.axis_size(old_axes)
 
     if isinstance(new_axis, Axis):
         if new_axis.size != total_axis_size:
