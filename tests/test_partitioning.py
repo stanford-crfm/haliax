@@ -108,25 +108,21 @@ def test_pjit_class_init_with_args():
 def test_infer_resource_partition_gda_bug():
     devices = jax.devices()
     with Mesh(np.array(devices).reshape(-1, 1), (ResourceAxis.DATA, ResourceAxis.MODEL)):
-        try:
 
-            def foo():
-                return hax.zeros((Dim1, Dim2, Dim3))
+        def foo():
+            return hax.zeros((Dim1, Dim2, Dim3))
 
-            pjit_foo = named_jit(foo, resource_map)
-            r = pjit_foo()
-            assert r.axes == (Dim1, Dim2, Dim3)
+        pjit_foo = named_jit(foo, resource_map)
+        r = pjit_foo()
+        assert r.axes == (Dim1, Dim2, Dim3)
 
-            def bar(x):
-                return x
+        def bar(x):
+            return x
 
-            # this won't work with GDAs
-            pjit_bar = named_jit(bar, resource_map)
-            r = pjit_bar(r)
-            assert r.axes == (Dim1, Dim2, Dim3)
-
-        finally:
-            jax.config.update("jax_parallel_functions_output_gda", False)
+        # this won't work with GDAs
+        pjit_bar = named_jit(bar, resource_map)
+        r = pjit_bar(r)
+        assert r.axes == (Dim1, Dim2, Dim3)
 
 
 @skip_if_not_enough_devices(4)

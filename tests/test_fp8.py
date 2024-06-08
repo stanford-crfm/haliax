@@ -1,3 +1,4 @@
+import chex
 import equinox as eqx
 import jax.numpy as jnp
 import jax.random as jrandom
@@ -133,9 +134,9 @@ def test_fp_loop():
 def test_layer_splicing():
     key, init_key, random_key = jrandom.split(jrandom.PRNGKey(seed=123), 3)
     Input = hax.Axis("Input", 16)
-    Hidden = hax.Axis("Hidden", 16)
+    Hidden = hax.Axis("Hidden", 64)
     Output = hax.Axis("Output", 32)
-    mlp = hax.nn.MLP.init(Input, Output, Hidden, 3, key=init_key)
+    mlp = hax.nn.MLP.init(Input, Output, Hidden, 3, key=init_key, init_scale=0.1)
 
     mlp_q = fp8_linear_layers(mlp, Fp8Config())
     for layer in mlp_q.layers:
@@ -144,7 +145,7 @@ def test_layer_splicing():
     input = hax.random.normal(jrandom.PRNGKey(0), Input) * 10  # 10 so we don't underflow
     output = mlp(input)
     output_q = mlp_q(input)
-    assert jnp.allclose(output.array, output_q.array, atol=1e-3, rtol=1e-3)
+    chex.assert_trees_all_close(output.array, output_q.array, atol=1e-3, rtol=1e-3)
     assert not jnp.allclose(output_q.array, 0)  # don't want them to all underflow
 
     mlp_q = fp8_linear_layers(mlp, Fp8Config(targets="layers.0"))

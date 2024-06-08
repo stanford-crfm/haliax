@@ -48,6 +48,7 @@ class MLP(eqx.Module):
         use_final_bias: bool = True,
         key: PRNGKeyArray,
         dot_general: Optional[DotGeneralOp] = None,
+        init_scale: float = 1.0,
     ):
         Width = _get_width(width)
         Width2 = Width.alias(Width.name + "2")
@@ -58,18 +59,34 @@ class MLP(eqx.Module):
 
         if depth == 0:
             # special case: no hidden layers
-            layers.append(Linear.init(Input, Output, use_bias=use_final_bias, key=keys[0], dot_general=dot_general))
+            layers.append(
+                Linear.init(
+                    Input, Output, use_bias=use_final_bias, key=keys[0], dot_general=dot_general, init_scale=init_scale
+                )
+            )
         else:
             # first hidden layer
-            layers.append(Linear.init(Input, Width, use_bias=use_bias, key=keys[0], dot_general=dot_general))
+            layers.append(
+                Linear.init(
+                    Input, Width, use_bias=use_bias, key=keys[0], dot_general=dot_general, init_scale=init_scale
+                )
+            )
             # middle hidden layers
             cur = Width
             next = Width2
             for i in range(1, depth):
-                layers.append(Linear.init(cur, next, use_bias=use_bias, key=keys[i], dot_general=dot_general))
+                layers.append(
+                    Linear.init(
+                        cur, next, use_bias=use_bias, key=keys[i], dot_general=dot_general, init_scale=init_scale
+                    )
+                )
                 cur, next = next, cur
             # final hidden layer
-            layers.append(Linear.init(cur, Output, use_bias=use_final_bias, key=keys[-1], dot_general=dot_general))
+            layers.append(
+                Linear.init(
+                    cur, Output, use_bias=use_final_bias, key=keys[-1], dot_general=dot_general, init_scale=init_scale
+                )
+            )
 
         return MLP(
             layers=tuple(layers),
