@@ -37,7 +37,9 @@ dev=["pytest >= 7.4.0", "mypy >= 0.910", "mkdocs >= 1.4.3", "mkdocs-material >= 
     "pymdown-extensions",
     "pygments",
     "pymdown-extensions",
+    "chex>=0.1.86"
 ]
+
 
 [tool.hatch.version]
 path = "src/haliax/__about__.py"

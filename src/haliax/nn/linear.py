@@ -1,3 +1,4 @@
+import math
 from typing import Optional
 
 import equinox as eqx
@@ -31,6 +32,7 @@ class Linear(eqx.Module):
         use_bias=True,
         out_first: bool = False,
         dot_general=None,
+        init_scale: float = 1.0,
     ) -> "Linear":
         """
 
@@ -41,9 +43,11 @@ class Linear(eqx.Module):
             use_bias: bool: Whether to use a bias term
             out_first: bool: Whether to put output axes first in the weight matrix. out_first is how PyTorch does it.
             dot_general: Callable: The dot_general function to use. Defaults to jax.lax.dot_general. For fp8 or int8
+            init_scale: float: The scale to use for initialization. We scale init by 1/sqrt(Input.size)*init_scale
         """
         joint_spec = hax.concat_axis_specs(Out, In) if out_first else hax.concat_axis_specs(In, Out)
-        weight = hax.random.normal(key, joint_spec) * 0.02
+        input_size = hax.axis_size(In)
+        weight = hax.random.truncated_normal(key, joint_spec, -3, 3) * (init_scale / math.sqrt(input_size))
         bias = hax.zeros(Out) if use_bias else None
 
         if dot_general is None:

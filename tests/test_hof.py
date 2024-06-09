@@ -87,6 +87,38 @@ def test_scan_doesnt_scan_scalars():
     assert jnp.all(jnp.equal(selected.array, named1.array * 4.0))
 
 
+def test_scan_doesnt_scan_init():
+    Height = Axis("Height", 10)
+    named1 = hax.random.uniform(PRNGKey(0), (Height,))
+
+    init = jnp.arange(Height.size, dtype=jnp.float32)
+
+    def scan_fun(acc, z, x):
+        out = acc + z * x, x * z
+        return out
+
+    total, selected = hax.scan(scan_fun, Height)(init, 4.0, named1)
+
+    assert jnp.all(jnp.isclose(total, init + jnp.sum(named1.array * 4.0)))
+
+    # double check with named array init
+    total, selected = hax.scan(scan_fun, Height)(hax.named(init, "Height"), 4.0, named1)
+
+    assert jnp.all(jnp.isclose(total.array, init + jnp.sum(named1.array * 4.0)))
+
+    # now do fold
+    def fold_fun(acc, z, x):
+        return acc + z * x
+
+    total = hax.fold(fold_fun, Height)(init, 4.0, named1)
+
+    assert jnp.all(jnp.isclose(total, init + jnp.sum(named1.array * 4.0)))
+
+    total = hax.fold(fold_fun, Height)(hax.named(init, "Height"), 4.0, named1)
+
+    assert jnp.all(jnp.isclose(total.array, init + jnp.sum(named1.array * 4.0)))
+
+
 def test_reduce():
     Height = Axis("Height", 10)
     Width = Axis("Width", 3)
