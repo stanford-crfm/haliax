@@ -14,6 +14,7 @@ import haliax.debug as debug
 import haliax.nn as nn
 import haliax.quantization as quantization
 import haliax.random as random
+import haliax.state_dict as state_dict
 import haliax.tree_util as tree_util
 import haliax.util as util
 
@@ -889,6 +890,7 @@ __all__ = [
     "random",
     "tree_util",
     "nn",
+    "state_dict",
     "Axis",
     "AxisSpec",
     "AxisSelection",

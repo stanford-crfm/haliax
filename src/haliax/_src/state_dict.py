@@ -37,12 +37,12 @@ def from_torch_compatible_state_dict(
     """
     Convert a state dict to a tree that is compatible with the structure of `t`.
 
-    This applies [tree_from_state_dict][] followed by [unflatten_linear_layers][].
+    This applies [haliax.state_dict.from_state_dict][] followed by [haliax.state_dict.unflatten_linear_layers][].
     """
     if unflatten_linear:
         t = _flatten_to_unflatten(t, state_dict, prefix)
     else:
-        t = tree_from_state_dict(t, state_dict, prefix=prefix)
+        t = from_state_dict(t, state_dict, prefix=prefix)
 
     return t
 
@@ -57,7 +57,7 @@ def _flatten_to_unflatten(t, state_dict, prefix):
 
     t = jax.tree_map(_dt_struct_to_array, t)
     flat_t = flatten_linear_layers(t)
-    flat_t = tree_from_state_dict(flat_t, state_dict, prefix=prefix)
+    flat_t = from_state_dict(flat_t, state_dict, prefix=prefix)
     t = unflatten_linear_layers(t, flat_t)
     return t
 
@@ -104,7 +104,7 @@ class ModuleWithStateDictSerialization(eqx.Module):
         return {}
 
 
-def tree_from_state_dict(tree: T, state_dict: StateDict, prefix: Optional[str] = None) -> T:
+def from_state_dict(tree: T, state_dict: StateDict, prefix: Optional[str] = None) -> T:
     """
     Given a (template) tree and a state dict, return a new tree with the same structure as the input tree, but with
     the values from the state dict.
@@ -125,9 +125,9 @@ def tree_from_state_dict(tree: T, state_dict: StateDict, prefix: Optional[str] =
         else:
             return default_eqx_module_from_state_dict(tree, state_dict, prefix)
     elif isinstance(tree, list):
-        return [tree_from_state_dict(item, state_dict, apply_prefix(prefix, str(i))) for i, item in enumerate(tree)]  # type: ignore
+        return [from_state_dict(item, state_dict, apply_prefix(prefix, str(i))) for i, item in enumerate(tree)]  # type: ignore
     elif isinstance(tree, dict):
-        return {k: tree_from_state_dict(v, state_dict, prefix=apply_prefix(prefix, k)) for k, v in tree.items()}  # type: ignore
+        return {k: from_state_dict(v, state_dict, prefix=apply_prefix(prefix, k)) for k, v in tree.items()}  # type: ignore
     elif isinstance(tree, NamedArray):
         if prefix is None:
             raise ValueError("Cannot extract a leaf value from a torch dict without a prefix")
@@ -160,7 +160,19 @@ def tree_from_state_dict(tree: T, state_dict: StateDict, prefix: Optional[str] =
         return state_dict.get(prefix, tree)
 
 
-def update_state_dict_with_tree(tree: PyTree, state_dict: StateDict, prefix: Optional[str] = None) -> None:
+def update_state_dict(tree: PyTree, state_dict: StateDict, prefix: Optional[str] = None) -> None:
+    """
+    Update a state dict with the values from a tree.
+
+    !!! warning
+        This function modifies the state dict in place.
+
+    Args:
+        tree:  The tree to update the state dict with.
+        state_dict:  The state dict to update.
+        prefix:  The prefix to use when updating the state dict.
+
+    """
     if isinstance(tree, eqx.Module):
         if hasattr(tree, "update_state_dict"):
             tree.update_state_dict(state_dict, prefix)
@@ -168,10 +180,10 @@ def update_state_dict_with_tree(tree: PyTree, state_dict: StateDict, prefix: Opt
             default_update_state_dict_with_eqx_module(state_dict, tree, prefix)
     elif isinstance(tree, list):
         for i, item in enumerate(tree):
-            update_state_dict_with_tree(item, state_dict, prefix=apply_prefix(prefix, str(i)))
+            update_state_dict(item, state_dict, prefix=apply_prefix(prefix, str(i)))
     elif isinstance(tree, dict):
         for k, v in tree.items():
-            update_state_dict_with_tree(v, state_dict, prefix=apply_prefix(prefix, k))
+            update_state_dict(v, state_dict, prefix=apply_prefix(prefix, k))
     elif isinstance(tree, NamedArray):
         assert prefix is not None
         state_dict[prefix] = tree.array
@@ -185,9 +197,15 @@ def update_state_dict_with_tree(tree: PyTree, state_dict: StateDict, prefix: Opt
         pass
 
 
-def tree_to_state_dict(tree: PyTree, prefix: Optional[str] = None) -> StateDict:
+def to_state_dict(tree: PyTree, prefix: Optional[str] = None) -> StateDict:
+    """
+    Convert a PyTree to a state dict.
+
+    Returns:
+        The state dict representation of the input tree.
+    """
     state_dict: StateDict = {}
-    update_state_dict_with_tree(tree, state_dict, prefix)
+    update_state_dict(tree, state_dict, prefix)
     return state_dict
 
 
@@ -201,7 +219,7 @@ def default_eqx_module_from_state_dict(mod: Mod, state_dict: StateDict, prefix: 
         key = key_map.get(field.name, field.name)
         value = getattr(mod, field.name)
         # TODO: might want to add a flag that allows missing keys?
-        new = tree_from_state_dict(value, state_dict, apply_prefix(prefix, key))
+        new = from_state_dict(value, state_dict, apply_prefix(prefix, key))
         # Do not try to update parameters that are never defined
         if value is None and new is None:
             continue
@@ -225,7 +243,7 @@ def default_update_state_dict_with_eqx_module(
             continue
         key = key_map.get(field.name, field.name)
         value = getattr(mod, field.name)
-        update_state_dict_with_tree(value, state_dict, apply_prefix(prefix, key))
+        update_state_dict(value, state_dict, apply_prefix(prefix, key))
     return state_dict
 
 
@@ -307,7 +325,7 @@ def to_numpy_state_dict(model, prefix: Optional[str] = None) -> StateDict:
         # need to make sure the model is on *this machine* and *this machine's CPU* before saving
         model = jax.tree_util.tree_map(lambda arr: get_to_cpu(arr), model)
         # TODO: it would be nice if safetensors supported an iterator or something so we could do the allgather one at a time
-        state_dict = model.to_state_dict(prefix=prefix)
+        state_dict = to_state_dict(model, prefix=prefix)
         return state_dict
 
 
@@ -327,6 +345,15 @@ def save_state_dict(state_dict: StateDict, path):
     global _GLOBAL_SAVE_COUNT
     sync_global_devices(f"save_state_dict {_GLOBAL_SAVE_COUNT}")
     _GLOBAL_SAVE_COUNT += 1
+
+
+def load_state_dict(path):
+    """
+    Load a model's state dict from a file, bringing all tensors to the CPU first and then converting to numpy.
+    This will load using safetensors format
+    """
+    state_dict = safetensors.numpy.load_file(path)
+    return state_dict
 
 
 def stack_state_dict(state_dict: StateDict, prefix: Optional[str] = None) -> StateDict:
@@ -428,7 +455,7 @@ def flatten_linear_layers(tree: T) -> T:
 
 def unflatten_linear_layers(template: T, tree_with_flattened_linears: T) -> T:
     """
-    Unflattens linear layers in a tree that was flattened with [flatten_linear_layers][].
+    Unflattens linear layers in a tree that was flattened with [haliax.state_dict.flatten_linear_layers][].
     Template has the same structure as the tree that was flattened, but with the original (unflattened)
     linear layers.
 

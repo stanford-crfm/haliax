@@ -8,7 +8,7 @@ import pytest
 import haliax as hax
 from haliax._src.state_dict import stack_state_dict, unstack_state_dict
 from haliax.nn import Linear
-from haliax.state_dict import flatten_linear_layers, tree_from_state_dict, tree_to_state_dict, unflatten_linear_layers
+from haliax.state_dict import flatten_linear_layers, from_state_dict, to_state_dict, unflatten_linear_layers
 
 
 @pytest.mark.parametrize("out_dims_first", [True, False])
@@ -26,7 +26,7 @@ def test_flatten_linear_layers(out_dims_first: bool):
 
     flat_linear = flatten_linear_layers(linear)
 
-    flat_state_dict = tree_to_state_dict(flat_linear)
+    flat_state_dict = to_state_dict(flat_linear)
     if out_dims_first:
         assert flat_state_dict["weight"].shape == (D.size * B.size, H.size * W.size)
     else:
@@ -120,10 +120,10 @@ def test_to_from_state_dict():
     b = jnp.array([3, 4])
     m = M(a, b)
 
-    state_dict = tree_to_state_dict(m)
+    state_dict = to_state_dict(m)
     assert state_dict == {"a": a, "b": b}
 
     m2 = M(jnp.array([0, 0]), jnp.array([0, 0]))
-    m2 = tree_from_state_dict(m2, state_dict)
+    m2 = from_state_dict(m2, state_dict)
     assert jnp.all(m2.a == a)
     assert jnp.all(m2.b == b)

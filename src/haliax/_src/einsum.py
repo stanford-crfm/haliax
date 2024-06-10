@@ -9,6 +9,7 @@ import haliax
 from ..axis import Axis, AxisSelector, axis_name, eliminate_axes, rearrange_for_partial_order, union_axes
 from ..core import NamedArray
 from ..jax_utils import _jittable_dg_einsum
+from ..quantization import DotGeneralOp
 from ..types import DTypeLike, PrecisionLike
 from ..util import ensure_tuple
 from .parsing import AliasTable, parse_einsum, raise_parse_error
@@ -19,8 +20,8 @@ def einsum(
     *arrays: NamedArray,
     precision: PrecisionLike = None,
     preferred_element_type: Optional[DTypeLike] = None,
-    _dot_general=jax.lax.dot_general,
-    **axis_aliases,
+    _dot_general: DotGeneralOp = jax.lax.dot_general,
+    **axis_aliases: AxisSelector,
 ) -> NamedArray:
     """Compute the tensor contraction of the input arrays according to Haliax's named variant of the Einstein summation
     convention.
