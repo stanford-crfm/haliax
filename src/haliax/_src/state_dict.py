@@ -55,7 +55,7 @@ def _flatten_to_unflatten(t, state_dict, prefix):
             return struct
         return jnp.zeros(struct.shape, struct.dtype)
 
-    t = jax.tree_map(_dt_struct_to_array, t)
+    t = jax.tree.map(_dt_struct_to_array, t)
     flat_t = flatten_linear_layers(t)
     flat_t = from_state_dict(flat_t, state_dict, prefix=prefix)
     t = unflatten_linear_layers(t, flat_t)
@@ -323,7 +323,7 @@ def to_numpy_state_dict(model, prefix: Optional[str] = None) -> StateDict:
                 return np.array(out)
 
         # need to make sure the model is on *this machine* and *this machine's CPU* before saving
-        model = jax.tree_util.tree_map(lambda arr: get_to_cpu(arr), model)
+        model = jax.tree.map(lambda arr: get_to_cpu(arr), model)
         # TODO: it would be nice if safetensors supported an iterator or something so we could do the allgather one at a time
         state_dict = to_state_dict(model, prefix=prefix)
         return state_dict
@@ -450,7 +450,7 @@ def flatten_linear_layers(tree: T) -> T:
         else:
             return layer
 
-    return jax.tree_map(_flatten_linear, tree, is_leaf=lambda x: isinstance(x, Linear))
+    return jax.tree.map(_flatten_linear, tree, is_leaf=lambda x: isinstance(x, Linear))
 
 
 def unflatten_linear_layers(template: T, tree_with_flattened_linears: T) -> T:
@@ -486,6 +486,6 @@ def unflatten_linear_layers(template: T, tree_with_flattened_linears: T) -> T:
 
         return dataclasses.replace(template, weight=weight, bias=bias)  # type: ignore
 
-    return jax.tree_map(
+    return jax.tree.map(
         _unflatten_linear, template, tree_with_flattened_linears, is_leaf=lambda x: isinstance(x, Linear)
     )

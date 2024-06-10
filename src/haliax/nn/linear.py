@@ -30,7 +30,7 @@ class Linear(eqx.Module):
         *,
         key: PRNGKey,
         use_bias: bool = True,
-        out_first: bool = False,
+        out_first: bool = True,
         dot_general: Optional[DotGeneralOp] = None,
         init_scale: float = 1.0,
     ) -> "Linear":
