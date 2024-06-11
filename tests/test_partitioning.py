@@ -99,7 +99,7 @@ def test_pjit_class_init_with_args():
 
         devices = jax.devices()
         with Mesh(np.array(devices).reshape(-1, 1), (ResourceAxis.DATA, ResourceAxis.MODEL)):
-            mod = named_jit(ModWithArgs)(hax.ones((Dim1, Dim2)))
+            mod = named_jit(ModWithArgs)(hax.shard(hax.ones((Dim1, Dim2))))
         assert isinstance(mod, ModWithArgs)
         assert mod.array.array.shape == (Dim1.size, Dim2.size)
         assert mod.array2.array.shape == (Dim3.size,)
@@ -173,7 +173,7 @@ def test_shard_with_axis_mapping_inside_jit():
 
             jax.debug.inspect_array_sharding(arr.array, callback=lambda x: assert_eq(x, expected))
 
-        @named_jit(in_axis_resources={}, out_axis_resources=resource_map)
+        @named_jit(out_axis_resources=resource_map)
         def do_shard(x, y):
             x = hax.shard(x, resource_map)
             assert_inside_pjit(x, NamedSharding(mesh, PartitionSpec(None, ResourceAxis.DATA)))
@@ -293,3 +293,25 @@ def test_cross_device_sharding():
         z_devices = z.array.devices()
 
         assert set(d.platform for d in x_devices) == set(d.platform for d in z_devices)
+
+
+def test_named_jit_no_in_axis_resources():
+    mesh = Mesh(np.array(jax.devices()).reshape(-1, 1), (ResourceAxis.DATA, ResourceAxis.MODEL))
+    with axis_mapping(resource_map), mesh:
+
+        class MyModule(eqx.Module):
+            array: NamedArray
+
+            def __init__(self):
+                self.array = hax.ones((Dim1, Dim2))
+
+        data = hax.ones((Dim1, Dim2))
+        data = hax.shard(data, {})
+
+        @named_jit(axis_resources=resource_map)
+        def fn(data):
+            mod = MyModule()
+            return mod.array
+
+        r = fn(data)
+        assert r.array.sharding.device_set == set(jax.devices())
