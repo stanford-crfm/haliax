@@ -18,7 +18,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install flake8 pytest
           pip install --upgrade "jax[cpu]==0.4.25" "jaxlib[cpu]==0.4.25"
-          pip install .[dev]
-      - name: Test with pytest
+
+      - name: Install Levanter from source
         run: |
-          XLA_FLAGS=--xla_force_host_platform_device_count=8 PYTHONPATH=tests:src:. pytest tests
+          git clone "git+https://github.com/stanford-crfm/levanter.git"
+          cd levanter
+          pip install .
+
+      - name: Install Haliax on top
+        run: |
+          # install levanter main
+          cd ..
+          pip install .[dev]
+      - name: Test levanter with pytest
+        run: |
+          cd levanter
+          XLA_FLAGS=--xla_force_host_platform_device_count=8 PYTHONPATH=tests:src:../src pytest tests -m "not entry and not slow"
