@@ -21,16 +21,16 @@ jobs:
 
       - name: Install Levanter from source
         run: |
+          cd ..
           git clone "git+https://github.com/stanford-crfm/levanter.git"
           cd levanter
-          pip install .
-
+          pip install -e .
       - name: Install Haliax on top
         run: |
-          # install levanter main
-          cd ..
+          # install second since levanter will install a built version of haliax
+          cd ../haliax
           pip install .[dev]
       - name: Test levanter with pytest
         run: |
-          cd levanter
+          cd ../levanter
           XLA_FLAGS=--xla_force_host_platform_device_count=8 PYTHONPATH=tests:src:../src pytest tests -m "not entry and not slow"
