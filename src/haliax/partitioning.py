@@ -141,13 +141,9 @@ def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] 
         assert isinstance(sharding, NamedSharding)
         if is_in_jit():
             return with_sharding_constraint(x, sharding)
-        elif sharding.is_fully_addressable:
+        else:
             sharded_array = jax.device_put(x.array, sharding)
             return NamedArray(sharded_array, x.axes)
-        else:
-            # sharded_array = jax.device_put(x.array, sharding)
-            ret = eqx.filter_jit(lambda x: with_sharding_constraint(x, sharding))(x)
-            return ret
 
     return htu.tree_map(_do_device_put, x)
 
