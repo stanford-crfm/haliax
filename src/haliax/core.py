@@ -684,6 +684,8 @@ def take(array: NamedArray, axis: AxisSelector, index: Union[int, NamedArray]) -
         new_axes = array.axes[:axis_index] + array.axes[axis_index + 1 :]
         return NamedArray(new_array, new_axes)
     else:
+        if not jnp.issubdtype(index.dtype, jnp.integer):
+            raise ValueError(f"Index must be an integer array, got {index.dtype}")
         # #13: should broadcast/autobatch take
         remaining_axes = eliminate_axes(array.axes, axis)
         # axis order is generally [array.axes[:axis_index], index.axes, array.axes[axis_index + 1 :]]
