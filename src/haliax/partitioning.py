@@ -141,12 +141,13 @@ def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] 
         assert isinstance(sharding, NamedSharding)
         if is_in_jit():
             return with_sharding_constraint(x, sharding)
-        elif sharding.is_fully_addressable:
-            sharded_array = jax.device_put(x.array, sharding)
+        # as a special case, SingleDeviceShardings are routed through jit
+        elif isinstance(x.array.sharding, SingleDeviceSharding):
+            # TODO(dlwh): this should be unnecessary in JAX soon. Check after 2024-08-01
+            sharded_array = jax.jit(lambda x: x, out_shardings=sharding)(x)
             return NamedArray(sharded_array, x.axes)
         else:
-            # sharded_array = jax.device_put(x.array, sharding)
-            ret = eqx.filter_jit(lambda x: with_sharding_constraint(x, sharding))(x)
+            ret = jax.device_put(x, sharding)
             return ret
 
     return htu.tree_map(_do_device_put, x)
