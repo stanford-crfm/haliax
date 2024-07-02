@@ -8,6 +8,13 @@ import haliax
 import haliax.util
 from haliax.jax_utils import filter_checkpoint
 
+from .._src.state_dict import (
+    ModuleWithStateDictSerialization,
+    StateDict,
+    apply_prefix,
+    stack_state_dict,
+    unstack_state_dict,
+)
 from ..axis import Axis
 
 
@@ -49,7 +56,7 @@ class BlockFoldable(Protocol[M]):
         ...
 
 
-class BlockSeq(eqx.Module, Generic[M]):
+class BlockSeq(ModuleWithStateDictSerialization, Generic[M]):
     """
     A "BlockSeq" wraps another module and produces a "sequential" version of it, where an input is applied
     to each instance of the sequential module in sequence. This is useful for e.g. transformers
@@ -134,8 +141,24 @@ class BlockSeq(eqx.Module, Generic[M]):
     def _state_dict_key_map(self) -> Dict[str, Optional[str]]:
         return {"blocks": None}
 
+    def from_state_dict(self: M, state_dict: StateDict, prefix: Optional[str] = None) -> M:
+        out_blocks = []
+        for i, block in enumerate(self.blocks):
+            my_prefix = apply_prefix(prefix, str(i))
+            block = block.from_state_dict(state_dict, my_prefix)
+            out_blocks.append(block)
 
-class Stacked(eqx.Module, Generic[M]):
+        return eqx.tree_at(lambda m: m.blocks, self, out_blocks)
+
+    def update_state_dict(self, state_dict: StateDict, prefix: Optional[str] = None) -> StateDict:
+        for i, block in enumerate(self.blocks):
+            my_prefix = apply_prefix(prefix, str(i))
+            block.update_state_dict(state_dict, my_prefix)
+
+        return state_dict
+
+
+class Stacked(ModuleWithStateDictSerialization, Generic[M]):
     """
     A "Stacked" wraps another module and produces a "stacked" version of it, where an input is applied
     to each instance of the stacked module in sequence. This is useful for e.g. transformers
@@ -254,3 +277,20 @@ class Stacked(eqx.Module, Generic[M]):
         # now we need to transpose the leaves
         unstacked_leaves = tuple(zip(*unstacked_leaves))
         return tuple(map(lambda x: jax.tree_util.tree_unflatten(structure, x), unstacked_leaves))
+
+    def update_state_dict(self, state_dict: StateDict, prefix: Optional[str] = None) -> StateDict:
+        # this method needs to "devectorize" the blocks, so that we have a list of blocks h.0.FOO, h.1.FOO, etc.
+        # first just do the normal thing with our own dict, which we'll post-process
+        my_state_dict: StateDict = super().to_state_dict(prefix)
+
+        stacked_dict = unstack_state_dict(my_state_dict, prefix)
+        state_dict.update(stacked_dict)
+
+        return state_dict
+
+    def from_state_dict(self: M, state_dict: StateDict, prefix: Optional[str] = None) -> M:
+        # this method needs to "vectorize" the blocks, so that we have a single block h.FOO
+        # first just do the normal thing with our own dict, which we'll post-process
+        stacked = stack_state_dict(state_dict, prefix=prefix)
+        out = super().from_state_dict(stacked, prefix=prefix)  # type: ignore
+        return out

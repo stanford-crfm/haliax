@@ -88,5 +88,6 @@ nav:
   - Partitioning: 'partitioning.md'
   - Higher Order Functions: 'hof.md'
   - FP8: 'fp8.md'
+  - Serialization: 'state-dict.md'
   - API Reference: 'api.md'
   - FAQ: 'faq.md'
