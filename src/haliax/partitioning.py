@@ -139,7 +139,7 @@ def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] 
 
         sharding = infer_resource_partitions(named, mapping, mesh=mesh, preserve_existing_shardings=False)
         assert isinstance(sharding, NamedSharding)
-        in_sharding = named.array.sharding
+        in_sharding = getattr(named.array, "sharding", None)
         if is_in_jit():
             return with_sharding_constraint(named, sharding)
         # as a special case, SingleDeviceShardings are routed through jit
