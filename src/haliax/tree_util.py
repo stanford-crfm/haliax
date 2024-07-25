@@ -1,9 +1,13 @@
+import dataclasses
+import functools
 from typing import Optional
 
 import equinox as eqx
 import jax
 import jax.tree_util as jtu
 from jaxtyping import PRNGKeyArray, PyTree
+
+import haliax.nn
 
 from .axis import AxisSelector
 from .core import NamedArray
@@ -15,12 +19,45 @@ def tree_map(fn, tree, *rest, is_leaf=None):
     """
     Version of [jax.tree_util.tree_map][] that automatically treats NamedArrays as leaves.
     """
+    old_is_leaf = is_leaf
     if is_leaf is None:
         is_leaf = lambda x: isinstance(x, NamedArray)
     else:
-        is_leaf = lambda x: is_leaf(x) or is_named_array(x)
+        is_leaf = lambda x: old_is_leaf(x) or is_named_array(x)
 
-    return jax.tree_util.tree_map(fn, tree, *rest, is_leaf=is_leaf)
+    return jax.tree.map(fn, tree, *rest, is_leaf=is_leaf)
+
+
+def scan_aware_tree_map(fn, tree, *rest, is_leaf=None):
+    """
+    Version of [haliax.tree_util.tree_map][] that is aware of the scan-layer pattern, specifically as implmeneted
+    in hax.nn.Stacked. This function will (implicitly) apply the transform to each layer in each Stacked module
+    (using vmap). If there are no Stacked modules in the tree, this function is equivalent to [haliax.tree_util.tree_map][].
+
+    Args:
+        fn:
+        tree:
+        *rest:
+        is_leaf:
+
+    Returns:
+    """
+    old_is_leaf = is_leaf
+    if is_leaf is None:
+        is_leaf = lambda x: isinstance(x, haliax.nn.Stacked)
+    else:
+        is_leaf = lambda x: old_is_leaf(x) or isinstance(x, haliax.nn.Stacked)
+
+    mapped_fn = functools.partial(scan_aware_tree_map, fn, is_leaf=is_leaf)
+
+    def rec_fn(x, *rest):
+        if isinstance(x, haliax.nn.Stacked):
+            new_inner = haliax.vmap(mapped_fn, x.Block)(x.stacked, *[r.stacked for r in rest])
+            return dataclasses.replace(x, stacked=new_inner)  # type: ignore
+        else:
+            return fn(x)
+
+    return tree_map(rec_fn, tree, *rest, is_leaf=is_leaf)
 
 
 def tree_flatten(tree, is_leaf=None):
