@@ -34,7 +34,7 @@ from .conv import Conv, ConvTranspose
 from .dropout import Dropout, dropout
 from .embedding import Embedding
 from .linear import Linear
-from .loss import binary_cross_entropy_loss, cross_entropy_loss, cross_entropy_loss_and_log_normalizers
+from .loss import binary_cross_entropy_loss, cross_entropy_loss, cross_entropy_loss_and_log_normalizers, reduce_loss
 from .mlp import MLP
 from .normalization import LayerNorm, log_softmax, logsumexp, softmax, standardize
 from .pool import max_pool, mean_pool, min_pool
@@ -77,6 +77,7 @@ __all__ = [
     "attention",
     "one_hot",
     "binary_cross_entropy_loss",
+    "reduce_loss",
     "cross_entropy_loss",
     "cross_entropy_loss_and_log_normalizers",
     "Conv",
