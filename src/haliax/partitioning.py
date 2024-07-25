@@ -603,7 +603,10 @@ def round_axis_for_partitioning(axis: Axis, mapping: Optional[ResourceMapping] =
 
 
 def _get_mesh() -> Mesh:
-    from jax.experimental.maps import thread_resources
+    try:
+        from jax.interpreters.pxla import thread_resources
+    except ImportError:
+        from jax.experimental.maps import thread_resources
 
     return thread_resources.env.physical_mesh
 
