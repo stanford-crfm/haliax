@@ -53,6 +53,10 @@ class BlockFoldable(Protocol[M]):
         ...
 
     def unstacked(self) -> Sequence[M]:
+        """
+        Returns the unstacked version of this module. This is useful for logging or saving checkpoints.
+
+        """
         ...
 
 
@@ -151,6 +155,9 @@ class BlockSeq(ModuleWithStateDictSerialization, Generic[M]):
         return eqx.tree_at(lambda m: m.blocks, self, out_blocks)
 
     def to_state_dict(self, prefix: Optional[str] = None) -> StateDict:
+        """
+        Returns the unstacked format of the module, which is compatible with torch.nn.Sequential, with keys of the form (...). The stacked/vectorized format is required for haliax.nn.Stacked and vectorizes all such tensors into a single shared key.".
+        """
         state_dict: StateDict = {}
         for i, block in enumerate(self.blocks):
             my_prefix = with_prefix(prefix, str(i))

@@ -210,6 +210,7 @@ def default_eqx_module_from_state_dict(mod: Mod, state_dict: StateDict, prefix: 
     names = []
     values = []
     for field in dataclasses.fields(mod):
+        # only encode dynamic fields (i.e. fields that don't have the static flag)
         if field.metadata.get("static", False):
             continue
         key = key_map.get(field.name, field.name)
@@ -339,7 +340,6 @@ def save_state_dict(state_dict: StateDict, path):
     This will save using safetensors format
     """
     state_dict = {k: v for k, v in state_dict.items() if v is not None}
-    # now that we've moved the model to the CPU, we don't need to do this on all processes
     if jax.process_index() == 0:
         # the "pt" is a lie but it doesn't seem to actually matter and HF demands it
         safetensors.numpy.save_file(state_dict, path, metadata={"format": "pt"})
