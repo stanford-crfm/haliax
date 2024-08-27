@@ -128,22 +128,28 @@ def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] 
         warnings.warn("Sharding constraints are not supported in jit on metal", RuntimeWarning)
         return x
 
-    def _do_device_put(x):
-        if not isinstance(x, NamedArray):
-            return x
+    def _do_device_put(named):
+        if not isinstance(named, NamedArray):
+            return named
 
-        if not is_jax_array_like(x.array):
+        if not is_jax_array_like(named.array):
             # this happens when we filter out params for things like lora.
             # could use eqx.partition to avoid this, but eh
-            return x
+            return named
 
-        sharding = infer_resource_partitions(x, mapping, mesh=mesh, preserve_existing_shardings=False)
+        sharding = infer_resource_partitions(named, mapping, mesh=mesh, preserve_existing_shardings=False)
         assert isinstance(sharding, NamedSharding)
+        in_sharding = getattr(named.array, "sharding", None)
         if is_in_jit():
-            return with_sharding_constraint(x, sharding)
+            return with_sharding_constraint(named, sharding)
+        # as a special case, SingleDeviceShardings are routed through jit
+        elif isinstance(in_sharding, SingleDeviceSharding) and in_sharding._device in sharding.device_set:
+            # TODO(dlwh): this should be unnecessary in JAX soon. Check after 2024-08-01
+            sharded_array = jax.jit(lambda x: x, out_shardings=sharding)(named)
+            return sharded_array
         else:
-            sharded_array = jax.device_put(x.array, sharding)
-            return NamedArray(sharded_array, x.axes)
+            ret = jax.device_put(named, sharding)
+            return ret
 
     return htu.tree_map(_do_device_put, x)
 
@@ -309,9 +315,7 @@ class _NamedJitWrapper(eqx.Module):
             output_shape = _cached_filter_eval_shape(self._fn, *args, **kwargs)
             my_pjit_args = dict(**self._pjit_args)
 
-            if in_axis_resources is not None or axis_resources is not None:
-                if in_axis_resources is None:
-                    in_axis_resources = axis_resources
+            if in_axis_resources is not None:
                 in_resources = infer_resource_partitions(
                     (dynamic_donated, dynamic_reserved),
                     in_axis_resources,
@@ -601,7 +605,10 @@ def round_axis_for_partitioning(axis: Axis, mapping: Optional[ResourceMapping] =
 
 
 def _get_mesh() -> Mesh:
-    from jax.experimental.maps import thread_resources
+    try:
+        from jax.interpreters.pxla import thread_resources
+    except ImportError:
+        from jax.experimental.maps import thread_resources
 
     return thread_resources.env.physical_mesh
 

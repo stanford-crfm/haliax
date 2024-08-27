@@ -94,6 +94,21 @@ def binary_cross_entropy_loss(
     return loss
 
 
+def reduce_loss(
+    arr,
+    reduction: Optional[ReductionFunction] | Unspecified = UNSPECIFIED,
+    reduction_axis: Optional[AxisSelection] = None,
+    where: Optional[NamedArray] = None,
+):
+    """
+    Reduce a loss array according to the given reduction and reduction axis.
+    If reduction is None, the loss is not reduced.
+    If reduction is UNSPECIFIED, the default reduction is used (mean).
+    If reduction_axis is None (default), the loss is reduced over all axes.
+    """
+    return maybe_reduce_loss(arr, reduction, reduction_axis, where)
+
+
 def maybe_reduce_loss(
     arr,
     reduction: Optional[ReductionFunction] | Unspecified,
