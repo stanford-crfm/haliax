@@ -48,6 +48,9 @@ def from_torch_compatible_state_dict(
 
 
 def _flatten_to_unflatten(t, state_dict, prefix):
+    """
+    Flatten the torch compatible state_dict before loading into t, and then recover the unflattened layers.
+    """
     # typically, `t` is a bunch of ShapeDtypeStructs, which can't be transposed etc. so we instead have to zeros()
     # into real arrays (that aren't actually real b/c this is inside a jit)
     def _dt_struct_to_array(struct):
@@ -63,22 +66,22 @@ def _flatten_to_unflatten(t, state_dict, prefix):
 
 
 @typing.overload
-def apply_prefix(prefix: str | None, leaf: str) -> str:
+def with_prefix(prefix: str | None, leaf: str) -> str:
     ...
 
 
 @typing.overload
-def apply_prefix(prefix: str, leaf: None) -> str:
+def with_prefix(prefix: str, leaf: None) -> str:
     ...
 
 
 @typing.overload
-def apply_prefix(prefix: Optional[str], leaf: Optional[str]) -> Optional[str]:
+def with_prefix(prefix: Optional[str], leaf: Optional[str]) -> Optional[str]:
     ...
 
 
-def apply_prefix(prefix: Optional[str], leaf: Optional[str]) -> Optional[str]:
-    """Joins two optional path strings in a way comptible with pytorch state dict serialization"""
+def with_prefix(prefix: Optional[str], leaf: Optional[str]) -> Optional[str]:
+    """Joins two optional path strings in a way compatible with pytorch state dict serialization"""
     if prefix is None:
         return leaf
     elif leaf is None:
@@ -95,9 +98,6 @@ class ModuleWithStateDictSerialization(eqx.Module):
 
     def from_state_dict(self: Mod, state_dict: StateDict, prefix: Optional[str] = None) -> Mod:
         return default_eqx_module_from_state_dict(self, state_dict, prefix)
-
-    def update_state_dict(self, state_dict: StateDict, prefix: Optional[str] = None) -> StateDict:
-        return default_update_state_dict_with_eqx_module(state_dict, self, prefix)
 
     def _state_dict_key_map(self) -> dict[str, Optional[str]]:
         """Returns a dict mapping eqx.Module keys to torch keys that need to be renamed for serialization"""
@@ -125,9 +125,9 @@ def from_state_dict(tree: T, state_dict: StateDict, prefix: Optional[str] = None
         else:
             return default_eqx_module_from_state_dict(tree, state_dict, prefix)
     elif isinstance(tree, list):
-        return [from_state_dict(item, state_dict, apply_prefix(prefix, str(i))) for i, item in enumerate(tree)]  # type: ignore
+        return [from_state_dict(item, state_dict, with_prefix(prefix, str(i))) for i, item in enumerate(tree)]  # type: ignore
     elif isinstance(tree, dict):
-        return {k: from_state_dict(v, state_dict, prefix=apply_prefix(prefix, k)) for k, v in tree.items()}  # type: ignore
+        return {k: from_state_dict(v, state_dict, prefix=with_prefix(prefix, k)) for k, v in tree.items()}  # type: ignore
     elif isinstance(tree, NamedArray):
         if prefix is None:
             raise ValueError("Cannot extract a leaf value from a torch dict without a prefix")
@@ -160,43 +160,6 @@ def from_state_dict(tree: T, state_dict: StateDict, prefix: Optional[str] = None
         return state_dict.get(prefix, tree)
 
 
-def update_state_dict(tree: PyTree, state_dict: StateDict, prefix: Optional[str] = None) -> None:
-    """
-    Update a state dict with the values from a tree.
-
-    !!! warning
-        This function modifies the state dict in place.
-
-    Args:
-        tree:  The tree to update the state dict with.
-        state_dict:  The state dict to update.
-        prefix:  The prefix to use when updating the state dict.
-
-    """
-    if isinstance(tree, eqx.Module):
-        if hasattr(tree, "update_state_dict"):
-            tree.update_state_dict(state_dict, prefix)
-        else:
-            default_update_state_dict_with_eqx_module(state_dict, tree, prefix)
-    elif isinstance(tree, list):
-        for i, item in enumerate(tree):
-            update_state_dict(item, state_dict, prefix=apply_prefix(prefix, str(i)))
-    elif isinstance(tree, dict):
-        for k, v in tree.items():
-            update_state_dict(v, state_dict, prefix=apply_prefix(prefix, k))
-    elif isinstance(tree, NamedArray):
-        assert prefix is not None
-        state_dict[prefix] = tree.array
-    elif is_jax_array_like(tree):
-        if prefix is not None:
-            if tree is not None:
-                state_dict[prefix] = tree  # type: ignore
-        else:
-            raise ValueError("Cannot update state dict with a leaf value.")
-    else:
-        pass
-
-
 def to_state_dict(tree: PyTree, prefix: Optional[str] = None) -> StateDict:
     """
     Convert a PyTree to a state dict.
@@ -204,8 +167,41 @@ def to_state_dict(tree: PyTree, prefix: Optional[str] = None) -> StateDict:
     Returns:
         The state dict representation of the input tree.
     """
-    state_dict: StateDict = {}
-    update_state_dict(tree, state_dict, prefix)
+    if isinstance(tree, eqx.Module):
+        if hasattr(tree, "to_state_dict"):
+            state_dict = tree.to_state_dict(prefix)
+        else:
+            state_dict = default_eqx_module_to_state_dict(tree, prefix)
+    elif isinstance(tree, list):
+        state_dict = {}
+        for i, item in enumerate(tree):
+            child = to_state_dict(item, prefix=with_prefix(prefix, str(i)))
+            # TODO: check for conflicts?
+            state_dict.update(child)
+    elif isinstance(tree, dict):
+        state_dict = {}
+        for k, v in tree.items():
+            child = to_state_dict(v, prefix=with_prefix(prefix, k))
+            # TODO: check for conflicts?
+            state_dict.update(child)
+    elif isinstance(tree, NamedArray):
+        if prefix is None:
+            raise ValueError("Cannot convert a leaf value to a state dict without a prefix")
+        if tree.array is not None:
+            state_dict = {prefix: tree.array}
+        else:
+            state_dict = {}
+    elif is_jax_array_like(tree):
+        if prefix is not None:
+            if tree is not None:
+                state_dict = {prefix: tree}
+            else:
+                state_dict = {}
+        else:
+            raise ValueError("Cannot convert a leaf value to a state dict without a prefix")
+    else:
+        raise ValueError(f"Unsupported type {type(tree)}")
+
     return state_dict
 
 
@@ -219,7 +215,7 @@ def default_eqx_module_from_state_dict(mod: Mod, state_dict: StateDict, prefix: 
         key = key_map.get(field.name, field.name)
         value = getattr(mod, field.name)
         # TODO: might want to add a flag that allows missing keys?
-        new = from_state_dict(value, state_dict, apply_prefix(prefix, key))
+        new = from_state_dict(value, state_dict, with_prefix(prefix, key))
         # Do not try to update parameters that are never defined
         if value is None and new is None:
             continue
@@ -229,21 +225,26 @@ def default_eqx_module_from_state_dict(mod: Mod, state_dict: StateDict, prefix: 
 
 
 def default_eqx_module_to_state_dict(mod: eqx.Module, prefix: Optional[str] = None) -> StateDict:
+    """
+    Convert an eqx.Module to a state dict. This is the default implementation of the to_state_dict method for
+    eqx.Modules. It works by iterating over the fields of the module and calling to_state_dict on each field.
+    Args:
+        mod:
+        prefix:
+
+    Returns:
+
+    """
     state_dict: StateDict = {}
-    default_update_state_dict_with_eqx_module(state_dict, mod, prefix)
-    return state_dict
-
-
-def default_update_state_dict_with_eqx_module(
-    state_dict: StateDict, mod: eqx.Module, prefix: Optional[str] = None
-) -> StateDict:
     key_map: Dict[str, Optional[str]] = getattr(mod, "_state_dict_key_map", lambda: {})()  # type: ignore
     for field in dataclasses.fields(mod):
         if field.metadata.get("static", False):
             continue
         key = key_map.get(field.name, field.name)
         value = getattr(mod, field.name)
-        update_state_dict(value, state_dict, apply_prefix(prefix, key))
+        child = to_state_dict(value, with_prefix(prefix, key))
+        # TODO: should we check for conflicts?
+        state_dict.update(child)
     return state_dict
 
 
@@ -369,8 +370,11 @@ def stack_state_dict(state_dict: StateDict, prefix: Optional[str] = None) -> Sta
     vectorized_dict: StateDict = {}
 
     tensors_to_vectorize: dict[str, list[Optional[Any]]] = {}
-    escaped = re.escape(prefix or "")
-    pattern = re.compile(rf"{escaped}\.(\d+)\.(.*)")
+    if prefix is not None:
+        prefix_for_pat = re.escape(prefix + ".")
+    else:
+        prefix_for_pat = ""
+    pattern = re.compile(rf"{prefix_for_pat}(\d+)\.(.*)")
 
     for k, v in state_dict.items():
         match = pattern.match(k)
@@ -387,7 +391,7 @@ def stack_state_dict(state_dict: StateDict, prefix: Optional[str] = None) -> Sta
 
     # now we have to vectorize the tensors
     for k, tensors in tensors_to_vectorize.items():
-        vectorized_dict[cast(str, apply_prefix(prefix, k))] = jnp.stack(tensors, axis=0)
+        vectorized_dict[cast(str, with_prefix(prefix, k))] = jnp.stack(tensors, axis=0)
 
     return vectorized_dict
 
@@ -401,7 +405,7 @@ def unstack_state_dict(state_dict: StateDict, prefix: Optional[str] = None) -> S
     keys are of the form "<prefix>.0.<key>", "<prefix>.1.<key>", etc.
     """
     new_dict: StateDict = {}
-    prefix = apply_prefix(prefix, "")
+    prefix = with_prefix(prefix, "")
     assert prefix is not None
 
     for k, v in state_dict.items():

@@ -11,9 +11,9 @@ from haliax.jax_utils import filter_checkpoint
 from .._src.state_dict import (
     ModuleWithStateDictSerialization,
     StateDict,
-    apply_prefix,
     stack_state_dict,
     unstack_state_dict,
+    with_prefix,
 )
 from ..axis import Axis
 
@@ -144,16 +144,17 @@ class BlockSeq(ModuleWithStateDictSerialization, Generic[M]):
     def from_state_dict(self: M, state_dict: StateDict, prefix: Optional[str] = None) -> M:
         out_blocks = []
         for i, block in enumerate(self.blocks):
-            my_prefix = apply_prefix(prefix, str(i))
+            my_prefix = with_prefix(prefix, str(i))
             block = block.from_state_dict(state_dict, my_prefix)
             out_blocks.append(block)
 
         return eqx.tree_at(lambda m: m.blocks, self, out_blocks)
 
-    def update_state_dict(self, state_dict: StateDict, prefix: Optional[str] = None) -> StateDict:
+    def to_state_dict(self, prefix: Optional[str] = None) -> StateDict:
+        state_dict: StateDict = {}
         for i, block in enumerate(self.blocks):
-            my_prefix = apply_prefix(prefix, str(i))
-            block.update_state_dict(state_dict, my_prefix)
+            my_prefix = with_prefix(prefix, str(i))
+            state_dict.update(block.to_state_dict(my_prefix))
 
         return state_dict
 
@@ -278,15 +279,12 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
         unstacked_leaves = tuple(zip(*unstacked_leaves))
         return tuple(map(lambda x: jax.tree_util.tree_unflatten(structure, x), unstacked_leaves))
 
-    def update_state_dict(self, state_dict: StateDict, prefix: Optional[str] = None) -> StateDict:
+    def to_state_dict(self, prefix: Optional[str] = None) -> StateDict:
         # this method needs to "devectorize" the blocks, so that we have a list of blocks h.0.FOO, h.1.FOO, etc.
         # first just do the normal thing with our own dict, which we'll post-process
-        my_state_dict: StateDict = super().to_state_dict(prefix)
+        state_dict: StateDict = super().to_state_dict(prefix)
 
-        stacked_dict = unstack_state_dict(my_state_dict, prefix)
-        state_dict.update(stacked_dict)
-
-        return state_dict
+        return unstack_state_dict(state_dict, prefix)
 
     def from_state_dict(self: M, state_dict: StateDict, prefix: Optional[str] = None) -> M:
         # this method needs to "vectorize" the blocks, so that we have a single block h.FOO

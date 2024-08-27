@@ -3,7 +3,6 @@ from typing import Optional, TypeVar
 from ._src.state_dict import (
     ModuleWithStateDictSerialization,
     StateDict,
-    apply_prefix,
     flatten_linear_layers,
     from_state_dict,
     from_torch_compatible_state_dict,
@@ -12,7 +11,7 @@ from ._src.state_dict import (
     to_numpy_state_dict,
     to_state_dict,
     unflatten_linear_layers,
-    update_state_dict,
+    with_prefix,
 )
 
 
@@ -38,8 +37,7 @@ __all__ = [
     "from_state_dict",
     "flatten_linear_layers",
     "unflatten_linear_layers",
-    "apply_prefix",
-    "update_state_dict",
+    "with_prefix",
     "to_state_dict",
     "to_numpy_state_dict",
     "StateDict",

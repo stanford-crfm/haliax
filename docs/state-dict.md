@@ -111,46 +111,47 @@ You can also "flatten" the submodules of a field by using `None`.
 ### Custom Serialization Logic
 
 If your modules need fancier special logic, you'll need to extend your class from `ModuleWithStateDictSerialization` and
-override the default functions `update_state_dict()` and `from_state_dict()`. It takes in and returns a modified
+override the default functions `to_state_dict()` and `from_state_dict()`. It takes in and returns a modified
 [haliax.state_dict.StateDict][]. As of June 2024, we almost never this in Levanter.
 
 For implementation, there are a few helper methods from `haliax.state_dict` that you can use:
-- To join specific prefix to the keys of Hugging Face state_dict, you can use the helper function `apply_prefix()`.
+- To join specific prefix to the keys of Hugging Face state_dict, you can use the helper function `with_prefix()`.
   The prefix comes from the name of attributes defined at the beginning of your model class.
 
-For example, below is the implementation of `update_state_dict()` in [levanter.models.backpack.BackpackLMHeadModel][].
+For example, below is the implementation of `to_state_dict()` in [levanter.models.backpack.BackpackLMHeadModel][].
 In this class, we want to preserve HF compatibility by saving untied output embeddings. (We chose not to implement
 non-weight-tied embeddings.)
 
 ```python
 from typing import Optional
 
-from haliax.state_dict import apply_prefix, StateDict
+from haliax.state_dict import with_prefix, StateDict
 
 
 class BackpackLMHeadModel(ModuleWithStateDictSerialization):
     ...
 
-    def update_state_dict(self, state_dict: StateDict, prefix: Optional[str] = None) -> StateDict:
-        state_dict = super().update_state_dict(state_dict, prefix=prefix)
+    def to_state_dict(self, prefix: Optional[str] = None) -> StateDict:
+        state_dict = super().to_state_dict(prefix=prefix)
         # In levanter's implementation, we have a shared embedding matrix for both the word
         # embeddings and the sense embeddings
-        state_dict[apply_prefix(prefix, "backpack.word_embeddings.weight")] = state_dict[
-            apply_prefix(prefix, "backpack.gpt2_model.wte.weight")
+        state_dict[with_prefix(prefix, "backpack.word_embeddings.weight")] = state_dict[
+            with_prefix(prefix, "backpack.gpt2_model.wte.weight")
         ]
-        state_dict[apply_prefix(prefix, "backpack.position_embeddings.weight")] = state_dict[
-            apply_prefix(prefix, "backpack.gpt2_model.wpe.weight")
+        state_dict[with_prefix(prefix, "backpack.position_embeddings.weight")] = state_dict[
+            with_prefix(prefix, "backpack.gpt2_model.wpe.weight")
         ]
         return state_dict
 ```
 
-Similarly, to load weights from the state dict, you might need to implement `from_state_dict`. For the case of
-`BackpackLMHeadModel`, we didn't because we can just not call the parent class's `from_state_dict` method.
-But the method signature looks like this:
+Similarly, to load weights from the state dict, you might need to implement `from_state_dict`. This function
+takes in a state dict and the module with the updated weights. You can use the `with_prefix()` helper function
+to join the prefix to the keys of the state dict.
 
 ```python
-    def from_state_dict(self, state_dict: StateDict, prefix: Optional[str] = None) -> StateDict:
+    def from_state_dict(self, state_dict: StateDict, prefix: Optional[str] = None) -> T:
       ...
+
 
 ```
 
