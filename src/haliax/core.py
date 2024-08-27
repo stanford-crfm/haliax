@@ -1205,7 +1205,9 @@ def unflatten_axis(array: NamedArray, axis: AxisSelector, new_axes: AxisSpec) ->
             raise ValueError("Must specify at least one axis to split")
 
     if axis_size != prod(ax.size for ax in new_axes):
-        raise ValueError(f"Cannot split {axis} into {new_axes}: size mismatch")
+        raise ValueError(
+            f"Cannot split {axis} into {new_axes}: size mismatch ({axis_size} != {prod(ax.size for ax in new_axes)})"
+        )
 
     resolved_new_axes = array.axes[:old_index] + tuple(new_axes) + array.axes[old_index + 1 :]
     new_array = jnp.reshape(array.array, [ax.size for ax in resolved_new_axes])

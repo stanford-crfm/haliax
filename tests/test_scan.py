@@ -68,3 +68,34 @@ def test_seq_and_stacked_give_same_results():
     y_seq = m_seq.fold(x, key=jax.random.split(jax.random.PRNGKey(2), Block.size))
 
     assert hax.all(hax.isclose(y, y_seq, atol=1e-5))
+
+
+def test_stacked_to_state_dict():
+    class Module(eqx.Module):
+        named: hax.NamedArray
+        array: jax.Array
+        static: int = eqx.static_field()
+
+        def __call__(self, x, *, key):
+            return x + self.array + self.static + hax.random.normal(key, x.axes)
+
+        @staticmethod
+        def init(named, array, static):
+            return Module(named=named, array=array, static=static)
+
+    Block = hax.Axis("block", 4)
+    E = hax.Axis("E", 10)
+
+    initial_named = hax.random.uniform(jax.random.PRNGKey(0), (Block, E))
+
+    m = Stacked.init(Block, Module)(named=initial_named, array=jax.numpy.ones(Block.size), static=1)
+
+    state_dict = m.to_state_dict()
+    m2 = m.from_state_dict(state_dict)
+    input = hax.random.uniform(jax.random.PRNGKey(1), (E,))
+    key = jax.random.split(jax.random.PRNGKey(2), Block.size)
+
+    y = m.fold(input, key=key)
+    y2 = m2.fold(input, key=key)
+
+    assert hax.all(hax.equal(y, y2))

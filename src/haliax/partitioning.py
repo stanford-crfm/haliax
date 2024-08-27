@@ -382,7 +382,7 @@ def named_jit(
     donate_args: Optional[PyTree] = None,
     donate_kwargs: Optional[PyTree] = None,
     **pjit_args,
-):
+) -> typing.Union[WrappedCallable[Args, R], typing.Callable[[Callable[Args, R]], WrappedCallable[Args, R]]]:
     """
     A version of pjit that uses NamedArrays and the provided resource mapping to infer resource partitions for
     sharded computation for.
@@ -394,6 +394,8 @@ def named_jit(
     If no resource mapping is provided, this function attempts to use the context resource mapping.
 
     Functionally this is very similar to something like:
+
+    This function can be used as a decorator or as a function.
 
     ```python
      def wrapped_fn(arg):
@@ -425,7 +427,7 @@ def named_jit(
 
     if fn is None:
         return functools.partial(  # type: ignore
-            named_jit,
+            named_jit,  # type: ignore
             axis_resources=axis_resources,
             in_axis_resources=in_axis_resources,
             out_axis_resources=out_axis_resources,
