@@ -44,6 +44,7 @@ class MLP(eqx.Module):
         depth: int,
         activation: Callable = relu,
         *,
+        out_first: bool = True,
         use_bias: bool = True,
         use_final_bias: bool = True,
         key: PRNGKeyArray,
@@ -57,36 +58,34 @@ class MLP(eqx.Module):
 
         layers = []
 
+        kwargs: dict = {
+            "use_bias": use_bias,
+            "dot_general": dot_general,
+            "init_scale": init_scale,
+            "out_first": out_first,
+        }
+
+        last_kwargs: dict = {
+            "use_bias": use_final_bias,
+            "dot_general": dot_general,
+            "init_scale": init_scale,
+            "out_first": out_first,
+        }
+
         if depth == 0:
             # special case: no hidden layers
-            layers.append(
-                Linear.init(
-                    Input, Output, use_bias=use_final_bias, key=keys[0], dot_general=dot_general, init_scale=init_scale
-                )
-            )
+            layers.append(Linear.init(Input, Output, key=keys[0], **last_kwargs))
         else:
             # first hidden layer
-            layers.append(
-                Linear.init(
-                    Input, Width, use_bias=use_bias, key=keys[0], dot_general=dot_general, init_scale=init_scale
-                )
-            )
+            layers.append(Linear.init(Input, Width, key=keys[0], **kwargs))
             # middle hidden layers
             cur = Width
             next = Width2
             for i in range(1, depth):
-                layers.append(
-                    Linear.init(
-                        cur, next, use_bias=use_bias, key=keys[i], dot_general=dot_general, init_scale=init_scale
-                    )
-                )
+                layers.append(Linear.init(cur, next, key=keys[i], **kwargs))
                 cur, next = next, cur
-            # final hidden layer
-            layers.append(
-                Linear.init(
-                    cur, Output, use_bias=use_final_bias, key=keys[-1], dot_general=dot_general, init_scale=init_scale
-                )
-            )
+            # final layer
+            layers.append(Linear.init(cur, Output, key=keys[-1], **last_kwargs))
 
         return MLP(
             layers=tuple(layers),
