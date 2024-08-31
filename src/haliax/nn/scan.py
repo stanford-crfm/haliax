@@ -156,6 +156,13 @@ class Stacked(eqx.Module, Generic[M]):
 
     Stacked also supports gradient checkpointing, which is useful for very large models that don't fit in memory.
 
+    Typically only one of "fold" or "scan" can be used with a given Stacked module, depending on the what the module
+    returns: if the module returns a single output, use "fold"; if the module returns a sequence of intermediates and
+    an output to be passed to the next layer, use "scan". More concretely, for a transformer, you would use "scan" if
+    you wanted to return a kv cache (or the attention matrix) as well as the output of the transformer. If you just
+    wanted the output of the transformer, you would use "fold".
+
+
     Example:
         ```python
         >>> import equinox as eqx
@@ -206,6 +213,32 @@ class Stacked(eqx.Module, Generic[M]):
         return fn
 
     def scan(self, init, *extra_args, **extra_kwargs):
+        """
+        Scan over the stacked module. This is the same as a for loop that applies each instance of the module in sequence
+        to the input, passing the output of one instance to the next instance. It returns a stack of intermediates as
+        well as the final output.
+
+        That is, it behaves similarly to the following Python code:
+
+        ```python
+        carry = init
+        intermediates = []
+
+        for block in self.stacked:
+            carry, extra = block(carry)
+            intermediates.append(extra)
+
+        return carry, hax.stack(Block, intermediates)
+        ```
+
+        Args:
+            init:
+            *extra_args:
+            **extra_kwargs:
+
+        Returns:
+
+        """
         if self.gradient_checkpointing:
             do_block = filter_checkpoint(self._do_block, prevent_cse=self.prevent_cse)
         else:
@@ -213,6 +246,27 @@ class Stacked(eqx.Module, Generic[M]):
         return haliax.scan(do_block, self.Block)(init, self.stacked, *extra_args, **extra_kwargs)
 
     def fold(self, init, *args, **kwargs):
+        """
+        Fold over the stacked module. This is the same as a for loop that applies each instance of the module in sequence
+        to the input, passing the output of one instance to the next instance.
+        That is, it behaves similarly to the following Python code:
+
+        ```python
+        carry = init
+        for block in self.stacked:
+            carry = block(carry)
+
+        return carry
+        ```
+
+        Args:
+            init:
+            *args:
+            **kwargs:
+
+        Returns:
+
+        """
         if self.gradient_checkpointing:
             do_block = filter_checkpoint(self._do_block, prevent_cse=self.prevent_cse)
         else:
