@@ -543,6 +543,23 @@ def test_index():
     assert jnp.all(jnp.equal(named1[{"H": 0, "W": 0, "D": 0}], named1.array[0, 0, 0]))
 
 
+def test_index_with_tracer():
+    H = Axis("H", 20)
+    W = Axis("W", 30)
+    D = Axis("D", 40)
+    named1 = hax.random.uniform(PRNGKey(0), (H, W, D))
+
+    @jax.jit
+    def f(idx):
+        return named1["H", idx]
+
+    idx = jnp.array([1, 2, 3])
+    assert jnp.all(jnp.equal(f(idx).array, named1.array[1:4, :, :]))
+
+    idx = jnp.array(0)
+    assert jnp.all(jnp.equal(f(idx).array, named1.array[0, :, :]))
+
+
 def test_index_array_slices():
     # fancier tests with array slices with named array args
     H = Axis("H", 10)

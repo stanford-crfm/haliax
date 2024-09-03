@@ -952,6 +952,7 @@ def _compute_new_axes_and_slices_for_index(
             # we allow this if it's a 0-d or 1-d array
             if slice_.ndim == 0:
                 ordered_slices[axis_index] = slice_
+                kept_axes[axis_index] = False
             elif slice_.ndim == 1:
                 # we allow this if it's a 1-d array, in which case we treat it as sugar for NamedArray(slice_, sliced-axis)
                 ordered_slices[axis_index] = haliax.named(slice_, axis_name(axis))
