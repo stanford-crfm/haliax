@@ -102,7 +102,14 @@ class BlockSeq(eqx.Module, Generic[M]):
             (block_args, block_kwargs) = haliax.tree_util.tree_map(
                 functools.partial(BlockSeq._slice_out, self.Block, i), (extra_args, extra_kwargs)
             )
-            carry, extra = block(carry, *block_args, **block_kwargs)
+            block_result = block(carry, *block_args, **block_kwargs)
+            if not isinstance(block_result, (tuple, list)) or len(block_result) != 2:
+                raise ValueError(
+                    f"BlockSeq.scan expects the block to return a pair of (carry, extra), got {block_result}"
+                )
+
+            carry, extra = block_result
+
             out.append(extra)
 
         # TODO: do we want to stack the outputs?
@@ -124,8 +131,11 @@ class BlockSeq(eqx.Module, Generic[M]):
 
     @staticmethod
     def _slice_out(Block, i, x):
-        if haliax.is_named_array(x) and haliax.selects_axis(x.axes, Block):
-            return x[Block, i]
+        if haliax.is_named_array(x):
+            if haliax.selects_axis(x.axes, Block):
+                return x[Block, i]
+            else:
+                return x
         elif haliax.jax_utils.is_jax_array_like(x):
             return x[i]
         else:
