@@ -157,3 +157,15 @@ def test_linear_has_no_function_leaves_by_default():
 
     hax_linear = hax.nn.Linear.init((H, C, W), E, key=jrandom.PRNGKey(0))
     assert all(not isinstance(v, Callable) for v in jax.tree_util.tree_leaves(hax_linear))  # type: ignore
+
+
+def test_linear_between_axes_of_same_name():
+    key = jrandom.PRNGKey(0)
+    H = Axis("H", 10)
+    A1 = Axis("A", 12)
+    A2 = Axis("A", 14)
+
+    hax_linear = hax.nn.Linear.init((H, A1), (H, A2), key=key)
+    x = hax.random.uniform(key, (H, A1))
+    y = hax_linear(x)
+    assert y.axes == (H, A2)
