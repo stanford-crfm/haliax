@@ -28,6 +28,17 @@ class Axis:
         return f"{self.name}({self.size})"
 
 
+def make_axes(**kwargs: int) -> Tuple[Axis, ...]:
+    """
+    Convenience function for creating a tuple of Axis objects.
+
+    Example:
+    ```
+    X, Y = axes(X=10, Y=20)
+    """
+    return tuple(Axis(name, size) for name, size in kwargs.items())
+
+
 AxisSelector = Union[Axis, str]
 """AxisSelector is a type that can be used to select a single axis from an array. str or Axis"""
 AxisSelection = Union[AxisSelector, Sequence[AxisSelector]]

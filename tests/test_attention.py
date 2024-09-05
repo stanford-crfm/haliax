@@ -93,8 +93,7 @@ def test_alibi_attention_compared_to_hf():
     import torch
     from transformers.models.bloom.modeling_bloom import build_alibi_tensor
 
-    L = hax.Axis("L", 128)
-    H = hax.Axis("NumHeads", 16)
+    L, H = hax.make_axes(L=1, H=16)
 
     # Returns tensor shaped (batch_size * num_heads, 1, max_seq_len)
     torch_tensor = (
@@ -107,7 +106,7 @@ def test_alibi_attention_compared_to_hf():
 
 
 def test_fcm_attention_mask():
-    KeyPos = hax.Axis("KeyPos", 20)
+    KeyPos, QueryPos, Head = hax.make_axes(KeyPos=20, QueryPos=10, Head=8)
 
     mask = forgetful_causal_mask(KeyPos, mask_prob=0.6, sample_prob=False, key=PRNGKey(0))
 
@@ -115,9 +114,6 @@ def test_fcm_attention_mask():
     assert mask.array[0].item() == 1
 
     assert mask.astype(float).sum().item() <= KeyPos.size
-
-    QueryPos = hax.Axis("QueryPos", 10)
-    Head = hax.Axis("Head", 8)
 
     query = hax.arange(QueryPos).broadcast_axis(Head)
     key = hax.arange(KeyPos).broadcast_axis(Head)

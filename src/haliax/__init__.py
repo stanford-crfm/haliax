@@ -32,6 +32,7 @@ from .axis import (
     ds,
     dslice,
     eliminate_axes,
+    make_axes,
     selects_axis,
 )
 from .core import (
@@ -893,6 +894,9 @@ __all__ = [
     "AxisSpec",
     "AxisSelection",
     "AxisSelector",
+    "make_axes",
+    "axis_name",
+    "axis_size",
     "NamedArray",
     "broadcast_to",
     "broadcast_axis",

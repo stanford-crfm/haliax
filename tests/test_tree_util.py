@@ -11,10 +11,7 @@ from haliax import Axis
 
 
 def test_resize_axis():
-
-    A = hax.Axis("A", 10)
-    B = hax.Axis("B", 20)
-    C = hax.Axis("C", 30)
+    A, B, C = hax.make_axes(A=10, B=20, C=30)
 
     class Module(eqx.Module):
         name1: hax.NamedArray

@@ -373,11 +373,10 @@ class NamedArray:
 
         Supports indexing like:
 
-        >>> X = Axis("x", 10)
-        >>> Y = Axis("y", 20)
+        >>> X, Y = haliax.make_axes(X=10, Y=20)
         >>> arr = haliax.random.randint(jax.random.PRNGKey(0), (X, Y), 0, X.size)
         # slice with ints or slices
-        >>> arr[{"x": 1, "y": slice(0,10,new_axis=2)}]
+        >>> arr[{"x": 1, "y": slice(0,10,2)}]
         >>> Z = Axis("z", 3)
         # so-called "advanced indexing" with NamedArrays.
         >>> index_arr = NamedArray(np.array([1, 2, 3]), Z)

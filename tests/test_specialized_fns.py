@@ -1,14 +1,13 @@
 import jax
 import jax.numpy as jnp
 
+import haliax
 import haliax.specialized_fns as hfns
-from haliax import Axis, NamedArray
+from haliax import NamedArray
 
 
 def test_top_k():
-    H = Axis("H", 5)
-    W = Axis("W", 6)
-    D = Axis("D", 7)
+    H, W, D = haliax.make_axes(H=3, W=4, D=5)
 
     rand = jax.random.uniform(jax.random.PRNGKey(0), (H.size, W.size, D.size))
     n_rand = NamedArray(rand, (H, W, D))

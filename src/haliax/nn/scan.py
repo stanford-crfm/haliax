@@ -300,7 +300,7 @@ class Stacked(eqx.Module, Generic[M]):
         """
 
         def unbatch_leaf(x):
-            if haliax.is_named_array(x):
+            if isinstance(x, haliax.core.NamedArray):
                 if haliax.selects_axis(x.axes, self.Block):
                     return haliax.unbind(x, self.Block)
                 else:
