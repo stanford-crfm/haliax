@@ -286,21 +286,21 @@ def replace_axis(axis_spec: AxisSelection, old: AxisSelector, new: AxisSelection
 
 
 @overload
-def overlapping_axes(ax1: AxisSpec, ax2: AxisSelection) -> Tuple[Axis, ...]:
+def intersect_axes(ax1: AxisSpec, ax2: AxisSelection) -> Tuple[Axis, ...]:
     ...
 
 
 @overload
-def overlapping_axes(ax1: AxisSelection, ax2: AxisSpec) -> Tuple[Axis, ...]:
+def intersect_axes(ax1: AxisSelection, ax2: AxisSpec) -> Tuple[Axis, ...]:
     ...
 
 
 @overload
-def overlapping_axes(ax1: AxisSelection, ax2: AxisSelection) -> Tuple[AxisSelector, ...]:
+def intersect_axes(ax1: AxisSelection, ax2: AxisSelection) -> Tuple[AxisSelector, ...]:
     ...
 
 
-def overlapping_axes(ax1: AxisSelection, ax2: AxisSelection) -> Tuple[AxisSelector, ...]:
+def intersect_axes(ax1: AxisSelection, ax2: AxisSelection) -> Tuple[AxisSelector, ...]:
     """Returns a tuple of axes that are present in both ax1 and ax2.
     The returned order is the same as ax1.
     """
@@ -545,7 +545,7 @@ __all__ = [
     "dblock",
     "eliminate_axes",
     "is_axis_compatible",
-    "overlapping_axes",
+    "intersect_axes",
     "replace_axis",
     "selects_axis",
     "union_axes",
