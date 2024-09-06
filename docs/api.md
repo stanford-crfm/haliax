@@ -27,6 +27,7 @@ Occasionally, an axis size can be inferred in some circumstances but not others.
 
 ### Axis Manipulation
 
+::: haliax.make_axes
 ::: haliax.axis.axis_name
 ::: haliax.axis.concat_axes
 ::: haliax.axis.union_axes

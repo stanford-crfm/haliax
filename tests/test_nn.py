@@ -46,8 +46,7 @@ def test_dropout():
 
 
 def test_one_hot():
-    i = Axis("i", 3)
-    c = Axis("c", 3)
+    i, c = hax.make_axes(i=3, c=3)
     actual = hax.nn.one_hot(hax.NamedArray(jnp.array([0, 1, 2]), (i,)), c)
     expected = jnp.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
 
@@ -61,16 +60,14 @@ def test_one_hot():
 
 
 def test_one_hot_out_of_bound():
-    i = Axis("i", 2)
-    c = Axis("c", 3)
+    i, c = hax.make_axes(i=2, c=3)
     actual = hax.nn.one_hot(hax.NamedArray(jnp.array([-1, 3]), (i,)), c)
     expected = jnp.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
     assert jnp.all(jnp.isclose(actual.array, expected))
 
 
 def test_standardize():
-    b = Axis("b", 2)
-    c = Axis("c", 3)
+    b, c = hax.make_axes(b=2, c=3)
     actual = hax.nn.standardize(hax.NamedArray(jnp.array([0, 1, 2]), (c,)), c)
     expected = jax.nn.standardize(jnp.array([0, 1, 2]), axis=0)
 
@@ -113,11 +110,7 @@ def test_standardize():
 @pytest.mark.parametrize("depth", [0, 1, 2, 3, 4, 5])
 def test_mlp(depth):
     key = jrandom.PRNGKey(0)
-    H = Axis("H", 10)
-    C = Axis("C", 12)
-    W = Axis("W", 14)
-
-    E = Axis("E", 16)
+    H, C, W, E = hax.make_axes(H=10, C=12, W=14, E=16)
 
     hax_mlp = hax.nn.MLP.init((H, C, W), E, width=8, depth=depth, key=key)
     x = hax.random.uniform(key, (H, C, W))
@@ -150,10 +143,7 @@ def test_mlp(depth):
 
 
 def test_linear_has_no_function_leaves_by_default():
-    H = Axis("H", 10)
-    C = Axis("C", 12)
-    W = Axis("W", 14)
-    E = Axis("E", 16)
+    H, C, W, E = hax.make_axes(H=10, C=12, W=14, E=16)
 
     hax_linear = hax.nn.Linear.init((H, C, W), E, key=jrandom.PRNGKey(0))
     assert all(not isinstance(v, Callable) for v in jax.tree_util.tree_leaves(hax_linear))  # type: ignore

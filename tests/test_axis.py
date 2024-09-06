@@ -1,12 +1,10 @@
 import pytest
 
-from haliax.axis import Axis, eliminate_axes, overlapping_axes, rearrange_for_partial_order
+from haliax.axis import Axis, eliminate_axes, make_axes, overlapping_axes, rearrange_for_partial_order
 
 
 def test_eliminate_axes():
-    H = Axis("H", 3)
-    W = Axis("W", 4)
-    C = Axis("C", 5)
+    H, W, C = make_axes(H=3, W=4, C=5)
 
     assert eliminate_axes((H, W), (H,)) == (W,)
     assert eliminate_axes((H, W), (W,)) == (H,)

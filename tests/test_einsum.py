@@ -273,12 +273,7 @@ def test_einsum_various_errors():
 
 
 def test_einsum_examples():
-
-    Batch = hax.Axis("batch", 32)
-    Embed = hax.Axis("embed", 64)
-    H = hax.Axis("h", 16)
-    W = hax.Axis("w", 16)
-    C = hax.Axis("c", 3)
+    Batch, Embed, H, W, C = hax.make_axes(batch=32, embed=64, h=16, w=16, c=3)
 
     # for jax
     im = jnp.zeros((32, 16, 16, 3))
