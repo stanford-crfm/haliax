@@ -328,6 +328,23 @@ def intersect_axes(ax1: AxisSelection, ax2: AxisSelection) -> Tuple[AxisSelector
     return tuple(out)
 
 
+def overlapping_axes(ax1: AxisSelection, ax2: AxisSelection) -> Tuple[str, ...]:
+    """
+    Like intersect_axes, but returns the names instead of the axes themselves.
+    Unlike intersect_axes, it does not throw an error if the sizes of a common axis are
+    different.
+
+    The returned order is the same as in ax1.
+    """
+    ax1 = ensure_tuple(ax1)
+    ax2 = ensure_tuple(ax2)
+    ax1_names = map(axis_name, ax1)
+    ax2_names = set(map(axis_name, ax2))
+
+    out = tuple(name for name in ax1_names if name in ax2_names)
+    return out
+
+
 @overload
 def axis_name(ax: AxisSelector) -> str:  # type: ignore
     ...

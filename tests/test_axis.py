@@ -1,6 +1,6 @@
 import pytest
 
-from haliax.axis import Axis, eliminate_axes, rearrange_for_partial_order
+from haliax.axis import Axis, eliminate_axes, overlapping_axes, rearrange_for_partial_order
 
 
 def test_eliminate_axes():
@@ -135,3 +135,17 @@ def test_duplicate_elements_errors():
 
     with pytest.raises(ValueError):
         rearrange_for_partial_order(partial_order, candidates)
+
+
+def test_overlapping_axes_with_different_sizes():
+    A1 = Axis("A", 10)
+    A2 = Axis("A", 12)
+    B = Axis("B", 14)
+    C = Axis("C", 16)
+    D = Axis("D", 18)
+
+    ax1 = (A1, B, C)
+    ax2 = (A2, C, D)
+
+    overlapping_names = overlapping_axes(ax1, ax2)  # Should not error
+    assert overlapping_names == ("A", "C")
