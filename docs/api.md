@@ -34,6 +34,7 @@ Occasionally, an axis size can be inferred in some circumstances but not others.
 ::: haliax.axis.eliminate_axes
 ::: haliax.axis.without_axes
 ::: haliax.axis.selects_axis
+::: haliax.axis.overlapping_axes
 ::: haliax.axis.is_axis_compatible
 
 
