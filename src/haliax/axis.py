@@ -297,21 +297,21 @@ def replace_axis(axis_spec: AxisSelection, old: AxisSelector, new: AxisSelection
 
 
 @overload
-def overlapping_axes(ax1: AxisSpec, ax2: AxisSelection) -> Tuple[Axis, ...]:
+def intersect_axes(ax1: AxisSpec, ax2: AxisSelection) -> Tuple[Axis, ...]:
     ...
 
 
 @overload
-def overlapping_axes(ax1: AxisSelection, ax2: AxisSpec) -> Tuple[Axis, ...]:
+def intersect_axes(ax1: AxisSelection, ax2: AxisSpec) -> Tuple[Axis, ...]:
     ...
 
 
 @overload
-def overlapping_axes(ax1: AxisSelection, ax2: AxisSelection) -> Tuple[AxisSelector, ...]:
+def intersect_axes(ax1: AxisSelection, ax2: AxisSelection) -> Tuple[AxisSelector, ...]:
     ...
 
 
-def overlapping_axes(ax1: AxisSelection, ax2: AxisSelection) -> Tuple[AxisSelector, ...]:
+def intersect_axes(ax1: AxisSelection, ax2: AxisSelection) -> Tuple[AxisSelector, ...]:
     """Returns a tuple of axes that are present in both ax1 and ax2.
     The returned order is the same as ax1.
     """
@@ -337,6 +337,23 @@ def overlapping_axes(ax1: AxisSelection, ax2: AxisSelection) -> Tuple[AxisSelect
             raise ValueError(f"Invalid axis spec: {ax}")
 
     return tuple(out)
+
+
+def overlapping_axes(ax1: AxisSelection, ax2: AxisSelection) -> Tuple[str, ...]:
+    """
+    Like intersect_axes, but returns the names instead of the axes themselves.
+    Unlike intersect_axes, it does not throw an error if the sizes of a common axis are
+    different.
+
+    The returned order is the same as in ax1.
+    """
+    ax1 = ensure_tuple(ax1)
+    ax2 = ensure_tuple(ax2)
+    ax1_names = map(axis_name, ax1)
+    ax2_names = set(map(axis_name, ax2))
+
+    out = tuple(name for name in ax1_names if name in ax2_names)
+    return out
 
 
 @overload
@@ -555,6 +572,7 @@ __all__ = [
     "dslice",
     "dblock",
     "eliminate_axes",
+    "intersect_axes",
     "is_axis_compatible",
     "overlapping_axes",
     "replace_axis",

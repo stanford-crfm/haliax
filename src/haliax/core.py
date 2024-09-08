@@ -689,9 +689,9 @@ def take(array: NamedArray, axis: AxisSelector, index: Union[int, NamedArray]) -
         remaining_axes = eliminate_axes(array.axes, axis)
         # axis order is generally [array.axes[:axis_index], index.axes, array.axes[axis_index + 1 :]]
         # except that index.axes may overlap with array.axes
-        overlapping_axes: AxisSpec = haliax.axis.overlapping_axes(remaining_axes, index.axes)
+        intersecting_axes: AxisSpec = haliax.axis.intersect_axes(remaining_axes, index.axes)
 
-        if overlapping_axes:
+        if intersecting_axes:
             # if the eliminated axis is also in the index, we rename it to a dummy axis that we can broadcast over it
             need_to_use_dummy_axis = index._lookup_indices(axis.name) is not None
             if need_to_use_dummy_axis:
