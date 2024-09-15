@@ -330,6 +330,12 @@ def test_einsum_output_only_mode():
     assert jnp.all(jnp.equal(einsum("-> Height Width", m1, m2).array, jnp.einsum("ijk,kji->ij", m1.array, m2.array)))
     assert jnp.all(jnp.equal(einsum("-> Height", m1).array, jnp.einsum("ijk->i", m1.array)))
 
+    assert jnp.all(jnp.equal(einsum("-> ...", m1, m2).array, jnp.einsum("ijk,kji->ijk", m1.array, m2.array)))
+    assert jnp.all(jnp.equal(einsum("-> ... Width", m1, m2).array, jnp.einsum("ijk,kji->ikj", m1.array, m2.array)))
+    assert jnp.all(
+        jnp.equal(einsum("-> Depth ... Width", m1, m2).array, jnp.einsum("ijk,kji->kij", m1.array, m2.array))
+    )
+
     with pytest.raises(ValueError):
         einsum("-> Q Width", m1)
 
