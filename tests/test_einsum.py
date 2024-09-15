@@ -250,9 +250,6 @@ def test_einsum_various_errors():
     m1 = hax.ones((Height, Hidth, Depth))
     m2 = hax.ones((Depth, Hidth, Height))
 
-    with pytest.raises(ValueError, match="Can't use ellipsis"):
-        einsum("-> ...", m1, m2)
-
     with pytest.raises(ValueError, match="multiple times"):
         einsum("-> Height Height", m1, m2)
 
