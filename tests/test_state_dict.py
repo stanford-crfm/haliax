@@ -6,8 +6,8 @@ import jax.numpy as jnp
 import pytest
 
 import haliax as hax
-from haliax._src.state_dict import stack_state_dict, unstack_state_dict
 from haliax.nn import Linear
+from haliax.nn.scan import _stack_state_dict, _unstack_state_dict
 from haliax.state_dict import flatten_linear_layers, from_state_dict, to_state_dict, unflatten_linear_layers
 
 
@@ -96,12 +96,12 @@ def test_flatten_linear_layers(out_dims_first: bool):
     ],
 )
 def test_stack_state_dict(input_dict, prefix, expected_output):
-    result = stack_state_dict(input_dict, prefix)
+    result = _stack_state_dict(input_dict, prefix)
     for key in expected_output:
         assert jnp.all(jnp.array_equal(result[key], expected_output[key])), f"Failed on key: {key}"
 
     # now unstack it
-    unstacked = unstack_state_dict(result, prefix)
+    unstacked = _unstack_state_dict(result, prefix)
     for key in input_dict:
         assert jnp.all(jnp.array_equal(unstacked[key], input_dict[key])), f"Failed on key: {key}"
 

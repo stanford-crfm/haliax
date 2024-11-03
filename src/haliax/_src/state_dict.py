@@ -1,8 +1,7 @@
 # Module to support torch-style "state dict" serialization via safetensors
 import dataclasses
-import re
 import typing
-from typing import Any, Optional, Sequence, TypeVar, cast
+from typing import Any, Optional, Sequence, TypeVar
 
 import equinox as eqx
 import jax
@@ -355,67 +354,6 @@ def load_state_dict(path):
     """
     state_dict = safetensors.numpy.load_file(path)
     return state_dict
-
-
-def stack_state_dict(state_dict: StateDict, prefix: Optional[str] = None) -> StateDict:
-    """
-    Stack all keys matching prefix in a new state dict, returning a state dict that has all keys matching
-    prefix stacked, but otherwise the same.
-
-    Stacked in this case means roughly "compatible with a torch.nn.Sequential", which means that the
-    keys are of the form "<prefix>.0.<key>", "<prefix>.1.<key>", etc.
-
-    Mostly for use with [haliax.nn.Stacked][].
-    """
-    vectorized_dict: StateDict = {}
-
-    tensors_to_vectorize: dict[str, list[Optional[Any]]] = {}
-    if prefix is not None:
-        prefix_for_pat = re.escape(prefix + ".")
-    else:
-        prefix_for_pat = ""
-    pattern = re.compile(rf"{prefix_for_pat}(\d+)\.(.*)")
-
-    for k, v in state_dict.items():
-        match = pattern.match(k)
-        if match:
-            block_idx = int(match.group(1))
-            block_key = match.group(2)
-            tensors = tensors_to_vectorize.setdefault(block_key, [])
-            if len(tensors) <= block_idx:
-                tensors.extend([None] * (block_idx - len(tensors) + 1))
-            assert tensors[block_idx] is None, f"Duplicate key {k}"
-            tensors[block_idx] = v
-        else:
-            vectorized_dict[k] = v
-
-    # now we have to vectorize the tensors
-    for k, tensors in tensors_to_vectorize.items():
-        vectorized_dict[cast(str, with_prefix(prefix, k))] = jnp.stack(tensors, axis=0)
-
-    return vectorized_dict
-
-
-def unstack_state_dict(state_dict: StateDict, prefix: Optional[str] = None) -> StateDict:
-    """
-    Unstack all keys matching prefix in a new state dict, returning a state dict that has all keys matching
-    prefix unstacked, but otherwise the same. Mostly for use with [haliax.nn.Stacked][].
-
-    Unstacked in this case means roughly "compatible with a torch.nn.Sequential", which means that the
-    keys are of the form "<prefix>.0.<key>", "<prefix>.1.<key>", etc.
-    """
-    new_dict: StateDict = {}
-    prefix = with_prefix(prefix, "")
-    assert prefix is not None
-
-    for k, v in state_dict.items():
-        if k.startswith(prefix) and v is not None:
-            for i, v_i in enumerate(v):
-                new_dict[f"{prefix}{i}.{k[len(prefix):]}"] = v_i
-        else:
-            new_dict[k] = v
-
-    return new_dict
 
 
 def flatten_linear_layers(tree: T) -> T:
