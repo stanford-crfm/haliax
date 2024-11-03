@@ -250,9 +250,6 @@ def test_einsum_various_errors():
     m1 = hax.ones((Height, Hidth, Depth))
     m2 = hax.ones((Depth, Hidth, Height))
 
-    with pytest.raises(ValueError, match="Can't use ellipsis"):
-        einsum("-> ...", m1, m2)
-
     with pytest.raises(ValueError, match="multiple times"):
         einsum("-> Height Height", m1, m2)
 
@@ -273,12 +270,7 @@ def test_einsum_various_errors():
 
 
 def test_einsum_examples():
-
-    Batch = hax.Axis("batch", 32)
-    Embed = hax.Axis("embed", 64)
-    H = hax.Axis("h", 16)
-    W = hax.Axis("w", 16)
-    C = hax.Axis("c", 3)
+    Batch, Embed, H, W, C = hax.make_axes(batch=32, embed=64, h=16, w=16, c=3)
 
     # for jax
     im = jnp.zeros((32, 16, 16, 3))
@@ -334,6 +326,12 @@ def test_einsum_output_only_mode():
 
     assert jnp.all(jnp.equal(einsum("-> Height Width", m1, m2).array, jnp.einsum("ijk,kji->ij", m1.array, m2.array)))
     assert jnp.all(jnp.equal(einsum("-> Height", m1).array, jnp.einsum("ijk->i", m1.array)))
+
+    assert jnp.all(jnp.equal(einsum("-> ...", m1, m2).array, jnp.einsum("ijk,kji->ijk", m1.array, m2.array)))
+    assert jnp.all(jnp.equal(einsum("-> ... Width", m1, m2).array, jnp.einsum("ijk,kji->ikj", m1.array, m2.array)))
+    assert jnp.all(
+        jnp.equal(einsum("-> Depth ... Width", m1, m2).array, jnp.einsum("ijk,kji->kij", m1.array, m2.array))
+    )
 
     with pytest.raises(ValueError):
         einsum("-> Q Width", m1)

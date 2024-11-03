@@ -7,11 +7,7 @@ from haliax._src.rearrange import einops_rearrange
 
 
 # some axes
-W = Axis("W", 4)
-H = Axis("H", 6)
-C = Axis("C", 3)
-D = Axis("D", 2)
-B = Axis("B", 5)
+H, W, C, D, B = hax.make_axes(H=6, W=4, C=3, D=2, B=5)
 Q = hax.Axis("Q", B.size * H.size)
 E = Axis("E", H.size * W.size * D.size)
 

@@ -47,6 +47,9 @@ Head = hax.Axis("head", 8)  # number of attention heads
 Key = hax.Axis("key", 64)  # key size
 Embed = hax.Axis("embed", 512)  # embedding size
 
+# alternatively:
+#Pos, KPos, Head, Key, Embed = hax.make_axes(pos=1024, key_pos=1024, head=8, key=64, embed=512)
+
 
 def attention_scores(Key, KPos, query, key, mask):
     # how similar is each query to each key

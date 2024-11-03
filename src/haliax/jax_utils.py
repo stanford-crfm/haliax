@@ -80,7 +80,7 @@ def filter_checkpoint(fun: Callable, *, prevent_cse: bool = True, policy: Option
 
 
 def is_jax_array_like(x):
-    return hasattr(x, "shape") and hasattr(x, "dtype")
+    return hasattr(x, "shape") and hasattr(x, "dtype")  # and not isinstance(x, haliax.NamedArray)
 
 
 # adapted from jax but exposed so i can use it

@@ -373,11 +373,10 @@ class NamedArray:
 
         Supports indexing like:
 
-        >>> X = Axis("x", 10)
-        >>> Y = Axis("y", 20)
+        >>> X, Y = haliax.make_axes(X=10, Y=20)
         >>> arr = haliax.random.randint(jax.random.PRNGKey(0), (X, Y), 0, X.size)
         # slice with ints or slices
-        >>> arr[{"x": 1, "y": slice(0,10,new_axis=2)}]
+        >>> arr[{"x": 1, "y": slice(0,10,2)}]
         >>> Z = Axis("z", 3)
         # so-called "advanced indexing" with NamedArrays.
         >>> index_arr = NamedArray(np.array([1, 2, 3]), Z)
@@ -684,13 +683,15 @@ def take(array: NamedArray, axis: AxisSelector, index: Union[int, NamedArray]) -
         new_axes = array.axes[:axis_index] + array.axes[axis_index + 1 :]
         return NamedArray(new_array, new_axes)
     else:
+        if not jnp.issubdtype(index.dtype, jnp.integer):
+            raise ValueError(f"Index must be an integer array, got {index.dtype}")
         # #13: should broadcast/autobatch take
         remaining_axes = eliminate_axes(array.axes, axis)
         # axis order is generally [array.axes[:axis_index], index.axes, array.axes[axis_index + 1 :]]
         # except that index.axes may overlap with array.axes
-        overlapping_axes: AxisSpec = haliax.axis.overlapping_axes(remaining_axes, index.axes)
+        intersecting_axes: AxisSpec = haliax.axis.intersect_axes(remaining_axes, index.axes)
 
-        if overlapping_axes:
+        if intersecting_axes:
             # if the eliminated axis is also in the index, we rename it to a dummy axis that we can broadcast over it
             need_to_use_dummy_axis = index._lookup_indices(axis.name) is not None
             if need_to_use_dummy_axis:
@@ -950,6 +951,7 @@ def _compute_new_axes_and_slices_for_index(
             # we allow this if it's a 0-d or 1-d array
             if slice_.ndim == 0:
                 ordered_slices[axis_index] = slice_
+                kept_axes[axis_index] = False
             elif slice_.ndim == 1:
                 # we allow this if it's a 1-d array, in which case we treat it as sugar for NamedArray(slice_, sliced-axis)
                 ordered_slices[axis_index] = haliax.named(slice_, axis_name(axis))

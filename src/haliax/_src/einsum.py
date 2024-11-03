@@ -122,10 +122,13 @@ def _output_only_named_einsum(equation, arrays, rhs, axis_aliases):
     used_aliases = set()
 
     input_axis_names = set(ax.name for ax in _all_input_axes(arrays))
+    has_ellipsis = False
 
     for capture in rhs.captures:
         if capture is Ellipsis:
-            raise_parse_error("Can't use ellipsis on the rhs of an einsum without an lhs", equation, None)
+            #     raise_parse_error("Can't use ellipsis on the rhs of an einsum without an lhs", equation, None)
+            out_axes.append(Ellipsis)
+            has_ellipsis = True
         elif capture.binding is None or len(capture.axes) > 1:
             raise_parse_error(
                 "Parenthesized axes are not currently supported in the output of an einsum",
@@ -151,7 +154,6 @@ def _output_only_named_einsum(equation, arrays, rhs, axis_aliases):
                     )
 
                 name = ax_name
-                used_axes.add(name)
 
             if name in out_axes:
                 raise_parse_error(
@@ -161,7 +163,17 @@ def _output_only_named_einsum(equation, arrays, rhs, axis_aliases):
             if name not in input_axis_names:
                 raise_parse_error(f"Axis {name} not found in any of the input arrays", equation, capture.char_range)
 
+            used_axes.add(name)
             out_axes.append(name)
+
+    # if there's an ellipsis, put all unused axes in the ellipsis
+    if has_ellipsis:
+        all_input_axes = _all_input_axes(arrays)
+        unmentioned = [ax.name for ax in all_input_axes if ax.name not in used_axes]
+        ellipsis_index = out_axes.index(Ellipsis)
+        out_axes = out_axes[:ellipsis_index] + unmentioned + out_axes[ellipsis_index + 1 :]
+
+        used_axes = set(out_axes)
 
     _check_for_unused_aliases(axis_aliases, used_aliases, equation)
 
