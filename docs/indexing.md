@@ -72,7 +72,7 @@ can use [haliax.where][] for most of the same functionality, though.
 
 Before we continue, a note on shapes in JAX. Most JAX code will be used inside `jit`, which means that the sizes of all
 arrays must be determined at compile time (i.e. when JAX interprets your functions abstractly). This is a hard
-requirement in XLA. It might worked around one day, but it's the way things are for now.
+requirement in XLA.
 
 A consequence of this restriction is that certain indexing patterns aren't allowed in `jit`-ed JAX code:
 
@@ -97,9 +97,30 @@ f(jnp.arange(10), 2)
 ```
 
 This is a not-uncommon pattern in situations where you want to process a large array in chunks. In Haliax, we provide
-two solutions: [haliax.slice][] as well as dynamic slices ([haliax.dslice][] a.k.a. [haliax.ds][]).
+two solutions: [haliax.slice][] and dynamic slices ([haliax.dslice][] a.k.a. [haliax.ds][]).
 
 ## Dynamic Slices
+
+[haliax.slice][] is a convenience function that wraps `jax.lax.dynamic_slice` and allows you to slice an array with a
+dynamic start and size. This is useful for situations where you need to slice an array in a way that can't be determined
+at compile time. For example, the above example can be written as follows:
+
+```python
+import jax
+
+import haliax as hax
+
+N = hax.Axis("N", 10)
+q = hax.arange(N)
+
+@hax.named_jit
+def f(x, slice_size: int):
+    num_blocks = N.size // slice_size
+    def body(i, m):
+        return i + hax.mean(hax.slice(x, {"N": i * slice_size}, {"N": slice_size}))
+    jax.lax.fori_loop(0, num_blocks, body, 0.0)
+```
+
 
 In light of the requirement that all array sizes be known at compile time, Haliax provides both a simple [haliax.slice][]
 function, as well as [haliax.dslice][], which can be used with `[]`. The simple slice function is just a wrapper

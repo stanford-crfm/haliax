@@ -62,7 +62,7 @@ y = hax.dot(x, w, c, axis=(), out_axes=(D, ..., H))  # shape is (D, W, C, H), eq
 [haliax.einsum][] is at its best when you want to express a more complex tensor contraction.
 It is similar to [numpy.einsum](https://numpy.org/doc/stable/reference/generated/numpy.einsum.html)
 or [einops.einsum](https://einops.rocks/api/einsum/) in terms of syntax and behavior,
-but extended to work with named axes, including added flexibility that named axes provide.
+but extended to work with named axes, including the added flexibility that named axes provide.
 Our "flavor" of `einsum` is most similar to `einops.einsum`'s flavor, in that
 it supports long names for axes (like `"batch h w, h w channel -> batch channel"`)
 rather than the compact notation of `numpy.einsum` (like `"bhwc,hwc->bc"`).
