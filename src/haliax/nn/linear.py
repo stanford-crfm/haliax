@@ -1,9 +1,8 @@
 import math
-from typing import Callable, Optional
+from typing import Optional
 
 import equinox as eqx
-import jax.lax
-from jaxtyping import PRNGKeyArray
+from jax.random import PRNGKey
 
 import haliax as hax
 
@@ -29,14 +28,13 @@ class Linear(eqx.Module):
         In: AxisSpec,
         Out: AxisSpec,
         *,
-        key,
-        use_bias=True,
-        out_first: bool = False,
-        dot_general=None,
+        key: PRNGKey,
+        use_bias: bool = True,
+        out_first: bool = True,
+        dot_general: Optional[DotGeneralOp] = None,
         init_scale: float = 1.0,
     ) -> "Linear":
         """
-
         Args:
             In: AxisSpec: The input axis spec
             Out: AxisSpec: The output axis spec
@@ -57,7 +55,7 @@ class Linear(eqx.Module):
         return Linear(weight, bias, In, Out, dot_general=dot_general)
 
     @named_call
-    def __call__(self, inputs, *, key: Optional[PRNGKeyArray] = None):
+    def __call__(self, inputs, *, key: Optional[PRNGKey] = None):
         """
         Args:
             inputs (NamedArray): Input array
