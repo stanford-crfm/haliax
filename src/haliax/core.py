@@ -246,7 +246,9 @@ class NamedArray:
                 try:
                     axis_index = index_where(lambda a: a.name == ax_name, self.axes)
                     if axis_index >= 0:
-                        warnings.warn("Found axis with same name but different size.", UserWarning)
+                        raise RuntimeError(
+                            f"Found axis with same name but different size: {axis} vs {self.axes[axis_index]}"
+                        )
                     return axis_index
                 except ValueError:
                     return None
