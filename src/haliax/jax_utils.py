@@ -152,7 +152,7 @@ def is_scalarish(x):
     if isinstance(x, haliax.NamedArray):
         return x.ndim == 0
     else:
-        return jnp.isscalar(x) or x.shape == ()
+        return jnp.isscalar(x) or (getattr(x, "shape", None) == ())
 
 
 def is_on_mac_metal():

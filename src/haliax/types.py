@@ -1,8 +1,9 @@
-from typing import Any, Literal, Protocol, Tuple, TypeAlias, Union
+from typing import Any, Callable, Literal, Protocol, Tuple, TypeAlias, Union
 
 import jax.numpy as jnp
 import numpy as np
 from jax.lax import Precision
+from jaxtyping import PyTree
 
 
 DType: TypeAlias = np.dtype
@@ -30,3 +31,13 @@ IntScalar = Union[int, jnp.ndarray]
 PrecisionLike = Union[None, str, Precision, Tuple[str, str], Tuple[Precision, Precision]]
 
 GatherScatterModeStr = Literal["promise_in_bounds", "clip", "drop", "fill"]
+
+
+FilterSpec = Union[bool, Callable[[Any], bool]]
+"""
+A filter specification. Typically used on a pytree to filter out certain subtrees. Boolean values are
+treated as-is, while callables are called on each element of the pytree. If the callable returns True, the element
+is kept, otherwise it is filtered out.
+"""
+
+FilterTree = FilterSpec | PyTree[FilterSpec]

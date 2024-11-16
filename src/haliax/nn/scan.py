@@ -8,7 +8,8 @@ from jax import numpy as jnp
 
 import haliax
 import haliax.util
-from haliax.jax_utils import filter_checkpoint
+from haliax.jax_utils import filter_checkpoint, is_jax_array_like
+from haliax.util import is_jax_or_hax_array_like
 
 from .._src.state_dict import ModuleWithStateDictSerialization, StateDict, with_prefix
 from ..axis import Axis
@@ -167,7 +168,9 @@ class BlockSeq(ModuleWithStateDictSerialization, Generic[M]):
         state_dict: StateDict = {}
         for i, block in enumerate(self.blocks):
             my_prefix = with_prefix(prefix, str(i))
-            state_dict.update(block.to_state_dict(my_prefix))
+            # we can't assume to_state_dict is implemented, so we have to do it manually
+            block_dict = haliax.state_dict.to_state_dict(block, my_prefix)
+            state_dict.update(block_dict)
 
         return state_dict
 
@@ -413,7 +416,7 @@ def _unstack_state_dict(state_dict: StateDict, prefix: Optional[str] = None) -> 
     assert prefix is not None
 
     for k, v in state_dict.items():
-        if k.startswith(prefix) and v is not None:
+        if k.startswith(prefix) and is_jax_or_hax_array_like(v):
             for i, v_i in enumerate(v):
                 new_dict[f"{prefix}{i}.{k[len(prefix):]}"] = v_i
         else:

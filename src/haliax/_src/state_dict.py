@@ -16,7 +16,7 @@ from jaxtyping import PyTree
 import haliax.partitioning as partitioning
 from haliax._src.util import index_where
 from haliax.core import NamedArray, named
-from haliax.jax_utils import is_jax_array_like
+from haliax.jax_utils import is_jax_array_like, is_scalarish
 
 
 try:
@@ -166,7 +166,9 @@ def to_state_dict(tree: PyTree, prefix: Optional[str] = None) -> StateDict:
     Returns:
         The state dict representation of the input tree.
     """
-    if isinstance(tree, eqx.Module):
+    if tree is None:
+        return {}
+    elif isinstance(tree, eqx.Module):
         if hasattr(tree, "to_state_dict"):
             state_dict = tree.to_state_dict(prefix)
         else:
@@ -196,6 +198,11 @@ def to_state_dict(tree: PyTree, prefix: Optional[str] = None) -> StateDict:
                 state_dict = {prefix: tree}
             else:
                 state_dict = {}
+        else:
+            raise ValueError("Cannot convert a leaf value to a state dict without a prefix")
+    elif is_scalarish(tree):
+        if prefix is not None:
+            state_dict = {prefix: tree}
         else:
             raise ValueError("Cannot convert a leaf value to a state dict without a prefix")
     else:
@@ -291,37 +298,46 @@ def to_numpy_state_dict(model, prefix: Optional[str] = None) -> StateDict:
     with jax.default_device(jax.local_devices(backend="cpu")[0]):
 
         def get_to_cpu(arr):
-            if not is_jax_array_like(arr):
+            if is_scalarish(arr):
+                return arr
+            elif not is_jax_array_like(arr):
                 return arr
             elif isinstance(arr, np.ndarray):
                 return arr
-            elif arr.is_fully_addressable:
-                r = np.array(arr)
-                return r
-            else:
-                # unfortunately, jax's allgather seems to replicate to every device rather than every host
-                # which doesn't work for ~7B parameter models on TPU (assuming we also have optimizer state)
-                # this approach limits us to <64B parameters, but that's good enough for now
-                # we're going to do something a bit fancy, where we shard the model into a (process, device) mesh,
-                # then look for some axis along which we can shard the array, and then we'll do an allgather
-                # via pjit. If we can't find one, we'll just fully replicate since it probably isn't that big.
-                # TODO: ensure that this mesh arranges devices correctly
-                # (jax seems to do this internally itself, so we should be fine?)
-                process_mesh = Mesh(np.array(jax.devices()).reshape((jax.process_count(), -1)), ("process", "device"))
-                # now we need to find an axis along which we can shard the array.
-                # for this, we need to find an axis s.t. size(axis) % local_devices == 0
-
-                try:
-                    axis_to_shard = index_where(
-                        lambda axis_size: axis_size % process_mesh.devices.size == 0, arr.shape
+            elif is_jax_array_like(arr):
+                if arr.is_fully_addressable:
+                    r = np.array(arr)
+                    return r
+                else:
+                    # unfortunately, jax's allgather seems to replicate to every device rather than every host
+                    # which doesn't work for ~7B parameter models on TPU (assuming we also have optimizer state)
+                    # this approach limits us to <64B parameters, but that's good enough for now
+                    # we're going to do something a bit fancy, where we shard the model into a (process, device) mesh,
+                    # then look for some axis along which we can shard the array, and then we'll do an allgather
+                    # via pjit. If we can't find one, we'll just fully replicate since it probably isn't that big.
+                    # TODO: ensure that this mesh arranges devices correctly
+                    # (jax seems to do this internally itself, so we should be fine?)
+                    process_mesh = Mesh(
+                        np.array(jax.devices()).reshape((jax.process_count(), -1)), ("process", "device")
                     )
-                except ValueError:
-                    return np.array(arr)
+                    # now we need to find an axis along which we can shard the array.
+                    # for this, we need to find an axis s.t. size(axis) % local_devices == 0
 
-                shardings = [None if i != axis_to_shard else "device" for i in range(len(arr.shape))]
-                sharding = NamedSharding(process_mesh, PartitionSpec(*shardings))
-                out = jax.jit(lambda x: x, out_shardings=sharding)(arr)
-                return np.array(out)
+                    try:
+                        axis_to_shard = index_where(
+                            lambda axis_size: axis_size % process_mesh.devices.size == 0, arr.shape
+                        )
+                    except ValueError:
+                        return np.array(arr)
+
+                    shardings = [None if i != axis_to_shard else "device" for i in range(len(arr.shape))]
+                    sharding = NamedSharding(process_mesh, PartitionSpec(*shardings))
+                    out = jax.jit(lambda x: x, out_shardings=sharding)(arr)
+                    return np.array(out)
+            elif is_scalarish(arr):
+                return np.asarray(arr)
+            else:
+                raise ValueError(f"Unsupported type {type(arr)}")
 
         # need to make sure the model is on *this machine* and *this machine's CPU* before saving
         model = jax.tree.map(lambda arr: get_to_cpu(arr), model)
