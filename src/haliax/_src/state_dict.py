@@ -320,6 +320,7 @@ def to_numpy_state_dict(model, prefix: Optional[str] = None) -> StateDict:
                     process_mesh = Mesh(
                         np.array(jax.devices()).reshape((jax.process_count(), -1)), ("process", "device")
                     )
+
                     # now we need to find an axis along which we can shard the array.
                     # for this, we need to find an axis s.t. size(axis) % local_devices == 0
 
@@ -332,7 +333,7 @@ def to_numpy_state_dict(model, prefix: Optional[str] = None) -> StateDict:
 
                     shardings = [None if i != axis_to_shard else "device" for i in range(len(arr.shape))]
                     sharding = NamedSharding(process_mesh, PartitionSpec(*shardings))
-                    out = jax.jit(lambda x: x, out_shardings=sharding)(arr)
+                    out = jax.device_put(arr, sharding)
                     return np.array(out)
             elif is_scalarish(arr):
                 return np.asarray(arr)
