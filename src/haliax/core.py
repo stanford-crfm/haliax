@@ -1143,12 +1143,65 @@ def rename(array: NamedArray, renames: Mapping[AxisSelector, AxisSelector]) -> N
     return NamedArray(array.array, new_axes)
 
 
+@typing.overload
+def flatten_axes(axis: Axis, old_axes: Axis, new_axis: AxisSelector) -> Axis:
+    pass
+
+
+@typing.overload
+def flatten_axes(axis: AxisSpec, new_axis: AxisSelector) -> Axis:
+    pass
+
+
+@typing.overload
+def flatten_axes(axis: AxisSpec, old_axes: AxisSelection, new_axis: AxisSelector) -> AxisSpec:
+    pass
+
+
+@typing.overload
 def flatten_axes(array: NamedArray, old_axes: AxisSelection, new_axis: AxisSelector) -> NamedArray:
+    pass
+
+
+def flatten_axes(  # type: ignore
+    # array: NamedArray | AxisSpec, old_axes: AxisSelection, new_axis: AxisSelector
+    *args,
+    **kwargs,
+) -> NamedArray | AxisSpec:
     """
     Merge a sequence of axes into a single axis. The new axis must have the same size as the product of the old axes.
 
-    The new axis is always inserted starting at the index of the first old axis in theunderlying array.
+    The new axis is always inserted starting at the index of the first old axis in the underlying array.
+
+    This function can be used in two ways:
+
+    * `flatten_axes(array, old_axes, new_axis)`: merge the old axes of the array into a new axis
+    * `flatten_axes(axes, old_axes, new_axis)`: merge the old axes into a new axis
     """
+
+    if len(args) + len(kwargs) == 2:
+        return _simple_flatten(*args, **kwargs)
+    else:
+        return _full_flatten(*args, **kwargs)
+
+
+def _simple_flatten(axis: AxisSpec, new_axis: AxisSelector) -> Axis:
+    size = haliax.axis_size(axis)
+    if isinstance(new_axis, Axis):
+        if new_axis.size != size:
+            raise ValueError(f"Cannot merge {axis} into {new_axis}: size mismatch")
+        return new_axis
+
+    assert isinstance(new_axis, str)
+    return Axis(new_axis, size)
+
+
+def _full_flatten(
+    array: NamedArray | AxisSpec, old_axes: AxisSelection, new_axis: AxisSelector
+) -> NamedArray | AxisSpec:
+    if isinstance(array, str | Axis | Sequence):
+        return _flatten_axis_spec(array, old_axes, new_axis)
+
     old_axes = ensure_tuple(old_axes)
     old_axes = array.resolve_axis(old_axes)
     total_axis_size = haliax.axis_size(old_axes)
@@ -1185,6 +1238,42 @@ def flatten_axes(array: NamedArray, old_axes: AxisSelection, new_axis: AxisSelec
     array = array.rearrange(intermediate_axes)
     raw_array = array.array.reshape([ax.size for ax in new_axes])
     return NamedArray(raw_array, tuple(new_axes))
+
+
+def _flatten_axis_spec(axes: AxisSpec, old_axes: AxisSelection, new_axis: AxisSelector) -> AxisSpec:
+    axes = ensure_tuple(axes)
+    old_axes = ensure_tuple(old_axes)
+    old_axes = haliax.axis.resolve_axis(axes, old_axes)
+    total_axis_size = haliax.axis_size(old_axes)
+
+    if isinstance(new_axis, Axis):
+        if new_axis.size != total_axis_size:
+            raise ValueError(f"Cannot merge {old_axes} into {new_axis}: size mismatch")
+    else:
+        assert isinstance(new_axis, str)
+        new_axis = Axis(new_axis, total_axis_size)
+
+    if len(old_axes) == 0:  # type: ignore
+        return (new_axis,) + axes
+
+    # ensure that the old_axes are contiguous
+    # we basically ensure that the old_axes occur after the index of the first old_axis
+    intermediate_axes: List[Axis] = []
+    new_axes: List[Axis] = []
+    index_of_first_old_axis = None
+    for i, ax in enumerate(axes):
+        if ax in old_axes:  # type: ignore
+            if index_of_first_old_axis is None:
+                index_of_first_old_axis = i
+                intermediate_axes.extend(old_axes)  # type: ignore
+                new_axes.append(new_axis)
+            else:
+                continue
+        else:
+            intermediate_axes.append(ax)
+            new_axes.append(ax)
+
+    return tuple(new_axes)
 
 
 def unflatten_axis(array: NamedArray, axis: AxisSelector, new_axes: AxisSpec) -> NamedArray:

@@ -394,6 +394,52 @@ def axis_size(ax: AxisSpec) -> int:
         return prod(axis.size for axis in ensure_tuple(ax))  # type: ignore
 
 
+@typing.overload
+def resolve_axis(axis_spec: AxisSpec, axis_selection: AxisSelector) -> Axis:
+    ...
+
+
+@typing.overload
+def resolve_axis(axis_spec: AxisSpec, axis_selection: AxisSelection) -> AxisSpec:
+    ...
+
+
+def resolve_axis(axis_spec: AxisSpec, axis_selection: AxisSelection) -> AxisSpec:
+    """
+    Returns the axis or axes in axis_spec that match the name of axis_selection.
+
+    If axis_selection is a str or axis, returns a single Axis. If it is a sequence, returns a sequence of Axes.
+
+    If an axis is present with a different size, raises ValueError.
+    """
+    ax: Axis
+    if isinstance(axis_selection, str | Axis):
+        name = axis_name(axis_selection)
+        for ax in ensure_tuple(axis_spec):
+            if axis_name(ax) == name:
+                if isinstance(axis_selection, Axis) and axis_size(ax) != axis_size(axis_selection):
+                    raise ValueError(f"Axis {name} has different sizes in {axis_spec} and {axis_selection}")
+                return ax
+        raise ValueError(f"Axis {name} not found in {axis_spec}")
+    else:
+        as_map = axis_spec_to_shape_dict(axis_spec)
+        out: list[Axis] = []
+
+        for ax in ensure_tuple(axis_selection):  # type: ignore
+            name = axis_name(ax)
+            if name not in as_map:
+                raise ValueError(f"Axis {name} not found in {axis_spec}")
+            if isinstance(ax, Axis):
+                if as_map[name] != ax.size:  # type: ignore
+                    raise ValueError(f"Axis {name} has different sizes in {axis_spec} and {axis_selection}")
+                else:
+                    out.append(ax)
+            else:
+                out.append(Axis(name, as_map[name]))
+
+        return tuple(out)
+
+
 class dslice(eqx.Module):
     """
     Dynamic slice, comprising a (start, length) pair. Also aliased as ds.
@@ -576,6 +622,7 @@ __all__ = [
     "is_axis_compatible",
     "overlapping_axes",
     "replace_axis",
+    "resolve_axis",
     "selects_axis",
     "union_axes",
     "without_axes",

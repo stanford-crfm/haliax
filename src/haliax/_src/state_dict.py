@@ -15,7 +15,8 @@ from jaxtyping import PyTree
 
 import haliax.partitioning as partitioning
 from haliax._src.util import index_where
-from haliax.core import NamedArray, named
+from haliax.axis import Axis
+from haliax.core import NamedArray, flatten_axes, named
 from haliax.jax_utils import is_jax_array_like, is_scalarish
 
 
@@ -390,24 +391,22 @@ def flatten_linear_layers(tree: T) -> T:
         weight = layer.weight
         bias = layer.bias
 
+        new_Out: Axis = flatten_axes(layer.Out, "__OUT__")
+        new_In: Axis = flatten_axes(layer.In, "__IN__")
+
         if weight.array is not None:
             out_first = layer.out_first
-            weight = weight.flatten_axes(layer.Out, "__OUT__").flatten_axes(layer.In, "__IN__")
+            weight = weight.flatten_axes(layer.Out, new_Out).flatten_axes(layer.In, new_In)
 
             if out_first:
                 weight = weight.rearrange((..., "__OUT__", "__IN__"))
             else:
                 weight = weight.rearrange((..., "__IN__", "__OUT__"))
 
-            if bias is not None:
-                bias = bias.flatten_axes(layer.Out, "__OUT__")
+        if bias is not None and bias.array is not None:
+            bias = bias.flatten_axes(layer.Out, new_Out)
 
-            In = weight.resolve_axis("__IN__")
-            Out = weight.resolve_axis("__OUT__")
-
-            return dataclasses.replace(layer, weight=weight, bias=bias, In=In, Out=Out)  # type: ignore
-        else:
-            return layer
+        return dataclasses.replace(layer, weight=weight, bias=bias, In=new_In, Out=new_Out)  # type: ignore
 
     return jax.tree.map(_flatten_linear, tree, is_leaf=lambda x: isinstance(x, Linear))
 

@@ -34,6 +34,8 @@ from .axis import (
     dslice,
     eliminate_axes,
     make_axes,
+    replace_axis,
+    resolve_axis,
     selects_axis,
 )
 from .core import (
@@ -1060,6 +1062,8 @@ __all__ = [
     "stack",
     "concatenate",
     "eliminate_axes",
+    "resolve_axis",
+    "replace_axis",
     "selects_axis",
     "concat_axes",
     "concat_axis_specs",
