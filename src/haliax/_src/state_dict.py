@@ -403,7 +403,7 @@ def flatten_linear_layers(tree: T) -> T:
             else:
                 weight = weight.rearrange((..., "__IN__", "__OUT__"))
 
-        if bias is not None and bias.array is not None:
+        if isinstance(bias, NamedArray):
             bias = bias.flatten_axes(layer.Out, new_Out)
 
         return dataclasses.replace(layer, weight=weight, bias=bias, In=new_In, Out=new_Out)  # type: ignore
@@ -437,7 +437,7 @@ def unflatten_linear_layers(template: T, tree_with_flattened_linears: T) -> T:
             weight = weight.unflatten_axis("__OUT__", template.Out).unflatten_axis("__IN__", template.In)
             weight = weight.rearrange(template.weight.axes)
 
-        if bias is not None:
+        if isinstance(bias, NamedArray):
             bias = bias.unflatten_axis("__OUT__", template.Out)
             assert template.bias is not None, "Flattened bias but template has no bias"
             bias = bias.rearrange(template.bias.axes)
