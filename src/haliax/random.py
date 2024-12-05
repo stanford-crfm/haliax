@@ -9,9 +9,8 @@ import jax.random as jrandom
 
 import haliax
 from haliax.core import NamedArray, NamedOrNumeric, broadcast_to
-from haliax.util import ensure_tuple
 
-from .axis import Axis, AxisSelector, AxisSpec, selects_axis
+from .axis import Axis, AxisSelector, AxisSpec, ShapeDict, axis_spec_to_shape_dict, selects_axis
 from .jax_utils import named_call
 from .partitioning import physical_axis_name, physical_axis_size, pspec_for_axis
 
@@ -20,7 +19,7 @@ from .partitioning import physical_axis_name, physical_axis_size, pspec_for_axis
 def uniform(
     key, shape: AxisSpec, dtype=float, minval: NamedOrNumeric = 0.0, maxval: NamedOrNumeric = 1.0
 ) -> NamedArray:
-    shape = ensure_tuple(shape)
+    shape = axis_spec_to_shape_dict(shape)
     minval = broadcast_to(minval, shape).array
     maxval = broadcast_to(maxval, shape).array
     jax_shape = _to_jax_shape(shape)
@@ -30,7 +29,7 @@ def uniform(
 
 @named_call
 def normal(key, shape: AxisSpec, dtype=float):
-    shape = ensure_tuple(shape)
+    shape = axis_spec_to_shape_dict(shape)
     jax_shape = _to_jax_shape(shape)
     jax_array = jrandom.normal(key=key, shape=jax_shape, dtype=dtype)
     return haliax.auto_sharded(NamedArray(jax_array, shape))
@@ -38,7 +37,7 @@ def normal(key, shape: AxisSpec, dtype=float):
 
 @named_call
 def bernoulli(key, shape: AxisSpec, p: NamedOrNumeric):
-    shape = ensure_tuple(shape)
+    shape = axis_spec_to_shape_dict(shape)
     p = broadcast_to(p, shape).array
     jax_shape = _to_jax_shape(shape)
     jax_array = jrandom.bernoulli(key=key, p=p, shape=jax_shape)
@@ -47,7 +46,7 @@ def bernoulli(key, shape: AxisSpec, p: NamedOrNumeric):
 
 @named_call
 def randint(key, shape: AxisSpec, minval: NamedOrNumeric, maxval: NamedOrNumeric, dtype=int):
-    shape = ensure_tuple(shape)
+    shape = axis_spec_to_shape_dict(shape)
     minval = broadcast_to(minval, shape).array
     maxval = broadcast_to(maxval, shape).array
     jax_shape = _to_jax_shape(shape)
@@ -57,7 +56,7 @@ def randint(key, shape: AxisSpec, minval: NamedOrNumeric, maxval: NamedOrNumeric
 
 @named_call
 def poisson(key, shape: AxisSpec, lam: NamedOrNumeric, dtype=int):
-    shape = ensure_tuple(shape)
+    shape = axis_spec_to_shape_dict(shape)
     lam = broadcast_to(lam, shape).array
     jax_shape = _to_jax_shape(shape)
     jax_array = jrandom.poisson(key=key, lam=lam, shape=jax_shape, dtype=dtype)
@@ -66,7 +65,7 @@ def poisson(key, shape: AxisSpec, lam: NamedOrNumeric, dtype=int):
 
 @named_call
 def exponential(key, shape: AxisSpec, dtype=float):
-    shape = ensure_tuple(shape)
+    shape = axis_spec_to_shape_dict(shape)
     jax_shape = _to_jax_shape(shape)
     jax_array = jrandom.exponential(key=key, shape=jax_shape, dtype=dtype)
     return haliax.auto_sharded(NamedArray(jax_array, shape))
@@ -74,7 +73,7 @@ def exponential(key, shape: AxisSpec, dtype=float):
 
 @named_call
 def gamma(key, shape: AxisSpec, a: NamedOrNumeric, dtype=float):
-    shape = ensure_tuple(shape)
+    shape = axis_spec_to_shape_dict(shape)
     a = broadcast_to(a, shape).array
     jax_shape = _to_jax_shape(shape)
     jax_array = jrandom.gamma(key=key, a=a, shape=jax_shape, dtype=dtype)
@@ -83,7 +82,7 @@ def gamma(key, shape: AxisSpec, a: NamedOrNumeric, dtype=float):
 
 @named_call
 def beta(key, shape: AxisSpec, a: NamedOrNumeric, b: NamedOrNumeric, dtype=float):
-    shape = ensure_tuple(shape)
+    shape = axis_spec_to_shape_dict(shape)
     a = broadcast_to(a, shape).array
     b = broadcast_to(b, shape).array
     jax_shape = _to_jax_shape(shape)
@@ -93,7 +92,7 @@ def beta(key, shape: AxisSpec, a: NamedOrNumeric, b: NamedOrNumeric, dtype=float
 
 @named_call
 def laplace(key, shape: AxisSpec, dtype=float):
-    shape = ensure_tuple(shape)
+    shape = axis_spec_to_shape_dict(shape)
     jax_shape = _to_jax_shape(shape)
     jax_array = jrandom.laplace(key=key, shape=jax_shape, dtype=dtype)
     return haliax.auto_sharded(NamedArray(jax_array, shape))
@@ -101,7 +100,7 @@ def laplace(key, shape: AxisSpec, dtype=float):
 
 @named_call
 def cauchy(key, shape: AxisSpec, dtype=float):
-    shape = ensure_tuple(shape)
+    shape = axis_spec_to_shape_dict(shape)
     jax_shape = _to_jax_shape(shape)
     jax_array = jrandom.cauchy(key=key, shape=jax_shape, dtype=dtype)
     return haliax.auto_sharded(NamedArray(jax_array, shape))
@@ -109,7 +108,7 @@ def cauchy(key, shape: AxisSpec, dtype=float):
 
 @named_call
 def logistic(key, shape: AxisSpec, dtype=float):
-    shape = ensure_tuple(shape)
+    shape = axis_spec_to_shape_dict(shape)
     jax_shape = _to_jax_shape(shape)
     jax_array = jrandom.logistic(key=key, shape=jax_shape, dtype=dtype)
     return haliax.auto_sharded(NamedArray(jax_array, shape))
@@ -117,7 +116,7 @@ def logistic(key, shape: AxisSpec, dtype=float):
 
 @named_call
 def truncated_normal(key, shape: AxisSpec, lower: NamedOrNumeric, upper: NamedOrNumeric, dtype=float):
-    shape = ensure_tuple(shape)
+    shape = axis_spec_to_shape_dict(shape)
     lower = broadcast_to(lower, shape).array
     upper = broadcast_to(upper, shape).array
     jax_shape = _to_jax_shape(shape)
@@ -160,7 +159,7 @@ def generate_sharded(fn, axis: Optional[AxisSelector] = None):
         key = bound.arguments["key"]
         shape = bound.arguments["shape"]
 
-        shape = ensure_tuple(shape)
+        shape = axis_spec_to_shape_dict(shape)
 
         if len(shape) == 0:
             # scalar
@@ -200,7 +199,7 @@ def generate_sharded(fn, axis: Optional[AxisSelector] = None):
 
 @named_call
 def ball(key, shape: AxisSpec, D: Axis, p: float = 2.0, dtype=float):
-    shape = ensure_tuple(shape)
+    shape = axis_spec_to_shape_dict(shape)
     jax_shape = _to_jax_shape(shape)
     jax_array = jrandom.ball(key=key, shape=jax_shape, d=D.size, p=p, dtype=dtype)
     return haliax.auto_sharded(NamedArray(jax_array, shape + (D,)))
@@ -221,9 +220,9 @@ def choice(
     index = a._lookup_indices(axis)
     assert index is not None, f"axis {axis} not in a"
 
-    shape = ensure_tuple(shape)
+    shape = axis_spec_to_shape_dict(shape)
     if p is not None:
-        assert p.resolve_axis(ensure_tuple(axis)) == p.axes, f"p must be 1D with axis {axis} or be None"
+        assert p.resolve_axis(axis_spec_to_shape_dict(axis)) == p.axes, f"p must be 1D with axis {axis} or be None"
 
     jax_shape = _to_jax_shape(shape)
     jax_p = p.array if p is not None else None
@@ -253,7 +252,7 @@ def categorical(key, logits: NamedArray, axis: AxisSelector, shape: Optional[Axi
     if shape is None:
         shape = tuple(a for a in logits.axes if a != axis)
     else:
-        shape = ensure_tuple(shape)
+        shape = axis_spec_to_shape_dict(shape)
 
     # TODO: could alias the axis and rename at end
     if selects_axis(shape, axis):
@@ -272,7 +271,7 @@ def categorical(key, logits: NamedArray, axis: AxisSelector, shape: Optional[Axi
 
 @named_call
 def gumbel(key, shape: AxisSpec, dtype=float):
-    shape = ensure_tuple(shape)
+    shape = axis_spec_to_shape_dict(shape)
     jax_shape = _to_jax_shape(shape)
     jax_array = jrandom.gumbel(key, jax_shape, dtype=dtype)
     return haliax.auto_sharded(NamedArray(jax_array, shape))
@@ -287,7 +286,7 @@ def permutation(key, x: NamedArray, axis: AxisSelector, independent: bool = Fals
 
 @named_call
 def rademacher(key, shape: AxisSpec, dtype=float):
-    shape = ensure_tuple(shape)
+    shape = axis_spec_to_shape_dict(shape)
     jax_shape = _to_jax_shape(shape)
     jax_array = jrandom.rademacher(key, jax_shape, dtype=dtype)
     return haliax.auto_sharded(NamedArray(jax_array, shape))
@@ -295,7 +294,7 @@ def rademacher(key, shape: AxisSpec, dtype=float):
 
 @named_call
 def t(key, shape: AxisSpec, df: NamedOrNumeric, dtype=float):
-    shape = ensure_tuple(shape)
+    shape = axis_spec_to_shape_dict(shape)
     df = broadcast_to(df, shape)
     jax_shape = _to_jax_shape(shape)
     jax_array = jrandom.t(key, df.array, jax_shape, dtype=dtype)
@@ -304,7 +303,7 @@ def t(key, shape: AxisSpec, df: NamedOrNumeric, dtype=float):
 
 @named_call
 def weibull_min(key, shape: AxisSpec, scale: NamedOrNumeric, concentration: NamedOrNumeric, dtype=float):
-    shape = ensure_tuple(shape)
+    shape = axis_spec_to_shape_dict(shape)
     scale = broadcast_to(scale, shape)
     concentration = broadcast_to(concentration, shape)
     jax_shape = _to_jax_shape(shape)
@@ -314,7 +313,7 @@ def weibull_min(key, shape: AxisSpec, scale: NamedOrNumeric, concentration: Name
 
 @named_call
 def pareto(key, shape: AxisSpec, b: NamedOrNumeric, dtype=float):
-    shape = ensure_tuple(shape)
+    shape = axis_spec_to_shape_dict(shape)
     b = broadcast_to(b, shape)
     jax_shape = _to_jax_shape(shape)
     jax_array = jrandom.pareto(key, b.array, jax_shape, dtype=dtype)
@@ -323,15 +322,15 @@ def pareto(key, shape: AxisSpec, b: NamedOrNumeric, dtype=float):
 
 @named_call
 def loggamma(key, shape: AxisSpec, a: NamedOrNumeric, dtype=float):
-    shape = ensure_tuple(shape)
+    shape = axis_spec_to_shape_dict(shape)
     a = broadcast_to(a, shape)
     jax_shape = _to_jax_shape(shape)
     jax_array = jrandom.loggamma(key, a.array, jax_shape, dtype=dtype)
     return haliax.auto_sharded(NamedArray(jax_array, shape))
 
 
-def _to_jax_shape(shape):
-    return tuple(axis.size if isinstance(axis, Axis) else axis for axis in shape)
+def _to_jax_shape(shape: ShapeDict):
+    return tuple(shape[a] for a in shape)
 
 
 __all__ = [

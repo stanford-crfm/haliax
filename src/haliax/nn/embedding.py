@@ -8,7 +8,7 @@ from jaxtyping import PRNGKeyArray
 
 import haliax as hax
 
-from ..axis import Axis, AxisSpec
+from ..axis import Axis, AxisSpec, concat_axes
 from ..core import NamedArray
 from ..jax_utils import named_call
 from ..tree_util import resize_axis
@@ -28,7 +28,7 @@ class Embedding(eqx.Module):
             warnings.warn("initializer_range is deprecated. Use init_std instead.", DeprecationWarning)
             init_scale = initializer_range
 
-        all_axes = (Vocab,) + ensure_tuple(Embed)
+        all_axes = concat_axes(Vocab, Embed)
         output_size = hax.axis_size(Embed)
         weight = hax.random.truncated_normal(key, all_axes, -3, 3) * (init_scale / math.sqrt(output_size))
         return Embedding(weight=weight, Vocab=Vocab, Embed=Embed)

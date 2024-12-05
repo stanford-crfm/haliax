@@ -62,11 +62,12 @@ def are_shape_checks_enabled():
 @dataclass(frozen=True)
 class NamedArray:
     array: jnp.ndarray
-    axes: Tuple[Axis, ...]
+    axes: tuple[Axis, ...]
 
-    def __post_init__(self):
-        if not isinstance(self.axes, tuple):
-            object.__setattr__(self, "axes", tuple(self.axes))
+    def __init__(self, array: jnp.ndarray, axes: AxisSpec):
+        object.__setattr__(self, "array", array)
+        object.__setattr__(self, "axes", ensure_tuple(axes))
+
         # ensure axes are all Axis objects
         # TODO: anonymous positional axes?
         for axis in self.axes:
@@ -1199,7 +1200,7 @@ def _simple_flatten(axis: AxisSpec, new_axis: AxisSelector) -> Axis:
 def _full_flatten(
     array: NamedArray | AxisSpec, old_axes: AxisSelection, new_axis: AxisSelector
 ) -> NamedArray | AxisSpec:
-    if isinstance(array, str | Axis | Sequence):
+    if isinstance(array, str | Axis | Sequence | Mapping):
         return _flatten_axis_spec(array, old_axes, new_axis)
 
     old_axes = ensure_tuple(old_axes)

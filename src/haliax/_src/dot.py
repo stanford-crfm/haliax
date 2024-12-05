@@ -12,6 +12,7 @@ from haliax.axis import (
     AxisSelection,
     PartialAxisSpec,
     axis_name,
+    axis_spec_to_shape_dict,
     eliminate_axes,
     rearrange_for_partial_order,
     union_axes,
@@ -140,8 +141,8 @@ def dot(
     if axis is None:
         jax_str = f"contract {', '.join(axis_name(ax) for ax in all_axes)} -> <scalar>"
     else:
-        axis = ensure_tuple(axis)
-        jax_str = f"contract {', '.join(axis_name(ax) for ax in axis)} -> {', '.join(a.name for a in output_axes)}"
+        axis = axis_spec_to_shape_dict(axis)
+        jax_str = f"contract {', '.join(axis)} -> {', '.join(a.name for a in output_axes)}"
 
     with jax.named_scope(jax_str):
         output = _jittable_dg_einsum(
