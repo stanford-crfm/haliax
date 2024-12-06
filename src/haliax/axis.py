@@ -63,27 +63,20 @@ multiple times.
 
 def selects_axis(selector: AxisSelection, selected: AxisSelection) -> bool:
     """Returns true if the selector has every axis in selected and, if dims are given, that they match"""
-    if isinstance(selector, Axis) or isinstance(selector, str):
-        selected = ensure_tuple(selected)
-        try:
-            index = index_where(lambda ax: is_axis_compatible(ax, selector), selected)  # type: ignore
-            return index >= 0
-        except ValueError:
-            return False
-
     selector_dict = axis_spec_to_shape_dict(selector)
 
-    selected_tuple = ensure_tuple(selected)  # type: ignore
-    for ax in selected_tuple:
-        if isinstance(ax, Axis):
-            selector_size = selector_dict.get(ax.name, _Sentinel)
-            if selector_size is not None and selector_size != ax.size:
-                return False
-        elif isinstance(ax, str):
-            if ax not in selector_dict:
-                return False
-        else:
-            raise ValueError(f"Invalid axis spec: {ax}")
+    selected_dict = axis_spec_to_shape_dict(selected)
+
+    if len(selector_dict) < len(selected_dict):
+        return False
+
+    for ax, size in selected_dict.items():
+        selector_size = selector_dict.get(ax)
+        if selector_size is None or size is None:
+            continue
+
+        if selector_size != size:
+            return False
 
     return True
 
@@ -144,17 +137,17 @@ def _dict_to_spec(axis_spec: PartialShapeDict) -> AxisSelection:
 
 
 @overload
+def concat_axes(a1: ShapeDict, a2: AxisSpec) -> ShapeDict:
+    pass
+
+
+@overload
 def concat_axes(a1: AxisSpec, a2: AxisSpec) -> AxisSpec:
     pass
 
 
 @overload
 def concat_axes(a1: AxisSelection, a2: AxisSelection) -> AxisSelection:
-    pass
-
-
-@overload
-def concat_axes(a1: ShapeDict, a2: AxisSpec) -> ShapeDict:
     pass
 
 
@@ -196,17 +189,17 @@ def concat_axes(a1, a2):
 
 
 @typing.overload
-def union_axes(a1: AxisSpec, a2: AxisSpec) -> AxisSpec:
-    ...
-
-
-@typing.overload
 def union_axes(a1: ShapeDict, a2: AxisSpec) -> ShapeDict:
     ...
 
 
 @typing.overload
 def union_axes(a1: AxisSpec, a2: ShapeDict) -> ShapeDict:
+    ...
+
+
+@typing.overload
+def union_axes(a1: AxisSpec, a2: AxisSpec) -> AxisSpec:
     ...
 
 
@@ -294,14 +287,25 @@ def without_axes(axis_spec: AxisSelection, to_remove: AxisSelection) -> AxisSele
 def without_axes(axis_spec: AxisSelection, to_remove: AxisSelection) -> AxisSelection:  # type: ignore
     """As eliminate_axes, but does not raise if any axis in to_remove is not present in axis_spec"""
 
-    to_remove = ensure_tuple(to_remove)
-    axis_spec_dict = axis_spec_to_shape_dict(axis_spec)
-    for ax in to_remove:
-        name = axis_name(ax)
-        if name in axis_spec_dict:
-            del axis_spec_dict[name]
+    to_remove_dict = axis_spec_to_shape_dict(to_remove)
+    was_dict = isinstance(axis_spec, Mapping)
 
+    axis_spec_dict = axis_spec_to_shape_dict(axis_spec)
+
+    for ax, size in to_remove_dict.items():
+        if ax in axis_spec_dict:
+            if size is not None and axis_spec_dict[ax] is not None and size != axis_spec_dict[ax]:
+                raise ValueError(f"Axis {ax} present in both specs with different sizes: {axis_spec} - {to_remove}")
+            del axis_spec_dict[ax]
+
+    if was_dict:
+        return axis_spec_dict
     return _dict_to_spec(axis_spec_dict)
+
+
+@typing.overload
+def unsize_axes(axis_spec: PartialAxisSpec, to_unsize: AxisSelection) -> PartialShapeDict:
+    ...
 
 
 @typing.overload
@@ -310,7 +314,7 @@ def unsize_axes(axis_spec: AxisSelection, to_unsize: AxisSelection) -> AxisSelec
 
 
 @typing.overload
-def unsize_axes(axis_spec: PartialAxisSpec, to_unsize: AxisSelection) -> PartialAxisSpec:
+def unsize_axes(axis_spec: PartialShapeDict) -> PartialShapeDict:
     ...
 
 
@@ -328,15 +332,25 @@ def unsize_axes(axis_spec: AxisSelection, to_unsize: Optional[AxisSelection] = N
     """
 
     if to_unsize is None:
-        return tuple(axis_name(ax) for ax in ensure_tuple(axis_spec))  # type: ignore
+        if isinstance(axis_spec, Mapping):
+            return {name: None for name in axis_spec}
+        elif isinstance(axis_spec, Axis | str):
+            return axis_name(axis_spec)
+        else:
+            return tuple(axis_name(ax) for ax in ensure_tuple(axis_spec))  # type: ignore
 
-    to_unsize = ensure_tuple(to_unsize)
+    was_dict = isinstance(axis_spec, Mapping)
+
+    to_unsize = axis_spec_to_shape_dict(to_unsize)
     axis_spec_dict: dict[str, Optional[int]] = axis_spec_to_shape_dict(axis_spec)  # type: ignore
     for ax in to_unsize:
         name = axis_name(ax)
         if name not in axis_spec_dict:
             raise ValueError(f"Axis {name} not present in axis spec {axis_spec}")
         axis_spec_dict[name] = None
+
+    if was_dict:
+        return axis_spec_dict
 
     return _dict_to_spec(axis_spec_dict)
 
@@ -354,6 +368,7 @@ def replace_axis(axis_spec: AxisSelection, old: AxisSelector, new: AxisSelection
 def replace_axis(axis_spec: AxisSelection, old: AxisSelector, new: AxisSelection) -> AxisSelection:
     """Returns a new axis spec that is the same as the original, but with any axes in old replaced with new. Raises if old is
     not present in axis_spec"""
+
     axis_spec = ensure_tuple(axis_spec)
     index_of_old = index_where(lambda ax: is_axis_compatible(ax, old), axis_spec)
 
