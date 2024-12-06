@@ -132,7 +132,7 @@ def axis_spec_to_shape_dict(axis_spec: AxisSelection) -> dict[str, Optional[int]
     return shape_dict
 
 
-def _dict_to_axis_tuple(axis_spec: PartialShapeDict) -> AxisSelection:
+def _dict_to_axis_tuple(axis_spec: PartialShapeDict) -> tuple[AxisSelector, ...]:
     return tuple(Axis(name, size) if size is not None else name for name, size in axis_spec.items())
 
 
@@ -304,7 +304,7 @@ def without_axes(axis_spec: AxisSelection, to_remove: AxisSelection) -> AxisSele
 
 
 @typing.overload
-def unsize_axes(axis_spec: PartialAxisSpec, to_unsize: AxisSelection) -> PartialShapeDict:
+def unsize_axes(axis_spec: PartialShapeDict, to_unsize: AxisSelection) -> PartialShapeDict:
     ...
 
 
@@ -370,21 +370,29 @@ def replace_axis(axis_spec: AxisSelection, old: AxisSelector, new: AxisSelection
     not present in axis_spec"""
 
     was_dict = isinstance(axis_spec, Mapping)
-    if isinstance(axis_spec, Mapping):  # makes type checker happy
-        axis_spec = _dict_to_axis_tuple(axis_spec)
+    axis_spec_tuple = _ensure_axis_tuple(axis_spec)
+    new_tuple = _ensure_axis_tuple(new)
 
-    axis_spec = ensure_tuple(axis_spec)
-    index_of_old = index_where(lambda ax: is_axis_compatible(ax, old), axis_spec)
+    index_of_old = index_where(lambda ax: is_axis_compatible(ax, old), axis_spec_tuple)
 
     if index_of_old < 0:
         raise ValueError(f"Axis {old} not present in axis spec {axis_spec}")
 
-    out = axis_spec[:index_of_old] + ensure_tuple(new) + axis_spec[index_of_old + 1 :]  # type: ignore
+    out = axis_spec_tuple[:index_of_old] + new_tuple + axis_spec_tuple[index_of_old + 1 :]  # type: ignore
 
     if was_dict:
         return axis_spec_to_shape_dict(out)
 
     return out
+
+
+def _ensure_axis_tuple(axis_spec: AxisSelection) -> tuple[AxisSelector, ...]:
+    axis_spec_tuple: tuple[AxisSelector, ...]
+    if isinstance(axis_spec, Mapping):  # makes type checker happy
+        axis_spec_tuple = _dict_to_axis_tuple(axis_spec)
+    else:
+        axis_spec_tuple = ensure_tuple(axis_spec)
+    return axis_spec_tuple
 
 
 @overload
@@ -393,17 +401,17 @@ def intersect_axes(ax1: ShapeDict, ax2: AxisSelection) -> ShapeDict:
 
 
 @overload
-def intersect_axes(ax1: AxisSpec, ax2: AxisSelection) -> AxisSpec:
+def intersect_axes(ax1: tuple[AxisSelector, ...], ax2: AxisSpec) -> tuple[Axis, ...]:
     ...
 
 
 @overload
-def intersect_axes(ax1: AxisSelection, ax2: AxisSpec) -> Tuple[Axis, ...]:
+def intersect_axes(ax1: tuple[AxisSelector, ...], ax2: AxisSelection) -> tuple[AxisSelector, ...]:  # type: ignore
     ...
 
 
 @overload
-def intersect_axes(ax1: AxisSelection, ax2: AxisSelection) -> Tuple[AxisSelector, ...]:
+def intersect_axes(ax1: AxisSpec, ax2: AxisSelection) -> AxisSpec:  # type: ignore
     ...
 
 
@@ -492,12 +500,14 @@ def resolve_axis(axis_spec: AxisSpec, axis_selection: AxisSelection) -> AxisSpec
     ax: Axis
     if isinstance(axis_selection, str | Axis):
         name = axis_name(axis_selection)
-        for ax in ensure_tuple(axis_spec):
-            if axis_name(ax) == name:
-                if isinstance(axis_selection, Axis) and axis_size(ax) != axis_size(axis_selection):
-                    raise ValueError(f"Axis {name} has different sizes in {axis_spec} and {axis_selection}")
-                return ax
-        raise ValueError(f"Axis {name} not found in {axis_spec}")
+        as_dict = axis_spec_to_shape_dict(axis_spec)
+        if name not in as_dict:
+            raise ValueError(f"Axis {name} not found in {axis_spec}")
+
+        if isinstance(axis_selection, Axis):
+            _check_size_consistency(axis_spec, axis_selection, name, as_dict[name], axis_size(axis_selection))
+
+        return Axis(name, as_dict[name])
     else:
         as_map = axis_spec_to_shape_dict(axis_spec)
         out: list[Axis] = []
