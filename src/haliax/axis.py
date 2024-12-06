@@ -497,10 +497,10 @@ def resolve_axis(axis_spec: AxisSpec, axis_selection: AxisSelection) -> AxisSpec
 
     If an axis is present with a different size, raises ValueError.
     """
-    ax: Axis
+    as_dict = axis_spec_to_shape_dict(axis_spec)
+
     if isinstance(axis_selection, str | Axis):
         name = axis_name(axis_selection)
-        as_dict = axis_spec_to_shape_dict(axis_spec)
         if name not in as_dict:
             raise ValueError(f"Axis {name} not found in {axis_spec}")
 
@@ -509,22 +509,22 @@ def resolve_axis(axis_spec: AxisSpec, axis_selection: AxisSelection) -> AxisSpec
 
         return Axis(name, as_dict[name])
     else:
-        as_map = axis_spec_to_shape_dict(axis_spec)
-        out: list[Axis] = []
+        out = {}
+        selection_was_dict = isinstance(axis_selection, Mapping)
+        select_dict = axis_spec_to_shape_dict(axis_selection)
 
-        for ax in ensure_tuple(axis_selection):  # type: ignore
-            name = axis_name(ax)
-            if name not in as_map:
-                raise ValueError(f"Axis {name} not found in {axis_spec}")
-            if isinstance(ax, Axis):
-                if as_map[name] != ax.size:  # type: ignore
-                    raise ValueError(f"Axis {name} has different sizes in {axis_spec} and {axis_selection}")
-                else:
-                    out.append(ax)
-            else:
-                out.append(Axis(name, as_map[name]))
+        ax: str
+        for ax, size in select_dict.items():
+            if ax not in as_dict:
+                raise ValueError(f"Axis {ax} not found in {axis_spec}")
+            _check_size_consistency(axis_spec, axis_selection, ax, as_dict[ax], size)
 
-        return tuple(out)
+            out[ax] = as_dict[ax]
+
+        if selection_was_dict:
+            return out
+        else:
+            return _dict_to_axis_tuple(out)
 
 
 class dslice(eqx.Module):
