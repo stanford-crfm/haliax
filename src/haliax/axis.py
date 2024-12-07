@@ -2,7 +2,7 @@ import typing
 from dataclasses import dataclass
 from math import prod
 from types import EllipsisType
-from typing import List, Mapping, Optional, Sequence, Tuple, Union, overload
+from typing import List, Mapping, Optional, Sequence, Union, overload
 
 import equinox as eqx
 
@@ -28,7 +28,7 @@ class Axis:
         return f"{self.name}({self.size})"
 
 
-def make_axes(**kwargs: int) -> Tuple[Axis, ...]:
+def make_axes(**kwargs: int) -> tuple[Axis, ...]:
     """
     Convenience function for creating a tuple of Axis objects.
 
@@ -130,6 +130,16 @@ def axis_spec_to_shape_dict(axis_spec: AxisSelection) -> dict[str, Optional[int]
             raise ValueError(f"Invalid axis spec: {ax}")
 
     return shape_dict
+
+
+@typing.overload
+def _dict_to_axis_tuple(axis_spec: ShapeDict) -> tuple[Axis, ...]:
+    ...
+
+
+@typing.overload
+def _dict_to_axis_tuple(axis_spec: PartialShapeDict) -> tuple[AxisSelector, ...]:
+    ...
 
 
 def _dict_to_axis_tuple(axis_spec: PartialShapeDict) -> tuple[AxisSelector, ...]:
@@ -235,7 +245,7 @@ def union_axes(a1: AxisSelection, a2: AxisSelection) -> AxisSelection:
 
 
 @overload
-def eliminate_axes(axis_spec: Axis | Sequence[Axis], axes: AxisSelection) -> Tuple[Axis, ...]:  # type: ignore
+def eliminate_axes(axis_spec: Axis | Sequence[Axis], axes: AxisSelection) -> tuple[Axis, ...]:  # type: ignore
     ...
 
 
@@ -272,6 +282,11 @@ def eliminate_axes(axis_spec: AxisSelection, to_remove: AxisSelection) -> AxisSe
         return axis_spec_dict
     else:
         return _dict_to_axis_tuple(axis_spec_dict)
+
+
+@typing.overload
+def without_axes(axis_spec: ShapeDict, to_remove: AxisSelection) -> ShapeDict:  # type: ignore
+    ...
 
 
 @typing.overload
@@ -447,11 +462,11 @@ def axis_name(ax: AxisSelector) -> str:  # type: ignore
 
 
 @overload
-def axis_name(ax: Sequence[AxisSelector]) -> Tuple[str, ...]:  # type: ignore
+def axis_name(ax: Sequence[AxisSelector]) -> tuple[str, ...]:  # type: ignore
     ...
 
 
-def axis_name(ax: AxisSelection) -> Union[str, Tuple[str, ...]]:
+def axis_name(ax: AxisSelection) -> Union[str, tuple[str, ...]]:
     """
     Returns the name of the axis. If ax is a string, returns ax. If ax is an Axis, returns ax.name
     """
@@ -712,3 +727,11 @@ def _check_size_consistency(
 ):
     if size1 is not None and size2 is not None and size1 != size2:
         raise ValueError(f"Axis {name} has different sizes in {spec1} and {spec2}: {size1} != {size2}")
+
+
+def to_jax_shape(shape: AxisSpec):
+    if isinstance(shape, Axis):
+        return shape.size
+    elif isinstance(shape, Sequence):
+        return tuple(s.size for s in shape)
+    return tuple(shape[a] for a in shape)

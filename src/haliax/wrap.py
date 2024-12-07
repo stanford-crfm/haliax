@@ -6,9 +6,8 @@ import jax.numpy as jnp
 
 from haliax.core import NamedArray, _broadcast_order, broadcast_to
 from haliax.jax_utils import is_scalarish
-from haliax.util import ensure_tuple
 
-from .axis import AxisSelection, AxisSelector, selects_axis
+from .axis import AxisSelection, AxisSelector, axis_spec_to_shape_dict, selects_axis
 
 
 def wrap_elemwise_unary(f, a, *args, **kwargs):
@@ -49,7 +48,7 @@ def wrap_reduction_call(
                 result = fn(a.array, axis=None, **kwargs)
                 return NamedArray(result, ())
             else:
-                axis = ensure_tuple(axis)
+                axis = axis_spec_to_shape_dict(axis)
                 if single_axis_only and len(axis) > 1:
                     raise ValueError(f"{fn.__name__} only supports a single axis")
                 indices = a._lookup_indices(axis)
@@ -74,9 +73,10 @@ def wrap_axiswise_call(fn, a, axis: Optional[AxisSelection], *, single_axis_only
         if axis is None:
             return fn(a.array, axis=None, **kwargs)
         else:
-            indices = ensure_tuple(a._lookup_indices(axis))
+            axis = axis_spec_to_shape_dict(axis)
+            indices = a._lookup_indices(axis)
             if any(x is None for x in indices):
-                raise ValueError(f"axis {axis} is not in {a.axes}")
+                raise ValueError(f"Axis {axis} not in {a.axes}")
             if len(indices) == 1:
                 return NamedArray(fn(a.array, axis=indices[0], **kwargs), a.axes)
             elif single_axis_only:

@@ -94,9 +94,9 @@ def pool(
         if not all([len(x) == 2 for x in padding]):
             raise ValueError(f"each entry in padding must be length 2, got {padding}")
 
-        padding_map = {w.name: p for w, p in zip(Window, padding)}
+        padding_map = {w: p for w, p in zip(Window, padding)}
         if use_ceil:
-            window_inputs = {w.name: ax.size for w, ax in zip(Window, inputs.axes)}
+            window_inputs = {w: ax.size for w, ax in zip(Window, inputs.axes)}
             padding_map = _use_ceil_padding(
                 window_inputs=window_inputs,
                 window_kernel=(Window),
@@ -213,8 +213,8 @@ def mean_pool(
     """
     tots = pool(Window, inputs, 0, jax.lax.add, stride, padding, use_ceil=use_ceil)
     if count_include_pad:
-        Window = ensure_tuple(Window)
-        window_size = reduce(lambda x, y: x * y, [w.size for w in Window])
+        Window = axis_spec_to_shape_dict(Window)
+        window_size = reduce(lambda x, y: x * y, [s for s in Window.values()])
         return tots / window_size
     else:
         inputs_axes_without_batches = inputs.resolve_axis(unsize_axes(Window))

@@ -1,7 +1,6 @@
 import contextlib
 import functools as ft
 import typing
-import warnings
 from dataclasses import dataclass
 from math import prod
 from types import EllipsisType
@@ -17,7 +16,21 @@ from haliax.jax_utils import is_jax_array_like, is_pallas_dslice
 from haliax.util import ensure_tuple
 
 from ._src.util import index_where, py_slice, slice_t
-from .axis import Axis, AxisSelection, AxisSelector, AxisSpec, axis_name, dslice, eliminate_axes, selects_axis
+from .axis import (
+    Axis,
+    AxisSelection,
+    AxisSelector,
+    AxisSpec,
+    PartialShapeDict,
+    ShapeDict,
+    axis_name,
+    axis_spec_to_shape_dict,
+    dslice,
+    eliminate_axes,
+    selects_axis,
+    to_jax_shape,
+    without_axes,
+)
 from .types import GatherScatterModeStr, IntScalar, PrecisionLike, Scalar
 
 
@@ -172,17 +185,25 @@ class NamedArray:
             return tuple(result)
 
     @overload
-    def resolve_axis(self, axis: AxisSelector) -> Axis:  # type: ignore
+    def resolve_axis(self, axis: AxisSelector) -> Axis:
         ...
 
     @overload
-    def resolve_axis(self, axis: Sequence[AxisSelector]) -> Tuple[Axis, ...]:  # type: ignore
+    def resolve_axis(self, axis: tuple[AxisSelector, ...]) -> tuple[Axis, ...]:
         ...
 
-    def resolve_axis(self, axes: AxisSelection) -> AxisSpec:  # type: ignore
+    @overload
+    def resolve_axis(self, axis: PartialShapeDict) -> ShapeDict:
+        ...
+
+    @overload
+    def resolve_axis(self, axes: AxisSelection) -> AxisSpec:
+        ...
+
+    def resolve_axis(self, axes: AxisSelection) -> AxisSpec:
         """
         Returns the axes corresponding to the given axis selection.
-        That is, it return the [haliax.Axis][] values themselves, not just their names.
+        That is, it returns the [haliax.Axis][] values themselves, not just their names.
 
         Raises a ValueError if any of the axes are not found.
         """
@@ -191,14 +212,21 @@ class NamedArray:
             return self.axes[indices]
         elif indices is None:
             raise ValueError(f"Axis {axes} not found")
+        elif isinstance(axes, Mapping):
+            result = {}
+            for key, i in zip(axes.keys(), indices):
+                if i is None:
+                    raise ValueError(f"Axis {key} not found")
+                result[key] = self.axes[i].size
+            return result
         else:
-            result = []
+            result_list = []
             assert isinstance(axes, Sequence)
             for i, ax in zip(indices, axes):
                 if i is None:
                     raise ValueError(f"Axis {ax} not found in {self.shape}")
-                result.append(self.axes[i])
-            return tuple(result)
+                result_list.append(self.axes[i])
+            return tuple(result_list)
 
     def __str__(self):
         # we consider the following cases:
@@ -229,7 +257,7 @@ class NamedArray:
         ...
 
     @overload
-    def _lookup_indices(self, axis: Sequence[AxisSelector]) -> Tuple[Optional[int], ...]:
+    def _lookup_indices(self, axis: AxisSelection) -> Tuple[Optional[int], ...]:
         ...
 
     def _lookup_indices(self, axis: AxisSelection) -> Union[Optional[int], Tuple[Optional[int], ...]]:
@@ -258,11 +286,6 @@ class NamedArray:
                 return index_where(lambda a: a.name == axis, self.axes)
             except ValueError:
                 return None
-        elif isinstance(axis, str):
-            try:
-                return index_where(lambda a: a.name == axis, self.axes)
-            except ValueError:
-                return None
         else:
             return tuple(self._lookup_indices(a) for a in axis)
 
@@ -282,7 +305,6 @@ class NamedArray:
         return haliax.rearrange(self, *args, **kwargs)
 
     def broadcast_to(self, axes: AxisSpec) -> "NamedArray":
-        axes = ensure_tuple(axes)
         return haliax.broadcast_to(self, axes=axes)
 
     def broadcast_axis(self, axis: AxisSpec) -> "NamedArray":
@@ -1395,32 +1417,37 @@ def broadcast_to(
 
     If enforce_no_extra_axes is True and the array has axes that are not in axes, then a ValueError is raised.
     """
-    axes = ensure_tuple(axes)
+    axes = axis_spec_to_shape_dict(axes)
 
     if not isinstance(a, NamedArray):
         a = named(jnp.asarray(a), ())
 
     assert isinstance(a, NamedArray)  # mypy gets confused
 
-    if a.axes == axes:
+    a_shape = a.shape
+
+    if selects_axis(a_shape, axes):
         return a
 
-    to_add = tuple(ax for ax in axes if ax not in a.axes)
+    to_add: ShapeDict = without_axes(a_shape, axes)
 
-    all_axes = to_add + a.axes
+    # this has to go first because we need to know the axes to broadcast to before we can broadcast
+    all_axes = haliax.concat_axes(to_add, axes)
 
     if enforce_no_extra_axes and len(all_axes) != len(axes):
         raise ValueError(f"Cannot broadcast {a} to {axes}: extra axes present")
 
-    extra_axes = tuple(ax for ax in a.axes if ax not in axes)
+    extra_axes = tuple(ax for ax in a_shape if ax not in axes)
 
     # broadcast whatever we need to the front and reorder
-    a_array = jnp.broadcast_to(a.array, [ax.size for ax in all_axes])
+    a_array = jnp.broadcast_to(a.array, to_jax_shape(all_axes))
     a = NamedArray(a_array, all_axes)
 
     # if the new axes are already in the right order, then we're done
     if ensure_order and not _is_subsequence(axes, all_axes):
-        a = a.rearrange(axes + extra_axes)
+        # a = a.rearrange(axes + extra_axes)
+        # rearrange to partial order consistent with axes
+        a = a.rearrange(axes)
 
     return typing.cast(NamedArray, a)
 
