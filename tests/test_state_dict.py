@@ -186,7 +186,7 @@ def test_torch_compatible_state_dict_stacked_linear():
 
     # check for some keys:
     assert "0.a.0.bias" in state_dict
-    assert "1.a.1." in state_dict
+    assert "1.a.1.weight" in state_dict
 
     z = tree_zeros_like(m_stacked)
 
