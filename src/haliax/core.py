@@ -1093,7 +1093,10 @@ def unbind(array: NamedArray, axis: AxisSelector) -> List[NamedArray]:
     # arrays = jnp.rollaxis(array.array, axis=axis_index, start=0)
     # instead we just loop over the axes pulling one out at a time
     axis_size = array.axes[axis_index].size
-    arrays = [jnp.take(array.array, i, axis=axis_index) for i in range(axis_size)]
+    if array.array is None:
+        arrays = [None] * axis_size
+    else:
+        arrays = [jnp.take(array.array, i, axis=axis_index) for i in range(axis_size)]
 
     return [haliax.auto_sharded(NamedArray(a, new_axes)) for a in arrays]
 
@@ -1236,7 +1239,9 @@ def _full_flatten(
             new_axes.append(ax)
 
     array = array.rearrange(intermediate_axes)
-    raw_array = array.array.reshape([ax.size for ax in new_axes])
+    raw_array = array.array
+    if raw_array is not None:
+        raw_array = raw_array.reshape([ax.size for ax in new_axes])
     return NamedArray(raw_array, tuple(new_axes))
 
 

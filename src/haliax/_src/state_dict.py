@@ -1,23 +1,26 @@
-# Module to support torch-style "state dict" serialization via safetensors
+# Module to support the creation of "state dict", including supporting Torch-compatible serialization via safetensors
 import dataclasses
 import typing
-from typing import Any, Optional, Sequence, TypeVar
+from typing import Any, Optional, Sequence, TypeVar, cast
 
+import equinox
 import equinox as eqx
 import jax
-import jax.numpy as jnp
 import numpy as np
 from jax import ShapeDtypeStruct
+from jax import numpy as jnp
 from jax.experimental.multihost_utils import sync_global_devices
 from jax.sharding import Mesh, NamedSharding, PartitionSpec
 from jax.tree_util import DictKey, FlattenedIndexKey, GetAttrKey, SequenceKey
 from jaxtyping import PyTree
 
+import haliax
 import haliax.partitioning as partitioning
 from haliax._src.util import index_where
 from haliax.axis import Axis
 from haliax.core import NamedArray, flatten_axes, named
 from haliax.jax_utils import is_jax_array_like, is_scalarish
+from haliax.types import FilterSpec
 
 
 try:
@@ -29,40 +32,6 @@ except ImportError:
 StateDict = dict[str, Any]
 Mod = TypeVar("Mod", bound=eqx.Module)
 T = TypeVar("T")
-
-
-def from_torch_compatible_state_dict(
-    t: T, state_dict: StateDict, *, unflatten_linear: bool = True, prefix: Optional[str] = None
-) -> T:
-    """
-    Convert a state dict to a tree that is compatible with the structure of `t`.
-
-    This applies [haliax.state_dict.from_state_dict][] followed by [haliax.state_dict.unflatten_linear_layers][].
-    """
-    if unflatten_linear:
-        t = _flatten_to_unflatten(t, state_dict, prefix)
-    else:
-        t = from_state_dict(t, state_dict, prefix=prefix)
-
-    return t
-
-
-def _flatten_to_unflatten(t, state_dict, prefix):
-    """
-    Flatten the torch compatible state_dict before loading into t, and then recover the unflattened layers.
-    """
-    # typically, `t` is a bunch of ShapeDtypeStructs, which can't be transposed etc. so we instead have to zeros()
-    # into real arrays (that aren't actually real b/c this is inside a jit)
-    def _dt_struct_to_array(struct):
-        if not isinstance(struct, ShapeDtypeStruct):
-            return struct
-        return jnp.zeros(struct.shape, struct.dtype)
-
-    t = jax.tree.map(_dt_struct_to_array, t)
-    flat_t = flatten_linear_layers(t)
-    flat_t = from_state_dict(flat_t, state_dict, prefix=prefix)
-    t = unflatten_linear_layers(t, flat_t)
-    return t
 
 
 @typing.overload
@@ -81,7 +50,7 @@ def with_prefix(prefix: Optional[str], leaf: Optional[str]) -> Optional[str]:
 
 
 def with_prefix(prefix: Optional[str], leaf: Optional[str]) -> Optional[str]:
-    """Joins two optional path strings in a way compatible with pytorch state dict serialization"""
+    """Joins two optional path strings in a way compatible with PyTorch state dict serialization"""
     if prefix is None:
         return leaf
     elif leaf is None:
@@ -91,7 +60,7 @@ def with_prefix(prefix: Optional[str], leaf: Optional[str]) -> Optional[str]:
 
 
 class ModuleWithStateDictSerialization(eqx.Module):
-    """An eqx.Module that can be serialized to a torch-style state dict."""
+    """An eqx.Module that can be serialized to a state dict."""
 
     def to_state_dict(self, prefix: Optional[str] = None) -> StateDict:
         return default_eqx_module_to_state_dict(self, prefix)
@@ -130,7 +99,7 @@ def from_state_dict(tree: T, state_dict: StateDict, prefix: Optional[str] = None
         return {k: from_state_dict(v, state_dict, prefix=with_prefix(prefix, k)) for k, v in tree.items()}  # type: ignore
     elif isinstance(tree, NamedArray):
         if prefix is None:
-            raise ValueError("Cannot extract a leaf value from a torch dict without a prefix")
+            raise ValueError("Cannot extract a leaf value from a state dict without a prefix")
 
         array = state_dict[prefix]
 
@@ -160,15 +129,25 @@ def from_state_dict(tree: T, state_dict: StateDict, prefix: Optional[str] = None
         return state_dict.get(prefix, tree)
 
 
-def to_state_dict(tree: PyTree, prefix: Optional[str] = None) -> StateDict:
+def to_state_dict(tree: PyTree, prefix: Optional[str] = None, *, is_leaf: typing.Callable | None = None) -> StateDict:
     """
     Convert a PyTree to a state dict.
+
+    Args:
+        tree: The tree to convert.
+        prefix: The prefix to use for the keys in the state dict.
+        is_leaf: A function that determines whether a node in the tree is a leaf. In addition to this function,
+           NamedArrays and the built-in JAX types are considered leaves.
 
     Returns:
         The state dict representation of the input tree.
     """
     if tree is None:
         return {}
+    elif is_leaf is not None and is_leaf(tree):
+        if prefix is None:
+            raise ValueError("Cannot convert a leaf value to a state dict without a prefix")
+        return {prefix: tree}
     elif isinstance(tree, eqx.Module):
         if hasattr(tree, "to_state_dict"):
             state_dict = tree.to_state_dict(prefix)
@@ -374,6 +353,95 @@ def load_state_dict(path):
     return state_dict
 
 
+def to_torch_compatible_state_dict(
+    t: T,
+    *,
+    flatten_linear: bool = True,
+    unstack_stacked: bool = True,
+    prefix: Optional[str] = None,
+    filter: FilterSpec = is_jax_array_like,
+) -> StateDict:
+    """
+    Convert a tree to a state dict that is compatible with Torch-style state dicts.
+
+    "Torch-style" here means two things:
+
+    1. [haliax.nn.Stacked][] instances are unstacked into a list of modules (instead of being represented as a single
+    module with a vmapped set of leaves.) This means they can be read into torch.nn.Sequential instances.
+    2. Linear layers are represented in their flattened form, i.e. as a 2d matrix and 1d bias vector (instead of the
+    more structure form we support). This means they can be read into torch.nn.Linear instances.
+
+    This applies [haliax.state_dict.flatten_linear_layers][] followed by [haliax.state_dict.to_state_dict][]
+
+    Args:
+        t: The tree to convert
+        flatten_linear: Whether to flatten linear layers
+        unstack_stacked: Whether to unstack stacked modules
+        prefix: The prefix to use for the state dict keys
+        filter: The filter to use for selecting which nodes to include in the state dict. By default, this includes only
+            array-like objects (e.g. JAX and NumPy arrays).
+    """
+    t = equinox.filter(t, filter)
+    if unstack_stacked:
+        t = _unstack_stacked(t)
+    if flatten_linear:
+        t = flatten_linear_layers(t)
+    return to_numpy_state_dict(t, prefix=prefix)
+
+
+def from_torch_compatible_state_dict(
+    t: T,
+    state_dict: StateDict,
+    *,
+    unflatten_linear: bool = True,
+    restack_stacked: bool = True,
+    prefix: Optional[str] = None,
+) -> T:
+    """
+    Convert a state dict to a tree that is compatible with the structure of `t`.
+
+    This function is the inverse of [haliax.state_dict.to_torch_compatible_state_dict][]. It has two (configurable)
+    behaviors on top of to_state_dict:
+
+    1) Linear layers are unflattened, i.e. converted from a 2d matrix and 1d bias vector to the more structured form
+      present in the input tree.
+    2) [haliax.nn.Stacked][] instances are restacked, i.e. converted from a list of modules to a single module with
+        a vmapped set of leaves.
+    """
+    # This function is a bit weird internally: it has to recreate the flattened/unstacked state dict
+    # so that it can be passed to from_state_dict. Then we undo the flattening/unstacking.
+
+    if restack_stacked or unflatten_linear:
+        # typically, `t` is a bunch of ShapeDtypeStructs, which can't be transposed etc. so we instead have to zeros()
+        # into real arrays (that aren't actually real b/c this is inside a jit)
+        def _dt_struct_to_array(struct):
+            if not isinstance(struct, ShapeDtypeStruct):
+                return struct
+            return jnp.zeros(struct.shape, struct.dtype)
+
+        t = jax.tree.map(_dt_struct_to_array, t)
+
+    orig_t = t
+
+    if restack_stacked:
+        t = _unstack_stacked(t)
+
+    pre_flatten = t
+
+    if unflatten_linear:
+        t = flatten_linear_layers(t)
+
+    t = from_state_dict(t, state_dict, prefix=prefix)
+
+    if unflatten_linear:
+        t = unflatten_linear_layers(pre_flatten, t)
+
+    if restack_stacked:
+        t = _restack_stacked(orig_t, t)
+
+    return t
+
+
 def flatten_linear_layers(tree: T) -> T:
     """
     In PyTorch, linear layers are stored as a 2d weight matrix and a 1d bias vector. In Haliax,
@@ -393,6 +461,10 @@ def flatten_linear_layers(tree: T) -> T:
 
         new_Out: Axis = flatten_axes(layer.Out, "__OUT__")
         new_In: Axis = flatten_axes(layer.In, "__IN__")
+
+        # TODO: ensure sharding?
+        # out_pspec = haliax.partitioning.pspec_for_axis(layer.Out)
+        # in_pspec = haliax.partitioning.pspec_for_axis(layer.In)
 
         if weight.array is not None:
             out_first = layer.out_first
@@ -447,3 +519,63 @@ def unflatten_linear_layers(template: T, tree_with_flattened_linears: T) -> T:
     return jax.tree.map(
         _unflatten_linear, template, tree_with_flattened_linears, is_leaf=lambda x: isinstance(x, Linear)
     )
+
+
+def _unstack_stacked(tree: PyTree) -> PyTree:
+    """
+    Unstack all [haliax.nn.Stacked][] instances in a tree, returning a new tree with all Stacked instances
+    converted to BlockSeq instances.
+    """
+    from haliax.nn import Stacked
+
+    def _unstack_layer(layer):
+        if not isinstance(layer, Stacked):
+            return layer
+
+        bs_layer = layer.as_block_seq()
+        return _unstack_stacked(bs_layer)
+
+    return jax.tree.map(_unstack_layer, tree, is_leaf=lambda x: isinstance(x, Stacked))
+
+
+def _restack_stacked(template: PyTree, tree: PyTree) -> PyTree:
+    """
+    Restack all [haliax.nn.Stacked][] instances in a tree, returning a new tree with all BlockSeq instances
+    converted to Stacked instances.
+
+    This implementation could be cleverer in the way it handles nested stacks. but those are rare enough that
+    it's not worth the complexity.
+    """
+    from haliax.nn import BlockSeq, Stacked
+
+    def _restack_layer(template, layer):
+        if not isinstance(template, Stacked) or not isinstance(layer, BlockSeq):
+            return layer
+
+        Block = template.Block
+        assert template.Block == layer.Block, "Block mismatch"
+
+        # first handle the recursion.
+        # the recursion is actually surprsingly stricky. each block in layer.blocks must be handled
+        # separately
+        template_0 = template.get_block(0)
+        layer_blocks = [_restack_stacked(template_0, block) for block in layer.blocks]
+
+        def restack_tree_leaf(leaves):
+            if isinstance(leaves[0], NamedArray):
+                return haliax.stack(Block, leaves)
+
+            if is_jax_array_like(leaves[0]):
+                return jnp.stack(leaves, axis=0)
+
+            if not all(leaf == leaves[0] for leaf in leaves):
+                raise ValueError(f"Unsupported type for restacking {type(leaves[0])}")
+
+            return leaves[0]
+
+        restacked = haliax.tree_util.tree_map(lambda *leaves: restack_tree_leaf(leaves), *layer_blocks)
+        return Stacked(
+            restacked, Block, gradient_checkpointing=layer.gradient_checkpointing, prevent_cse=template.prevent_cse
+        )
+
+    return jax.tree.map(_restack_layer, template, tree, is_leaf=lambda x: isinstance(x, Stacked))
