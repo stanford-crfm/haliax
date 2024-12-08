@@ -114,7 +114,8 @@ def axis_spec_rearrange(array: NamedArray, axis_spec: PartialAxisSpec) -> NamedA
         permute_spec.append(index_of_in[ax])
 
     out_axes = tuple(array.axes[i] for i in typing.cast(list[int], permute_spec))
-    return NamedArray(jnp.transpose(array.array, permute_spec), out_axes)
+    transpose = jnp.transpose(array.array, permute_spec) if array.array is not None else None
+    return NamedArray(transpose, out_axes)
 
 
 def einops_rearrange(array: NamedArray, expression: str, **bindings: AxisSelector | int) -> NamedArray:

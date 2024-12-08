@@ -26,7 +26,8 @@ dependencies = [
     "equinox>=0.10.6",
     "jaxtyping>=0.2.20",
     "jmp>=0.0.4",
-    "safetensors>=0.4.3"
+    "safetensors>=0.4.3",
+    "optax>=0.2.4",
 ]
 dynamic =[ "version" ]
 
