@@ -253,7 +253,7 @@ def _matches_target_fp8(key_path, config: Fp8Config) -> bool:
     return re.match(config.targets, key_path_str) is not None
 
 
-def _key_path_to_str(key_path: tuple[BuiltInKeyEntry, ...]) -> str:
+def _key_path_to_str(key_path) -> str:
     out = ""
     for k in key_path:
         match k:
