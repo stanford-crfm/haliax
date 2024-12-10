@@ -7,7 +7,7 @@ import jax.numpy as jnp
 from haliax.core import NamedArray, _broadcast_order, broadcast_to
 from haliax.jax_utils import is_scalarish
 
-from .axis import AxisSelection, AxisSelector, axis_spec_to_shape_dict, selects_axis
+from .axis import AxisSelection, AxisSelector, axis_spec_to_shape_dict, eliminate_axes
 
 
 def wrap_elemwise_unary(f, a, *args, **kwargs):
@@ -54,7 +54,8 @@ def wrap_reduction_call(
                 indices = a._lookup_indices(axis)
                 if indices is None or any(x is None for x in indices):
                     raise ValueError(f"axis {axis} is not in {a.axes}")
-                new_axes = [ax for ax in a.axes if not selects_axis(axis, ax)]
+                new_axes = eliminate_axes(a.axes, axis)
+
                 if single_axis_only:
                     result = fn(a.array, axis=indices[0], **kwargs)
                 else:

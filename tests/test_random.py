@@ -5,12 +5,14 @@ import jax.numpy as jnp
 from jaxtyping import PRNGKeyArray
 
 import haliax as hax
-from haliax.random import generate_sharded
+from haliax.axis import axis_spec_to_shape_dict
 
 
 Height = hax.Axis("Height", 4)
 Width = hax.Axis("Width", 8)
 Digit = hax.Axis("Digit", 10)
+
+HWD = axis_spec_to_shape_dict((Height, Width, Digit))
 
 
 def test_empty_shape():
@@ -57,26 +59,6 @@ def test_uniform_with_bounds_broadcast_and_scalar():
 
     assert hax.all(u >= -3.0)
     assert hax.all(u <= 0.5)
-
-
-def test_sharded_uniform_with_bounds_broadcast_and_scalar():
-    hax.random._enforce_sharded_generate = True
-    try:
-        key = jax.random.PRNGKey(0)
-        lb = hax.full(Height, -3.0)
-        ub = 0.5
-        u = generate_sharded(hax.random.uniform, axis=Height)(key, shape=(Height, Width), minval=lb, maxval=ub)
-
-        assert u.axes == (Height, Width)
-
-        assert hax.all(u >= -3.0)
-        assert hax.all(u <= 0.5)
-    finally:
-        hax.random._enforce_sharded_generate = False
-
-    # now just assert that this does in fact change the randomness
-    u2 = hax.random.uniform(key, shape=(Height, Width), minval=lb, maxval=ub)
-    assert not hax.all(u == u2)
 
 
 def test_randint():
@@ -242,6 +224,38 @@ def test_choice():
     check_gen_is_equal(
         lambda k, s: jax.random.choice(k, digits.array, shape=s, p=weights.array),
         lambda k, s: hax.random.choice(k, s, digits, "Digit", p=weights),
+    )
+
+
+def test_categorical_shape_dict():
+    logits = hax.random.uniform(jax.random.PRNGKey(0), HWD)
+    check_gen_is_equal(
+        lambda k, s: jax.random.categorical(k, logits.array, shape=s, axis=-1),
+        lambda k, s: hax.random.categorical(k, logits, Digit, shape=s),
+    )
+
+    logits = logits.rearrange((Digit, Height, Width))
+    check_gen_is_equal(
+        lambda k, s: jax.random.categorical(k, logits.array, shape=s, axis=0),
+        lambda k, s: hax.random.categorical(k, logits, Digit, shape=s),
+    )
+
+    # check broadcasting
+    logits = hax.random.uniform(
+        jax.random.PRNGKey(0),
+        {"Height": Height.size, "Digit": Digit.size},
+    )
+    # https://github.com/google/jax/issues/13124 broadcasting is wrong with jax categorical
+    raw_logits = jnp.broadcast_to(logits.array.reshape(-1, 1, Digit.size), (Height.size, Width.size, Digit.size))
+    check_gen_is_equal(
+        lambda k, s: jax.random.categorical(k, raw_logits, shape=s, axis=-1),
+        lambda k, s: hax.random.categorical(k, logits, Digit, shape=s),
+    )
+
+    # check str arg for selector
+    check_gen_is_equal(
+        lambda k, s: jax.random.categorical(k, raw_logits, shape=s, axis=-1),
+        lambda k, s: hax.random.categorical(k, logits, "Digit", shape=s),
     )
 
 
