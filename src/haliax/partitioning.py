@@ -8,7 +8,7 @@ from typing import Callable, ContextManager, Mapping, Optional, ParamSpec, Seque
 
 import equinox as eqx
 import jax
-from equinox import module_update_wrapper
+from equinox import is_array, module_update_wrapper
 from jax.lax import with_sharding_constraint
 from jax.sharding import Mesh, NamedSharding, PartitionSpec, SingleDeviceSharding
 from jaxtyping import PyTree
@@ -20,7 +20,7 @@ from .axis import Axis, AxisSelection, AxisSelector
 from .core import NamedArray
 from .jax_utils import Static, is_in_jit, is_jax_array_like, is_on_mac_metal
 from .tree_util import hashable_combine, hashable_partition
-from .util import StringHolderEnum, ensure_tuple, is_named_array
+from .util import StringHolderEnum, ensure_tuple
 
 
 PhysicalAxisSpec = Union[(str), Sequence[str]]
@@ -274,7 +274,7 @@ class _NamedJitWrapper(eqx.Module):
         if out_axis_resources is None:
             out_axis_resources = axis_resources
 
-        dynamic_argspec, static_argspec = hashable_partition((args, kwargs), is_jax_array_like)
+        dynamic_argspec, static_argspec = hashable_partition((args, kwargs), is_array)
         dynamic = (self._dynamic_fun, dynamic_argspec)
 
         donate_args = self._donate_args
@@ -436,7 +436,7 @@ def named_jit(
             **pjit_args,
         )
 
-    dynamic_fun, static_fun = hashable_partition(fn, is_jax_array_like)
+    dynamic_fun, static_fun = hashable_partition(fn, is_array)
 
     wrapper = _NamedJitWrapper(
         fn,
@@ -514,7 +514,7 @@ def _named_pjit_cache(fun_names, **jitkwargs) -> WrappedCallable:
         fun = hashable_combine(dynamic_fun, static_fun)
         args, kwargs = hashable_combine(dynamic_spec, static_spec)
         out = fun(*args, **kwargs)
-        out_dynamic, out_static = hashable_partition(out, is_jax_array_like)
+        out_dynamic, out_static = hashable_partition(out, is_array)
         return out_dynamic, Static(out_static)
 
     fun_name, fun_qualname = fun_names
@@ -543,7 +543,7 @@ def _cached_filter_eval_shape(fun, *args, **kwargs):
     eval_shape is surprisingly expensive, so we cache it. We use this for named_pjit for evaluating resource partitions
     of the output.
     """
-    dynamic, static = hashable_partition((fun, args, kwargs), is_jax_array_like)
+    dynamic, static = hashable_partition((fun, args, kwargs), is_array)
     if static not in _eval_shape_cache:
         _eval_shape_cache[static] = eqx.filter_eval_shape(fun, *args, **kwargs)
 
