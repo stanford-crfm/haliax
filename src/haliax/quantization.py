@@ -10,7 +10,6 @@ from typing import Optional, Protocol, TypeVar
 import equinox as eqx
 import jax
 from jax import numpy as jnp
-from jax._src.tree_util import BuiltInKeyEntry
 from jax.tree_util import DictKey, FlattenedIndexKey, GetAttrKey, SequenceKey
 from jax.typing import DTypeLike
 
@@ -253,7 +252,7 @@ def _matches_target_fp8(key_path, config: Fp8Config) -> bool:
     return re.match(config.targets, key_path_str) is not None
 
 
-def _key_path_to_str(key_path: tuple[BuiltInKeyEntry, ...]) -> str:
+def _key_path_to_str(key_path: tuple) -> str:
     out = ""
     for k in key_path:
         match k:
