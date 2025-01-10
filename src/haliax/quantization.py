@@ -10,7 +10,6 @@ from typing import Optional, Protocol, TypeVar
 import equinox as eqx
 import jax
 from jax import numpy as jnp
-from jax._src.tree_util import BuiltInKeyEntry
 from jax.tree_util import DictKey, FlattenedIndexKey, GetAttrKey, SequenceKey
 from jax.typing import DTypeLike
 
