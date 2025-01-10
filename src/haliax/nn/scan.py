@@ -1,15 +1,12 @@
 import functools
-import re
-from typing import Any, Dict, Generic, Optional, Protocol, Sequence, Type, TypeVar, cast
+from typing import Dict, Generic, Optional, Protocol, Sequence, Type, TypeVar
 
 import equinox as eqx
 import jax
-from jax import numpy as jnp
 
 import haliax
 import haliax.util
-from haliax.jax_utils import filter_checkpoint, is_jax_array_like
-from haliax.util import is_jax_or_hax_array_like
+from haliax.jax_utils import filter_checkpoint
 
 from .._src.state_dict import ModuleWithStateDictSerialization, StateDict, with_prefix
 from ..axis import Axis
@@ -36,6 +33,7 @@ class BlockFoldable(Protocol[M]):
     """
 
     Block: Axis
+    gradient_checkpointing: bool
 
     @classmethod
     def init(
@@ -52,6 +50,14 @@ class BlockFoldable(Protocol[M]):
     def unstacked(self) -> Sequence[M]:
         """
         Returns the unstacked version of this module. This is useful for logging or saving checkpoints.
+
+        """
+        ...
+
+    def as_block_seq(self) -> "BlockSeq[M]":
+        """
+        Convert this module to a BlockSeq. This is useful if you have a Stacked module and you want to convert it to a
+        BlockSeq, e.g. for saving checkpoints or logging.
 
         """
         ...
@@ -156,10 +162,10 @@ class BlockSeq(ModuleWithStateDictSerialization, Generic[M]):
         out_blocks = []
         for i, block in enumerate(self.blocks):
             my_prefix = with_prefix(prefix, str(i))
-            block = block.from_state_dict(state_dict, my_prefix)
+            block = haliax.state_dict.from_state_dict(block, state_dict, my_prefix)
             out_blocks.append(block)
 
-        return eqx.tree_at(lambda m: m.blocks, self, out_blocks)
+        return eqx.tree_at(lambda m: m.blocks, self, type(self.blocks)(out_blocks))
 
     def to_state_dict(self, prefix: Optional[str] = None) -> StateDict:
         """
@@ -168,11 +174,13 @@ class BlockSeq(ModuleWithStateDictSerialization, Generic[M]):
         state_dict: StateDict = {}
         for i, block in enumerate(self.blocks):
             my_prefix = with_prefix(prefix, str(i))
-            # we can't assume to_state_dict is implemented, so we have to do it manually
             block_dict = haliax.state_dict.to_state_dict(block, my_prefix)
             state_dict.update(block_dict)
 
         return state_dict
+
+    def as_block_seq(self) -> "BlockSeq[M]":
+        return self
 
 
 class Stacked(ModuleWithStateDictSerialization, Generic[M]):
@@ -318,9 +326,43 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
     def _do_block(carry, block, *extra_args, **extra_kwargs):
         return block(carry, *extra_args, **extra_kwargs)
 
-    # TODO: this is for logic that's in levanter. We should move that logic to haliax I guess?
     def _state_dict_key_map(self) -> Dict[str, Optional[str]]:
         return {"stacked": None}
+
+    def get_block(self, i: int) -> M:
+        """
+        Get the ith block from the stacked module. You don't typically use this when doing computation,
+        but it's useful for debugging or introspection, or unstacking.
+        """
+
+        def get_block_leaf(leaf):
+            if isinstance(leaf, haliax.core.NamedArray):
+                return leaf[self.Block, i]
+            elif haliax.jax_utils.is_jax_array_like(leaf):
+                return leaf[i]
+            else:
+                return leaf
+
+        return haliax.tree_util.tree_map(get_block_leaf, self.stacked)
+
+    def set_block(self, i: int, block: M) -> "Stacked[M]":
+        """
+        Set the ith block in the stacked module, returning a new Stacked module.
+
+        Returns:
+            this module with the ith block replaced with the new block
+        """
+
+        def set_block_leaf(leaf):
+            if isinstance(leaf, haliax.core.NamedArray):
+                return leaf.at[self.Block, i].set(block)
+            elif haliax.jax_utils.is_jax_array_like(leaf):
+                return leaf.at[i].set(block)
+            else:
+                return block
+
+        new_stacked = haliax.tree_util.tree_map(set_block_leaf, self.stacked)
+        return eqx.tree_at(lambda m: m.stacked, self, new_stacked)
 
     def unstacked(self) -> Sequence[M]:
         """
@@ -349,77 +391,5 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
         unstacked_leaves = tuple(zip(*unstacked_leaves))
         return tuple(map(lambda x: jax.tree_util.tree_unflatten(structure, x), unstacked_leaves))
 
-    def to_state_dict(self, prefix: Optional[str] = None) -> StateDict:
-        # this method needs to "devectorize" the blocks, so that we have a list of blocks h.0.FOO, h.1.FOO, etc.
-        # first just do the normal thing with our own dict, which we'll post-process
-        state_dict: StateDict = super().to_state_dict(prefix)
-
-        return _unstack_state_dict(state_dict, prefix)
-
-    def from_state_dict(self: M, state_dict: StateDict, prefix: Optional[str] = None) -> M:
-        # this method needs to "vectorize" the blocks, so that we have a single block h.FOO
-        # first just do the normal thing with our own dict, which we'll post-process
-        stacked = _stack_state_dict(state_dict, prefix=prefix)
-        out = super().from_state_dict(stacked, prefix=prefix)  # type: ignore
-        return out
-
-
-def _stack_state_dict(state_dict: StateDict, prefix: Optional[str] = None) -> StateDict:
-    """
-    Stack all keys matching prefix in a new state dict, returning a state dict that has all keys matching
-    prefix stacked, but otherwise the same.
-
-    Stacked in this case means roughly "compatible with a torch.nn.Sequential", which means that the
-    keys are of the form "<prefix>.0.<key>", "<prefix>.1.<key>", etc.
-
-    Mostly for use with [haliax.nn.Stacked][].
-    """
-    vectorized_dict: StateDict = {}
-
-    tensors_to_vectorize: dict[str, list[Optional[Any]]] = {}
-    if prefix is not None:
-        prefix_for_pat = re.escape(prefix + ".")
-    else:
-        prefix_for_pat = ""
-    pattern = re.compile(rf"{prefix_for_pat}(\d+)\.(.*)")
-
-    for k, v in state_dict.items():
-        match = pattern.match(k)
-        if match:
-            block_idx = int(match.group(1))
-            block_key = match.group(2)
-            tensors = tensors_to_vectorize.setdefault(block_key, [])
-            if len(tensors) <= block_idx:
-                tensors.extend([None] * (block_idx - len(tensors) + 1))
-            assert tensors[block_idx] is None, f"Duplicate key {k}"
-            tensors[block_idx] = v
-        else:
-            vectorized_dict[k] = v
-
-    # now we have to vectorize the tensors
-    for k, tensors in tensors_to_vectorize.items():
-        vectorized_dict[cast(str, with_prefix(prefix, k))] = jnp.stack(tensors, axis=0)
-
-    return vectorized_dict
-
-
-def _unstack_state_dict(state_dict: StateDict, prefix: Optional[str] = None) -> StateDict:
-    """
-    Unstack all keys matching prefix in a new state dict, returning a state dict that has all keys matching
-    prefix unstacked, but otherwise the same. Mostly for use with [haliax.nn.Stacked][].
-
-    Unstacked in this case means roughly "compatible with a torch.nn.Sequential", which means that the
-    keys are of the form "<prefix>.0.<key>", "<prefix>.1.<key>", etc.
-    """
-    new_dict: StateDict = {}
-    prefix = with_prefix(prefix, "")
-    assert prefix is not None
-
-    for k, v in state_dict.items():
-        if k.startswith(prefix) and is_jax_or_hax_array_like(v):
-            for i, v_i in enumerate(v):
-                new_dict[f"{prefix}{i}.{k[len(prefix):]}"] = v_i
-        else:
-            new_dict[k] = v
-
-    return new_dict
+    def as_block_seq(self) -> BlockSeq[M]:
+        return BlockSeq(self.unstacked(), self.Block, self.gradient_checkpointing)
