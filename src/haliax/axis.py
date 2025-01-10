@@ -215,8 +215,8 @@ def concat_axes(a1, a2):
 
         return axis_spec_to_tuple(out)
     else:
-        a1 = ensure_tuple(a1)
-        a2 = ensure_tuple(a2)
+        a1 = axis_spec_to_tuple(a1)
+        a2 = axis_spec_to_tuple(a2)
 
         a1_names = [axis_name(ax) for ax in a1]
         a2_names = [axis_name(ax) for ax in a2]
