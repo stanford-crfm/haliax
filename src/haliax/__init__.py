@@ -62,7 +62,7 @@ from .core import (
 )
 from .hof import fold, map, scan, vmap
 from .jax_utils import filter_checkpoint
-from .ops import clip, isclose, pad_left, trace, tril, triu, where
+from .ops import clip, isclose, pad_left, trace, tril, triu, unique, where
 from .partitioning import auto_sharded, axis_mapping, fsdp, named_jit, shard, shard_with_axis_mapping
 from .specialized_fns import top_k
 from .types import Scalar
@@ -1011,6 +1011,7 @@ __all__ = [
     "vmap",
     "trace",
     "where",
+    "unique",
     "clip",
     "tril",
     "triu",

@@ -3,6 +3,9 @@ from typing import Optional, Union
 
 import jax
 import jax.numpy as jnp
+from jaxtyping import ArrayLike
+
+import haliax
 
 from .axis import Axis, AxisSelector
 from .core import NamedArray, NamedOrNumeric, broadcast_arrays, broadcast_arrays_and_return_axes, named
@@ -156,4 +159,147 @@ def raw_array_or_scalar(x: NamedOrNumeric):
     return x
 
 
-__all__ = ["trace", "where", "tril", "triu", "isclose", "pad_left", "clip"]
+@typing.overload
+def unique(
+    array: NamedArray, Unique: Axis, *, axis: AxisSelector | None = None, fill_value: ArrayLike | None = None
+) -> NamedArray:
+    ...
+
+
+@typing.overload
+def unique(
+    array: NamedArray,
+    Unique: Axis,
+    *,
+    return_index: typing.Literal[True],
+    axis: AxisSelector | None = None,
+    fill_value: ArrayLike | None = None,
+) -> tuple[NamedArray, NamedArray]:
+    ...
+
+
+@typing.overload
+def unique(
+    array: NamedArray,
+    Unique: Axis,
+    *,
+    return_inverse: typing.Literal[True],
+    axis: AxisSelector | None = None,
+    fill_value: ArrayLike | None = None,
+) -> tuple[NamedArray, NamedArray]:
+    ...
+
+
+@typing.overload
+def unique(
+    array: NamedArray,
+    Unique: Axis,
+    *,
+    return_counts: typing.Literal[True],
+    axis: AxisSelector | None = None,
+    fill_value: ArrayLike | None = None,
+) -> tuple[NamedArray, NamedArray]:
+    ...
+
+
+@typing.overload
+def unique(
+    array: NamedArray,
+    Unique: Axis,
+    *,
+    return_index: bool = False,
+    return_inverse: bool = False,
+    return_counts: bool = False,
+    axis: AxisSelector | None = None,
+    fill_value: ArrayLike | None = None,
+) -> NamedArray | tuple[NamedArray, ...]:
+    ...
+
+
+def unique(
+    array: NamedArray,
+    Unique: Axis,
+    *,
+    return_index: bool = False,
+    return_inverse: bool = False,
+    return_counts: bool = False,
+    axis: AxisSelector | None = None,
+    fill_value: ArrayLike | None = None,
+) -> NamedArray | tuple[NamedArray, ...]:
+    """
+    Like jnp.unique, but with named axes.
+
+    Args:
+        array: The input array.
+        Unique: The name of the axis that will be created to hold the unique values.
+        fill_value: The value to use for the fill_value argument of jnp.unique
+        axis: The axis along which to find unique values.
+        return_index: If True, return the indices of the unique values.
+        return_inverse: If True, return the indices of the input array that would reconstruct the unique values.
+    """
+    size = Unique.size
+
+    is_multireturn = return_index or return_inverse or return_counts
+
+    kwargs = dict(
+        size=size,
+        fill_value=fill_value,
+        return_index=return_index,
+        return_inverse=return_inverse,
+        return_counts=return_counts,
+    )
+
+    if axis is not None:
+        axis_index = array._lookup_indices(axis)
+        if axis_index is None:
+            raise ValueError(f"Axis {axis} not found in array. Available axes: {array.axes}")
+        out = jnp.unique(array.array, axis=axis_index, **kwargs)
+    else:
+        out = jnp.unique(array.array, **kwargs)
+
+    if is_multireturn:
+        unique = out[0]
+        next_index = 1
+        if return_index:
+            index = out[next_index]
+            next_index += 1
+        if return_inverse:
+            inverse = out[next_index]
+            next_index += 1
+        if return_counts:
+            counts = out[next_index]
+            next_index += 1
+    else:
+        unique = out
+
+    ret = []
+
+    if axis is not None:
+        out_axes = haliax.axis.replace_axis(array.axes, axis, Unique)
+    else:
+        out_axes = (Unique,)
+
+    unique_values = haliax.named(unique, out_axes)
+    if not is_multireturn:
+        return unique_values
+
+    ret.append(unique_values)
+
+    if return_index:
+        ret.append(haliax.named(index, Unique))
+
+    if return_inverse:
+        if axis is not None:
+            assert axis_index is not None
+            inverse = haliax.named(inverse, array.axes[axis_index])
+        else:
+            inverse = haliax.named(inverse, array.axes)
+        ret.append(inverse)
+
+    if return_counts:
+        ret.append(haliax.named(counts, Unique))
+
+    return tuple(ret)
+
+
+__all__ = ["trace", "where", "tril", "triu", "isclose", "pad_left", "clip", "unique"]
