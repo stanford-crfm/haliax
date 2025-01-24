@@ -33,7 +33,7 @@ def dot_product_attention_weights(
     bias: Optional[NamedArray] = None,
     attention_dtype: Optional[jnp.dtype] = None,
     precision: PrecisionLike = None,
-    use_mup: bool = False,
+    scaling_factor: Optional[float] = None,
 ) -> NamedArray:
     """
     NamedArray version of dot product attention. Computes the logits for the attention weights. Note that the
@@ -52,10 +52,10 @@ def dot_product_attention_weights(
     # cf https://github.com/google/flax/blob/509bf97ea272e130d932920f45307ac98947d994/flax/linen/attention.py#L40
 
     orig_dtype = query.dtype
-    if use_mup:
-        query = query / query.axis_size(Key)
-    else:
-        query = query / jnp.sqrt(query.axis_size(Key))
+    if scaling_factor is None:
+        scaling_factor = query / jnp.sqrt(query.axis_size(Key))
+
+    query = query * scaling_factor
 
     if attention_dtype is not None:
         query = query.astype(attention_dtype)
