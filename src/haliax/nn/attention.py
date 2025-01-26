@@ -54,7 +54,7 @@ def dot_product_attention_weights(
 
     orig_dtype = query.dtype
     if scaling_factor is None:
-        scaling_factor = query / jnp.sqrt(query.axis_size(Key))
+        scaling_factor = 1.0 / jnp.sqrt(query.axis_size(Key))
 
     query = query * scaling_factor
 
