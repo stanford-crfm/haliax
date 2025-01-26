@@ -47,6 +47,7 @@ def dot_product_attention_weights(
     :param bias: Optional[NamedArray] broadcast compatible with (KeySize, QPos, KPos). Should be float
     :param attention_dtype: Optional dtype to use for attention
     :param precision: PrecisionLike for dot product. See precision argument to jax.lax.dot_general
+    :param scaling_factor: Optional float as scaling factor for attention score. Default to 1/sqrt(D)
     :return: NamedArray of shape (QPos, KPos)
     """
     # cf https://github.com/google/flax/blob/509bf97ea272e130d932920f45307ac98947d994/flax/linen/attention.py#L40
