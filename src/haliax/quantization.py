@@ -5,8 +5,11 @@ import dataclasses
 import functools
 import warnings
 from dataclasses import dataclass
-from typing import Optional, Protocol, TypeVar
+from typing import Optional, List, Protocol, TypeVar
 
+import aqt.jax.v2.config as aqt_config
+from aqt.jax.v2.aqt_dot_general import DotGeneral
+import jax.random as jrandom
 import equinox as eqx
 import jax
 from jax import numpy as jnp
@@ -183,6 +186,27 @@ class Fp8DotGeneralOp(OverwriteWithGradient):
         return y
 
 
+class Int8DotGeneralOp(OverwriteWithGradient):
+
+    cfg: DotGeneral
+
+    @classmethod
+    def init(cls):
+        cfg = aqt_config.config_v3()
+        return cls(cfg)
+    
+    def __call__(
+        self,
+        lhs,
+        rhs,
+        dimension_numbers,
+        precision,
+        preferred_element_type=None,
+    ):
+        cfg = aqt_config.set_context(self.cfg, jrandom.PRNGKey(42), train_step=None)
+        return cfg(lhs, rhs, dimension_numbers, precision, preferred_element_type)
+
+
 @dataclass(frozen=True)
 class Fp8Config:
     amax_history_length: int = 1024
@@ -232,6 +256,45 @@ def fp8_linear_layers(tree: T, config: Fp8Config = Fp8Config()) -> T:
 
     return jax.tree_util.tree_map_with_path(
         lambda p, m: fp8_quantize_module((), (), p, m), tree, is_leaf=_is_special_module
+    )
+
+
+def int8_linear_layers(tree: T) -> T:
+    """
+    Converts a module tree to use Int8 quantization.
+    Linear modules that have a name that matches the targets (if provided) will be converted to use FP8.
+    (If targets is None, all linear modules will be converted.)
+
+    This essentially goes through and adds FP8DotGeneralOp to the Linear modules.
+    """
+
+    def _is_special_module(module):
+        # TODO: add conv?
+        return isinstance(module, hnn.Linear) or isinstance(module, hnn.Stacked)
+
+    def _batchify_ctor(ctor, batch_dims):
+        # this is gross but it basically just vmaps the ctor over each batch dimension
+        return functools.reduce(lambda ctor, batch_axis: vmap(ctor, batch_axis), reversed(batch_dims), ctor)
+
+    # TODO: test scanlayers for dg
+    def int8_quantize_module(path_prefix, batch_dims: tuple[Axis, ...], path, module: T) -> T:
+        path = path_prefix + path
+        if isinstance(module, hnn.Stacked):
+            new_inner = jax.tree_util.tree_map_with_path(
+                functools.partial(int8_quantize_module, path_prefix + (GetAttrKey("stacked"),), batch_dims + (module.Block,)),  # type: ignore
+                module.stacked,
+                is_leaf=_is_special_module,
+            )
+            return dataclasses.replace(module, stacked=new_inner)  # type: ignore
+        elif isinstance(module, hnn.Linear):
+            vmapped_dg = _batchify_ctor(Int8DotGeneralOp.init, batch_dims)()
+            module = dataclasses.replace(module, dot_general=vmapped_dg)  # type: ignore
+            return module
+        else:
+            return module
+
+    return jax.tree_util.tree_map_with_path(
+        lambda p, m: int8_quantize_module((), (), p, m), tree, is_leaf=_is_special_module
     )
 
 
