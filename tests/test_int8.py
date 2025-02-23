@@ -1,0 +1,35 @@
+import chex
+import equinox as eqx
+import jax.numpy as jnp
+import jax.random as jrandom
+import jax.tree_util
+import numpy as np
+from chex import assert_trees_all_close
+
+import haliax as hax
+from haliax._src.fp8 import compute_scale
+from haliax.nn import Linear
+from haliax.quantization import (
+    Int8DotGeneralOp,
+    apply_updates,
+    int8_linear_layers,
+    partition_for_grad_overwrite,
+)
+
+def test_int8_is_reasonable():
+    In = hax.Axis("In", 8)
+    Out = hax.Axis("Out", 8)
+    linear = Linear.init(In, Out, key=jrandom.PRNGKey(0), init_scale=0.1)
+
+    int8_linear = Linear.init(
+        In, Out, key=jrandom.PRNGKey(0), dot_general=Int8DotGeneralOp.init(), init_scale=0.1
+    )
+
+    input = hax.random.normal(jrandom.PRNGKey(3), In)
+    output = linear(input)
+    int8_output = int8_linear(input)
+
+    assert output.shape == int8_output.shape
+    assert output.dtype == int8_output.dtype
+
+    assert_trees_all_close(output.array, int8_output.array, atol=1e-2, rtol=5e-2)
