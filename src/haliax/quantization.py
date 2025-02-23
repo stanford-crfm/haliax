@@ -5,13 +5,13 @@ import dataclasses
 import functools
 import warnings
 from dataclasses import dataclass
-from typing import Optional, List, Protocol, TypeVar
+from typing import Optional, Protocol, TypeVar
 
 import aqt.jax.v2.config as aqt_config
-from aqt.jax.v2.aqt_dot_general import DotGeneral
-import jax.random as jrandom
 import equinox as eqx
 import jax
+import jax.random as jrandom
+from aqt.jax.v2.aqt_dot_general import DotGeneral
 from jax import numpy as jnp
 from jax.tree_util import DictKey, FlattenedIndexKey, GetAttrKey, SequenceKey
 from jax.typing import DTypeLike
@@ -194,7 +194,7 @@ class Int8DotGeneralOp(OverwriteWithGradient):
     def init(cls):
         cfg = aqt_config.config_v3()
         return cls(cfg)
-    
+
     def __call__(
         self,
         lhs,
