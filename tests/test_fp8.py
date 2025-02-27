@@ -10,11 +10,11 @@ import haliax as hax
 from haliax._src.fp8 import compute_scale
 from haliax.nn import Linear
 from haliax.quantization import (
-    QuantizationConfig,
-    quantize_linear_layers,
     Fp8DotGeneralOp,
+    QuantizationConfig,
     apply_updates,
     partition_for_grad_overwrite,
+    quantize_linear_layers,
 )
 
 
