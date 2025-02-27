@@ -16,6 +16,16 @@ import haliax
 from haliax.types import PrecisionLike
 
 
+try:
+    # jax v0.5.1 or newer
+    from jax._src.numpy import (
+        einsum as jax_einsum,  # pylint: disable=g-import-not-at-top  # pytype: disable=import-error
+    )
+except ImportError:
+    # jax v0.5.0 or older
+    from jax._src.numpy import lax_numpy as jax_einsum  # pylint: disable=g-import-not-at-top
+
+
 F = typing.TypeVar("F", bound=Callable[..., Any])
 
 
@@ -169,6 +179,13 @@ def _jittable_dg_einsum(
     preferred_element_type: DTypeLike | None = None,
     _dot_general: Callable[..., Array] = jax.lax.dot_general,
 ) -> Array:
+    """
+    So we want to pass around a jittable dot_general module, but JAX's builtin version doesn't support this.
+    So we copy over the implementation of jax.numpy.einsum and modify thing so that it is jittable (via
+    eqx.filter_jit)
+
+    More or less copied from AQT
+    """
     operands = (subscripts, *operands)
     if out is not None:
         raise NotImplementedError("The 'out' argument to jnp.einsum is not supported.")
@@ -191,7 +208,7 @@ def _jittable_dg_einsum(
 
     contractions = tuple((a, frozenset(b), c) for a, b, c, *_ in contractions)
 
-    einsum = eqx.filter_jit(lax_numpy._einsum, inline=True)
+    einsum = eqx.filter_jit(jax_einsum._einsum, inline=True)
     if spec is not None:
         einsum = jax.named_call(einsum, name=spec)
     return einsum(operands, contractions, precision, preferred_element_type, _dot_general)  # type: ignore[operator]

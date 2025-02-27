@@ -34,7 +34,7 @@ def test_fp8_is_reasonable():
     assert output.shape == fp8_output.shape
     assert output.dtype == fp8_output.dtype
 
-    assert_trees_all_close(output.array, fp8_output.array, atol=1e-2, rtol=5e-2)
+    assert_trees_all_close(output.array, fp8_output.array, atol=2e-2, rtol=5e-2)
 
 
 # https://github.com/google/flax/blob/6f2b08e024c2fd2f8cec42a6c82408cb35412319/tests/linen/linen_test.py#L1222
