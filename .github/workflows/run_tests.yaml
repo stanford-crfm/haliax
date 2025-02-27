@@ -18,7 +18,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install flake8 pytest
           pip install "jax==0.4.35" "jaxlib==0.4.35"
-          pip install .[dev]
+          pip install jax==0.4.35 .[dev]
       - name: Test with pytest
         run: |
           XLA_FLAGS=--xla_force_host_platform_device_count=8 PYTHONPATH=tests:src:. pytest tests
