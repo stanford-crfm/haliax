@@ -23,7 +23,7 @@ Using FP8 with Haliax is actually pretty straightforward. To enable FP8, do this
 ```python
 import haliax.quantization as haxq
 # setup
-module = haxq.fp8_linear_layers(module)
+module = haxq.quantize_linear_layers(module, haxq.QuantizationConfig(fp8=True))
 
 # if using optax. This saves a tiny amount of memory so you can skip it if you want
 _, trainable_module = haxq.partition_for_grad_overwrite(module)
@@ -81,13 +81,13 @@ class MyModule(eqx.Module):
 module = MyModule.init(key=jax.random.PRNGKey(0))
 
 # Enable FP8
-module = hax.quantization.fp8_linear_layers(module)
+module = hax.quantization.quantize_linear_layers(module, QuantizationConfig(fp8=True))
 
 # Enable FP8 for a specific layer
-from haliax.quantization import Fp8Config
+from haliax.quantization import QuantizationConfig
 
-config = Fp8Config(targets=["up_proj"])
-module = hax.quantization.fp8_linear_layers(module, config)
+config = QuantizationConfig(targets=["up_proj"], fp8=True)
+module = hax.quantization.quantize_linear_layers(module, config)
 
 # Train step
 grads = eqx.filter_grad(loss_fn)(module, data)
@@ -96,7 +96,7 @@ updates, opt_state = opt.update(grads, opt_state, params=module)  # or however y
 module = hax.quantization.apply_updates(module, updates, grads)
 ```
 
-That's it! Just a few lines of code to enabl e FP8. The `fp8_linear_layers` function will transform your module to use FP8
+That's it! Just a few lines of code to enable FP8. The `quantize_linear_layers` function will transform your module to use FP8
 for linear layers (or a subset if you want), and the combo of `partition_for_grad_overwrite` and `apply_updates` function will apply the updates to the module
 in a way that is compatible with FP8.
 
@@ -138,7 +138,7 @@ gradient and stores it in the gradient.
 
 ## Functions
 
-::: haliax.quantization.fp8_linear_layers
+::: haliax.quantization.quantize_linear_layers
 ::: haliax.quantization.partition_for_grad_overwrite
 ::: haliax.quantization.apply_updates
 

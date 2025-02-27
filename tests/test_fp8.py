@@ -10,10 +10,10 @@ import haliax as hax
 from haliax._src.fp8 import compute_scale
 from haliax.nn import Linear
 from haliax.quantization import (
-    Fp8Config,
+    QuantizationConfig,
+    quantize_linear_layers,
     Fp8DotGeneralOp,
     apply_updates,
-    fp8_linear_layers,
     partition_for_grad_overwrite,
 )
 
@@ -138,7 +138,7 @@ def test_layer_splicing():
     Output = hax.Axis("Output", 32)
     mlp = hax.nn.MLP.init(Input, Output, Hidden, 3, key=init_key, init_scale=0.1)
 
-    mlp_q = fp8_linear_layers(mlp, Fp8Config())
+    mlp_q = quantize_linear_layers(mlp, QuantizationConfig(fp8=True))
     for layer in mlp_q.layers:
         assert isinstance(layer.dot_general, Fp8DotGeneralOp)
 
@@ -148,14 +148,14 @@ def test_layer_splicing():
     chex.assert_trees_all_close(output.array, output_q.array, atol=1e-3, rtol=1e-3)
     assert not jnp.allclose(output_q.array, 0)  # don't want them to all underflow
 
-    mlp_q = fp8_linear_layers(mlp, Fp8Config(targets="layers.0"))
+    mlp_q = quantize_linear_layers(mlp, QuantizationConfig(targets="layers.0", fp8=True))
     for i, layer in enumerate(mlp_q.layers):
         if i == 0:
             assert isinstance(layer.dot_general, Fp8DotGeneralOp)
         else:
             assert not isinstance(layer.dot_general, Fp8DotGeneralOp)
 
-    mlp_q = fp8_linear_layers(mlp, Fp8Config(targets=["0", "1"]))
+    mlp_q = quantize_linear_layers(mlp, QuantizationConfig(targets=["0", "1"], fp8=True))
     for i, layer in enumerate(mlp_q.layers):
         if i < 2:
             assert isinstance(layer.dot_general, Fp8DotGeneralOp)
@@ -193,7 +193,7 @@ def test_fp8ize_stacking():
     In = hax.Axis("In", 16)
     Out = hax.Axis("Out", 32)
     tformer = Tformer.init(In, Out, key=jrandom.PRNGKey(0))
-    tformer_q = fp8_linear_layers(tformer, Fp8Config())
+    tformer_q = quantize_linear_layers(tformer, QuantizationConfig(fp8=True))
 
     # want to be sure this vmaps the dot_general to the right places
     dg = tformer_q.blocks.stacked.up_proj.dot_general
@@ -204,7 +204,7 @@ def test_fp8ize_stacking():
     assert isinstance(dg, Fp8DotGeneralOp)
 
     # just stack the up_proj
-    tformer_q = fp8_linear_layers(tformer, Fp8Config(targets=["up_proj"]))
+    tformer_q = quantize_linear_layers(tformer, QuantizationConfig(targets=["up_proj"], fp8=True))
     dg = tformer_q.blocks.stacked.up_proj.dot_general
     assert isinstance(dg, Fp8DotGeneralOp)
     dg = tformer_q.blocks.stacked.down_proj.dot_general

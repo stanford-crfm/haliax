@@ -208,22 +208,41 @@ class Int8DotGeneralOp(OverwriteWithGradient):
 
 
 @dataclass(frozen=True)
-class Fp8Config:
-    amax_history_length: int = 1024
-    compute_dtype: DTypeLike = None
+class QuantizationConfig:
     targets: Optional[list[str] | str] = dataclasses.field(default=None)
     """
     If provided, only modules with names in this list will be quantized. If a single string, will be treated as a regex
     """
 
+    amax_history_length: int = 1024
+    compute_dtype: DTypeLike = None
 
-def fp8_linear_layers(tree: T, config: Fp8Config = Fp8Config()) -> T:
+    fp8: bool = False
+    int8: bool = False
+
+    def __post_init__(self):
+        assert not (self.fp8 and self.int8), "Cannot use FP8 and INT8 quantization at the same time."
+
+
+def quantize_linear_layers(tree: T, config: QuantizationConfig) -> T:
     """
-    Converts a module tree to use FP8 quantization.
-    Linear modules that have a name that matches the targets (if provided) will be converted to use FP8.
+    Converts a module tree to use FP8/INT8 quantization.
+    """
+    if config.fp8:
+        return _quantize_linear_layers(tree, config, Fp8DotGeneralOp, config.amax_history_length, config.compute_dtype)
+    elif config.int8:
+        return _quantize_linear_layers(tree, config, Int8DotGeneralOp)
+    else:
+        warnings.warn("Both fp8 and int8 are set to False. `quantize_linear_layers()` is no-op.")
+        return tree
+
+
+def _quantize_linear_layers(tree: T, config: QuantizationConfig, dot_general_cls, *args, **kwargs) -> T:
+    """
+    Linear modules that have a name that matches the targets (if provided) will be converted to quantized version.
     (If targets is None, all linear modules will be converted.)
 
-    This essentially goes through and adds FP8DotGeneralOp to the Linear modules.
+    This essentially goes through and adds corresponding DotGeneralOp to the Linear modules.
     """
 
     def _is_special_module(module):
@@ -235,70 +254,29 @@ def fp8_linear_layers(tree: T, config: Fp8Config = Fp8Config()) -> T:
         return functools.reduce(lambda ctor, batch_axis: vmap(ctor, batch_axis), reversed(batch_dims), ctor)
 
     # TODO: test scanlayers for dg
-    def fp8_quantize_module(path_prefix, batch_dims: tuple[Axis, ...], path, module: T) -> T:
+    def quantize_module(path_prefix, batch_dims: tuple[Axis, ...], path, module: T) -> T:
         path = path_prefix + path
         if isinstance(module, hnn.Stacked):
             new_inner = jax.tree_util.tree_map_with_path(
-                functools.partial(fp8_quantize_module, path_prefix + (GetAttrKey("stacked"),), batch_dims + (module.Block,)),  # type: ignore
+                functools.partial(quantize_module, path_prefix + (GetAttrKey("stacked"),), batch_dims + (module.Block,)),  # type: ignore
                 module.stacked,
                 is_leaf=_is_special_module,
             )
             return dataclasses.replace(module, stacked=new_inner)  # type: ignore
         elif isinstance(module, hnn.Linear):
-            if _matches_target_fp8(path, config):
-                vmapped_dg = _batchify_ctor(Fp8DotGeneralOp.init, batch_dims)(
-                    config.amax_history_length, config.compute_dtype
-                )
+            if _matches_target(path, config):
+                vmapped_dg = _batchify_ctor(dot_general_cls.init, batch_dims)(*args, **kwargs)
                 module = dataclasses.replace(module, dot_general=vmapped_dg)  # type: ignore
             return module
         else:
             return module
 
     return jax.tree_util.tree_map_with_path(
-        lambda p, m: fp8_quantize_module((), (), p, m), tree, is_leaf=_is_special_module
+        lambda p, m: quantize_module((), (), p, m), tree, is_leaf=_is_special_module
     )
 
 
-def int8_linear_layers(tree: T) -> T:
-    """
-    Converts a module tree to use Int8 quantization.
-    Linear modules that have a name that matches the targets (if provided) will be converted to use FP8.
-    (If targets is None, all linear modules will be converted.)
-
-    This essentially goes through and adds FP8DotGeneralOp to the Linear modules.
-    """
-
-    def _is_special_module(module):
-        # TODO: add conv?
-        return isinstance(module, hnn.Linear) or isinstance(module, hnn.Stacked)
-
-    def _batchify_ctor(ctor, batch_dims):
-        # this is gross but it basically just vmaps the ctor over each batch dimension
-        return functools.reduce(lambda ctor, batch_axis: vmap(ctor, batch_axis), reversed(batch_dims), ctor)
-
-    # TODO: test scanlayers for dg
-    def int8_quantize_module(path_prefix, batch_dims: tuple[Axis, ...], path, module: T) -> T:
-        path = path_prefix + path
-        if isinstance(module, hnn.Stacked):
-            new_inner = jax.tree_util.tree_map_with_path(
-                functools.partial(int8_quantize_module, path_prefix + (GetAttrKey("stacked"),), batch_dims + (module.Block,)),  # type: ignore
-                module.stacked,
-                is_leaf=_is_special_module,
-            )
-            return dataclasses.replace(module, stacked=new_inner)  # type: ignore
-        elif isinstance(module, hnn.Linear):
-            vmapped_dg = _batchify_ctor(Int8DotGeneralOp.init, batch_dims)()
-            module = dataclasses.replace(module, dot_general=vmapped_dg)  # type: ignore
-            return module
-        else:
-            return module
-
-    return jax.tree_util.tree_map_with_path(
-        lambda p, m: int8_quantize_module((), (), p, m), tree, is_leaf=_is_special_module
-    )
-
-
-def _matches_target_fp8(key_path, config: Fp8Config) -> bool:
+def _matches_target(key_path, config: QuantizationConfig) -> bool:
     if not key_path:
         key = ""
     else:
