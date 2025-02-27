@@ -150,7 +150,9 @@ def test_where(use_jit):
     Volume = hax.Axis("Volume", Height.size * Width.size * Depth.size)
     named7 = hax.random.uniform(PRNGKey(0), (Height, Width, Depth))
     named8, named9, named10 = hax_where(named7 > 0.5, fill_value=-1, new_axis=Volume)
-    assert jnp.all((named7[{"Height": named8, "Width": named9, "Depth": named10}] > 0.5).array)
+    unnamed_7 = named7.array
+    unnamed_8, unnamed_9, unnamed_10 = jnp.where(unnamed_7 > 0.5, size=Volume.size, fill_value=-1)
+    assert jnp.all(unnamed_8 == named8.array)
 
 
 def test_clip():
