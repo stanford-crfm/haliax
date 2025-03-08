@@ -130,8 +130,6 @@ def test_scan_with_aux_named_args():
     z_seq, z_seq_scan = m_seq.scan(x, initial_y, key=jax.random.split(jax.random.PRNGKey(2), Block.size))
     assert hax.all(hax.isclose(z, z_seq, atol=1e-5))
 
-    z_seq_scan = hax.stack(Block, z_seq_scan)
-
     assert hax.all(hax.isclose(z_scan, z_seq_scan, atol=1e-5))
 
 

@@ -1,10 +1,13 @@
+import dataclasses
 import functools
 import re
-from typing import Any, Dict, Generic, Optional, Protocol, Sequence, Type, TypeVar, cast
+import warnings
+from typing import Any, Dict, Generic, Literal, Optional, Protocol, Sequence, Type, TypeVar, Union, cast
 
 import equinox as eqx
 import jax
 from jax import numpy as jnp
+from jax.ad_checkpoint import checkpoint_name
 
 import haliax
 import haliax.util
@@ -26,6 +29,102 @@ class ModuleInit(Protocol[M_co]):
         ...
 
 
+@dataclasses.dataclass
+class StackedCheckpointPolicy:
+    """
+    A class that represents a checkpoint policy for blocks in a Stacked module. This is used to control
+    gradient checkpointing in Stacked and BlockFoldable
+    """
+
+    prevent_cse: bool = False
+    save_carries: bool | Literal["offload"] = True
+    """
+    Whether to save all carries in the forward pass. If True, carries are saved in the forward pass and used in the
+    backward pass. If "offload", carries are saved in the forward pass and offloaded to the host
+    """
+    save_intermediates: bool | Literal["offload"] = True
+    """
+    Whether to save intermediates in the forward pass. If True, intermediates are saved in the forward pass and
+    used in the backward pass. If "offload", intermediates are saved in the forward pass and offloaded to the host
+    """
+    save_block_internals: bool | list[str] = True
+    """
+    Whether to save internal state of blocks. If a list, only the listed names are saved, as
+    with [jax.checkpoint_policies.save_only_these_names][].
+
+    See Also: https://docs.jax.dev/en/latest/gradient-checkpointing.html#custom-policies-for-offload
+    """
+
+    @staticmethod
+    def from_bool_or_str(remat_policy: bool | str):
+        """
+        Convert a boolean or string into a BlockCheckpointPolicy. This is useful for converting user input
+        into a BlockCheckpointPolicy.
+
+        Choices:
+            * True: save intermediates, don't save block internals. This is the classic Haliax behavior.
+            * False: save everything.
+            * "offload": offload intermediates to the host, don't save block internals.
+            * "recompute" or "full": don't save intermediates or block internals.
+            * "save_all": save intermediates and block internals. Equivalent to False
+        """
+        if remat_policy == "offload":
+            return StackedCheckpointPolicy(
+                save_carries="offload", save_intermediates="offload", save_block_internals=False
+            )
+        elif remat_policy == "recompute" or remat_policy == "full":
+            return StackedCheckpointPolicy(save_carries=False, save_intermediates=False, save_block_internals=False)
+        elif remat_policy == "save_all":
+            return StackedCheckpointPolicy(save_carries=True, save_intermediates=True, save_block_internals=True)
+        elif remat_policy is True:
+            return StackedCheckpointPolicy(save_carries=True, save_intermediates=True, save_block_internals=False)
+        elif remat_policy is False:
+            return StackedCheckpointPolicy(save_carries=True, save_intermediates=True, save_block_internals=True)
+        else:
+            raise ValueError(f"Invalid checkpoint policy {remat_policy}")
+
+    @staticmethod
+    def _mk(remat_policy: Union[bool, str, "StackedCheckpointPolicy"]) -> "StackedCheckpointPolicy":
+        if isinstance(remat_policy, StackedCheckpointPolicy):
+            return remat_policy
+        else:
+            return StackedCheckpointPolicy.from_bool_or_str(remat_policy)
+
+    def checkpoint(self, carry_name: str, intermediate_name: str, callable):
+        policy = self._to_jax_policy(carry_name, intermediate_name)
+        if policy is None:
+            return callable
+        else:
+            return eqx.filter_checkpoint(callable, policy=policy, prevent_cse=self.prevent_cse)
+
+    def _to_jax_policy(self, carry_name: str, intermediate_name: str):
+        policies = []
+        our_names_to_save = []
+        if self.save_intermediates:
+            our_names_to_save.append(intermediate_name)
+        if self.save_carries:
+            our_names_to_save.append(carry_name)
+
+        if len(our_names_to_save) > 0:
+            policies.append(jax.checkpoint_policies.save_only_these_names(*our_names_to_save))
+
+        if self.save_block_internals is True:
+            policies.append(jax.checkpoint_policies.save_any_names_but_these(carry_name, intermediate_name))
+        elif isinstance(self.save_block_internals, Sequence):
+            policies.append(jax.checkpoint_policies.save_only_these_names(*self.save_block_internals))
+
+        if len(policies) == 0:
+            return None
+        elif len(policies) == 1:
+            return policies[0]
+        else:
+            out = policies[0]
+            for p in policies[1:]:
+                out = jax.checkpoint_policies.save_from_both_policies(out, p)
+
+            return out
+
+
 class BlockFoldable(Protocol[M]):
     """
     A superclass for [haliax.nn.Stacked][] and [haliax.nn.BlockSeq][] that exposes the fold and scan methods, as
@@ -39,7 +138,12 @@ class BlockFoldable(Protocol[M]):
 
     @classmethod
     def init(
-        cls: Type[S], Block: Axis, module: Type[M], *, gradient_checkpointing: bool = False, prevent_cse: bool = False
+        cls: Type[S],
+        Block: Axis,
+        module: Type[M],
+        *,
+        gradient_checkpointing: bool | StackedCheckpointPolicy = False,
+        prevent_cse: bool = False,
     ) -> ModuleInit[S]:
         ...
 
@@ -70,23 +174,37 @@ class BlockSeq(ModuleWithStateDictSerialization, Generic[M]):
 
     blocks: Sequence[M]
     Block: Axis = eqx.static_field()
-    gradient_checkpointing: bool = eqx.static_field()
+    gradient_checkpointing: StackedCheckpointPolicy = eqx.static_field()
 
     @classmethod
     def init(
-        cls: Type[S], Block: Axis, module: Type[M], *, gradient_checkpointing: bool = False, prevent_cse: bool = False
+        cls: Type[S],
+        Block: Axis,
+        module: Type[M],
+        *,
+        gradient_checkpointing: bool | StackedCheckpointPolicy = False,
+        prevent_cse: bool | None = None,
     ) -> ModuleInit[S]:
         """
         This is a curried init method that takes the Block and module and returns a function that takes
         the arguments to the module's init method. Any NamedArrays in the arguments will be sliced along the
         Block axis (if it exists). JAX arrays will be sliced along the first axis.
         """
-        del prevent_cse  # not needed, but kept for compat with Stacked
+
+        gradient_checkpointing = StackedCheckpointPolicy._mk(gradient_checkpointing)
+
+        if prevent_cse is not None:
+            warnings.warn(
+                "The prevent_cse argument is deprecated and will be removed in a future version of Haliax. Use the"
+                " StackedCheckpointPolicy instead.",
+                DeprecationWarning,
+            )
+            gradient_checkpointing = dataclasses.replace(gradient_checkpointing, prevent_cse=prevent_cse)
 
         @functools.wraps(module)
         def fn(*args, **kwargs):
             # The only complexity here is that the args and kwargs might have a Block axis in them,
-            # in which case we need to loop over them them to slice them out.
+            # in which case we need to loop over them to slice them out.
 
             def init_block(i):
                 (block_args, block_kwargs) = haliax.tree_util.tree_map(
@@ -101,38 +219,50 @@ class BlockSeq(ModuleWithStateDictSerialization, Generic[M]):
         return fn
 
     def scan(self, init: T, *extra_args, **extra_kwargs):
-        out = []
-        carry = init
+        def do_scan(init, *extra_args, **extra_kwargs):
+            out = []
+            carry = init
 
-        for i, block in enumerate(self.blocks):
-            if self.gradient_checkpointing:
-                block = filter_checkpoint(block)
-            (block_args, block_kwargs) = haliax.tree_util.tree_map(
-                functools.partial(BlockSeq._slice_out, self.Block, i), (extra_args, extra_kwargs)
-            )
-            block_result = block(carry, *block_args, **block_kwargs)
-            if not isinstance(block_result, (tuple, list)) or len(block_result) != 2:
-                raise ValueError(
-                    f"BlockSeq.scan expects the block to return a pair of (carry, extra), got {block_result}"
+            for i, block in enumerate(self.blocks):
+
+                (block_args, block_kwargs) = haliax.tree_util.tree_map(
+                    functools.partial(BlockSeq._slice_out, self.Block, i), (extra_args, extra_kwargs)
                 )
 
-            carry, extra = block_result
+                block_result = block(carry, *block_args, **block_kwargs)
 
-            out.append(extra)
+                if not isinstance(block_result, (tuple, list)) or len(block_result) != 2:
+                    raise ValueError(
+                        f"BlockSeq.scan expects the block to return a pair of (carry, extra), got {block_result}"
+                    )
 
-        # TODO: do we want to stack the outputs?
-        return carry, out
+                carry, extra = block_result
+
+                carry = _tree_checkpoint_name(carry, self._carry_ckpt_name)
+                extra = _tree_checkpoint_name(extra, self._intermediate_ckpt_name)
+
+                out.append(extra)
+
+            return carry, haliax.tree_util.tree_map(lambda *x: haliax.stack(self.Block, x), *out)
+
+        do_scan = self.gradient_checkpointing.checkpoint(self._carry_ckpt_name, self._intermediate_ckpt_name, do_scan)
+
+        return do_scan(init, *extra_args, **extra_kwargs)
 
     def fold(self, init: T, *args, **kwargs) -> T:
-        carry = init
-        for i, block in enumerate(self.blocks):
-            if self.gradient_checkpointing:
-                block = filter_checkpoint(block)
-            (block_args, block_kwargs) = haliax.tree_util.tree_map(
-                functools.partial(BlockSeq._slice_out, self.Block, i), (args, kwargs)
-            )
-            carry = block(carry, *block_args, **block_kwargs)
-        return carry
+        def do_fold(init, *args, **kwargs):
+            carry = init
+            for i, block in enumerate(self.blocks):
+                (block_args, block_kwargs) = haliax.tree_util.tree_map(
+                    functools.partial(BlockSeq._slice_out, self.Block, i), (args, kwargs)
+                )
+                carry = block(carry, *block_args, **block_kwargs)
+                carry = _tree_checkpoint_name(carry, self._carry_ckpt_name)
+            return carry
+
+        do_fold = self.gradient_checkpointing.checkpoint(self._carry_ckpt_name, self._intermediate_ckpt_name, do_fold)
+
+        return do_fold(init, *args, **kwargs)
 
     def unstacked(self) -> Sequence[M]:
         return self.blocks
@@ -173,6 +303,14 @@ class BlockSeq(ModuleWithStateDictSerialization, Generic[M]):
             state_dict.update(block_dict)
 
         return state_dict
+
+    @property
+    def _intermediate_ckpt_name(self):
+        return f"BlockSeq[{self.Block}, {self.blocks[0].__class__.__name__}].intermediates"
+
+    @property
+    def _carry_ckpt_name(self):
+        return f"BlockSeq[{self.Block}, {self.blocks[0].__class__.__name__}].carry"
 
 
 class Stacked(ModuleWithStateDictSerialization, Generic[M]):
@@ -227,28 +365,45 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
 
     stacked: M
     Block: Axis = eqx.static_field()
-    # TODO: support fancier gradient checkpointing
-    gradient_checkpointing: bool = eqx.static_field()
-    prevent_cse: bool = eqx.static_field()
+    gradient_checkpointing: StackedCheckpointPolicy = eqx.static_field()
 
     @classmethod
     def init(
-        cls, Block: Axis, module: Type[M], *, gradient_checkpointing: bool = False, prevent_cse: bool = False
+        cls,
+        Block: Axis,
+        module: Type[M],
+        *,
+        gradient_checkpointing: bool | StackedCheckpointPolicy | str = False,
+        prevent_cse: bool | None = None,
     ) -> ModuleInit["Stacked[M]"]:
         """
         Initialize a Stacked module. This method is curried: you can pass in the Block and module, and it will return
         a function that takes (batched) arguments to the vmapped module's init method.
-        :param Block:
-        :param module:
-        :param gradient_checkpointing:
-        :param prevent_cse:
-        :return:
+
+        Args:
+            Block: The axis that will be stacked over. This is typically a "layer" axis, but could be any axis.
+            module: The module that will be stacked. This module must take a batched input and return a batched output.
+            gradient_checkpointing: Whether to use gradient checkpointing. If True, uses the default policy. If a string,
+                uses the policy specified by the string. If a StackedCheckpointPolicy, uses that policy.
+            prevent_cse: Whether to prevent common subexpression elimination in the checkpointed function. This is useful
+                for debugging, but may slow down the function.
         """
+
+        gradient_checkpointing = StackedCheckpointPolicy._mk(gradient_checkpointing)
+
+        if prevent_cse is not None:
+            warnings.warn(
+                "The prevent_cse argument is deprecated and will be removed in a future version of Haliax. Use the"
+                " StackedCheckpointPolicy instead.",
+                DeprecationWarning,
+            )
+
+            gradient_checkpointing = dataclasses.replace(gradient_checkpointing, prevent_cse=prevent_cse)
 
         @functools.wraps(module)
         def fn(*args, **kwargs):
             stacked = haliax.vmap(module.init, Block)(*args, **kwargs)
-            return Stacked(stacked, Block, gradient_checkpointing, prevent_cse)
+            return Stacked(stacked, Block, gradient_checkpointing)
 
         return fn
 
@@ -279,11 +434,21 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
         Returns:
 
         """
-        if self.gradient_checkpointing:
-            do_block = filter_checkpoint(self._do_block, prevent_cse=self.prevent_cse)
-        else:
-            do_block = self._do_block
-        return haliax.scan(do_block, self.Block)(init, self.stacked, *extra_args, **extra_kwargs)
+        carry_name = self._carry_ckpt_name
+        intermediate_name = self._intermediate_ckpt_name
+
+        def do_block(carry, block, *args, **kwargs):
+            carry, out = block(carry, *args, **kwargs)
+            carry = _tree_checkpoint_name(carry, carry_name)
+            out = _tree_checkpoint_name(out, intermediate_name)
+            return carry, out
+
+        def do_scan(init, *extra_args, **extra_kwargs):
+            return haliax.scan(do_block, self.Block)(init, self.stacked, *extra_args, **extra_kwargs)
+
+        do_scan = self.gradient_checkpointing.checkpoint(carry_name, intermediate_name, do_scan)
+
+        return do_scan(init, *extra_args, **extra_kwargs)
 
     def fold(self, init, *args, **kwargs):
         """
@@ -307,12 +472,19 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
         Returns:
 
         """
-        if self.gradient_checkpointing:
-            do_block = filter_checkpoint(self._do_block, prevent_cse=self.prevent_cse)
-        else:
-            do_block = self._do_block
+        carry_name = self._carry_ckpt_name
 
-        return haliax.fold(do_block, self.Block)(init, self.stacked, *args, **kwargs)
+        def do_block(carry, block, *args, **kwargs):
+            carry = block(carry, *args, **kwargs)
+            carry = _tree_checkpoint_name(carry, carry_name)
+            return carry
+
+        def do_fold(init, *extra_args, **extra_kwargs):
+            return haliax.fold(do_block, self.Block)(init, self.stacked, *extra_args, **extra_kwargs)
+
+        do_scan = self.gradient_checkpointing.checkpoint(carry_name, self._intermediate_ckpt_name, do_fold)
+
+        return do_scan(init, *args, **kwargs)
 
     @staticmethod
     def _do_block(carry, block, *extra_args, **extra_kwargs):
@@ -362,6 +534,14 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
         stacked = _stack_state_dict(state_dict, prefix=prefix)
         out = super().from_state_dict(stacked, prefix=prefix)  # type: ignore
         return out
+
+    @property
+    def _carry_ckpt_name(self):
+        return f"Stacked[{self.Block}, {self.stacked.__class__.__name__}].carry"
+
+    @property
+    def _intermediate_ckpt_name(self):
+        return f"Stacked[{self.Block}, {self.stacked.__class__.__name__}].intermediates"
 
 
 def _stack_state_dict(state_dict: StateDict, prefix: Optional[str] = None) -> StateDict:
@@ -423,3 +603,13 @@ def _unstack_state_dict(state_dict: StateDict, prefix: Optional[str] = None) -> 
             new_dict[k] = v
 
     return new_dict
+
+
+def _tree_checkpoint_name(x, name):
+    def _checkpoint_leaf(x):
+        if is_jax_array_like(x):
+            return checkpoint_name(x, name)
+        else:
+            return x
+
+    return jax.tree.map(_checkpoint_leaf, x)
