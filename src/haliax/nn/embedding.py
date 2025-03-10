@@ -24,20 +24,41 @@ class Embedding(eqx.Module):
 
     @staticmethod
     def init(Vocab: Axis, Embed: AxisSpec, *, init_scale: float = 1, key, initializer_range: Optional[float] = None):
+        """
+        Initialize an Embedding module.
+
+        An embedding module is a simple lookup table that maps integer indices to vectors or tensors.
+        Weights are initialized with a truncated normal distribution with a standard deviation of
+          `init_scale / output_size`.
+
+        Args:
+            Vocab: Axis: The vocabulary axis
+            Embed:
+            init_scale:
+            key:
+            initializer_range:
+
+        Returns:
+
+        """
         if initializer_range is not None:
             warnings.warn("initializer_range is deprecated. Use init_std instead.", DeprecationWarning)
             init_scale = initializer_range
 
         all_axes = (Vocab,) + ensure_tuple(Embed)
         output_size = hax.axis_size(Embed)
-        weight = hax.random.truncated_normal(key, all_axes, -3, 3) * (init_scale / math.sqrt(output_size))
+        weight = hax.random.truncated_normal(key, all_axes, -3, 3) * (init_scale / output_size)
         return Embedding(weight=weight, Vocab=Vocab, Embed=Embed)
 
-    def __call__(self, input_ids, *, key: Optional[PRNGKeyArray] = None):
+    def __call__(self, input_ids: NamedArray, *, key: Optional[PRNGKeyArray] = None):
         return self.embed(input_ids)
 
     @named_call
-    def embed(self, input_ids):
+    def embed(self, input_ids: NamedArray):
+        """
+        Args:
+            input_ids: token IDs with shape > {Vocab}
+        """
         input_embeds = self.weight.take(self.Vocab, input_ids)
         return input_embeds
 

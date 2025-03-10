@@ -55,11 +55,11 @@ Occasionally, an axis size can be inferred in some circumstances but not others.
 
 ### Combining Arrays
 
-We don't include `hstack` or `vstack` because we prefer semantic axes.
 
 ::: haliax.concatenate
 ::: haliax.stack
 
+(We don't include `hstack` or `vstack` because they are subsumed by `stack`.)
 
 ## Array Manipulation
 
@@ -288,6 +288,16 @@ See also the section on [Partitioning](partitioning.md).
 ::: haliax.partitioning.physical_axis_name
 ::: haliax.partitioning.physical_axis_size
 ::: haliax.partitioning.sharding_for_axis
+
+
+## Gradient Checkpointing
+
+Haliax mainly just defers to JAX and [equinox.filter_checkpoint][] for gradient checkpointing. However,
+we provide a few utilities to make it easier to use.
+
+See also [haliax.nn.StackedCheckpointPolicy][].
+
+::: haliax.tree_checkpoint_name
 
 ### Old API
 

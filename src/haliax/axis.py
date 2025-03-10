@@ -35,6 +35,8 @@ def make_axes(**kwargs: int) -> Tuple[Axis, ...]:
     Example:
     ```
     X, Y = axes(X=10, Y=20)
+    ```
+
     """
     return tuple(Axis(name, size) for name, size in kwargs.items())
 

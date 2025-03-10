@@ -58,6 +58,9 @@ def logsumexp(a: A, axis: Optional[AxisSelection] = None) -> A:
     return wrap_reduction_call(jnn.logsumexp, a, axis=axis, single_axis_only=False, supports_where=False)
 
 
+# TODO: support where in softmax, etc
+
+
 def softmax(a: A, axis: Optional[AxisSelection] = None) -> A:
     return wrap_axiswise_call(jnn.softmax, a, axis=axis, single_axis_only=False)
 

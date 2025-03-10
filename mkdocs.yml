@@ -43,25 +43,33 @@ plugins:
             - https://jax.readthedocs.io/en/latest/objects.inv
             - https://docs.kidger.site/equinox/objects.inv
             - https://einops.rocks/objects.inv
+          selection:
+            inherited_members: true
           options:
             docstring_options:
               ignore_init_summary: true
               docstring_style: sphinx
             show_source: false
-            docstring_section_style: list
-            heading_level: 5
+            filters:
+              - "!^_"
+            heading_level: 4
             inherited_members: true
             merge_init_into_class: true
+            parameter_headings: true
+            separate_signature: false
             load_external_modules: true
             preload_modules: [haliax, haliax.core]
-#            separate_signature: true
+            show_if_no_docstring: true
             show_root_heading: true
             show_root_full_path: false
-#            show_signature_annotations: true
-            show_symbol_type_heading: false
+            show_signature_annotations: true
+            docstring_section_style: list
+            show_symbol_type_heading: true
             show_symbol_type_toc: false
             signature_crossrefs: true
             line_length: 100
+            summary: true
+
   - include-markdown
 extra_css:
   - css/material.css

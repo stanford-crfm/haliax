@@ -1,20 +1,11 @@
-# FP8 Training
+# Quantized Training
 
 !!! warning
 
-    FP8 training in Haliax is currently experimental and may change in the future.
+    FP8 and Int8 training in Haliax is currently experimental and may change in the future.
 
-FP8 refers to 8-bit floating point numbers. FP8 is a massively reduced precision compared to the 32-bit floating point numbers
-or 16-bit floating point numbers that are typically used in deep learning: there are only 256 possible values in FP8, compared to
-the (almost) 2^32 in 32-bit and 2^16 in 16-bit. However, FP8 is still useful for training deep learning models, especially on
-hardware that is optimized for FP8. In particular, it can massively accelerate training on hardware that is optimized for FP8:
-H100 has 2x FP8 FLOPS compared to FP16 FLOPS and almost 60x(!) compared to F32 FLOPS.
-
-The FP8 in Haliax is currently designed to optimize throughput on FP8-enabled devices (currently H100) rather
-than to save memory. In particular, Haliax's FP8 support is not designed to quantize a model to FP8 for deployment,
-though this shouldn't be that hard to add for models that were trained using this functionality.
-We would be happy to accept contributions to add this functionality,
-and are happy to work with you to do so. In particular, adding this for models trained using Haliax's FP8 should be easy.
+Haliax supports training with FP8 and int8. This is useful for training on hardware that is optimized for FP8 or Int8,
+such as the H100 (fp8) or A100s (int8) and TPU v5 and newer (int8).
 
 ## TL;DR
 
@@ -38,15 +29,42 @@ module = haxq.apply_updates(module, updates, overwrite)
 
 And train your model like normal.
 
-## How to use FP8
+Similarly, you can use `Int8` by setting `Int8=True` in the `QuantizationConfig` object.
 
-To use FP8, you need to do two things:
 
-* Enable FP8 for the layers you want to use FP8
-* Modify your training step to be compatible with FP8
+
+## What is FP8?
+
+FP8 refers to 8-bit floating point numbers. FP8 is a massively reduced precision compared to the 32-bit floating point numbers
+or 16-bit floating point numbers that are typically used in deep learning: there are only 256 possible values in FP8, compared to
+the (almost) 2^32 in 32-bit and 2^16 in 16-bit. However, FP8 is still useful for training deep learning models, especially on
+hardware that is optimized for FP8. In particular, it can massively accelerate training on hardware that is optimized for FP8:
+H100 has 2x FP8 FLOPS compared to FP16 FLOPS and almost 60x(!) compared to F32 FLOPS.
+
+The FP8 in Haliax is currently designed to optimize throughput on FP8-enabled devices (currently H100) rather
+than to save memory. In particular, Haliax's FP8 support is not designed to quantize a model to FP8 for deployment,
+though this shouldn't be that hard to add for models that were trained using this functionality.
+We would be happy to accept contributions to add this functionality,
+and are happy to work with you to do so. In particular, adding this for models trained using Haliax's FP8 should be easy.
+
+See this [FP8 Primer](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/examples/fp8_primer.html) for more information on FP8.
+
+## What is Int8?
+
+Int8 refers to 8-bit integers. Int8 has the same number of bits as FP8, but the interpretation is different: instead of
+exponentially spaced numbers, Int8 has linearly spaced numbers.
+
+In Haliax, we support Int8 training through Google's [AQT](https://github.com/google/aqt) library. AQT (for
+"Accurate Quantization Training") is a library that allows you to train models with quantization-aware training (QAT).
+
+## How to use FP8 or Int8 in Haliax
+
+To use quantized training in Haliax, you need to do three things:
+
+* Enable FP8 (or int8) for the layers you want
+* Modify your training step to be compatible
 
 Each of these is just a couple of lines of code.
-
 
 ```python
 import haliax as hax
@@ -96,8 +114,8 @@ updates, opt_state = opt.update(grads, opt_state, params=module)  # or however y
 module = hax.quantization.apply_updates(module, updates, grads)
 ```
 
-That's it! Just a few lines of code to enable FP8. The `quantize_linear_layers` function will transform your module to use FP8
-for linear layers (or a subset if you want), and the combo of `partition_for_grad_overwrite` and `apply_updates` function will apply the updates to the module
+That's it! Just a few lines of code to enable FP8. The `quantize_linear_layers` function will transform your module to use
+quantization-aware training for linear layers (or a subset if you want), and the combo of `partition_for_grad_overwrite` and `apply_updates` function will apply the updates to the module
 in a way that is compatible with FP8.
 
 ## How FP8 works
@@ -134,6 +152,13 @@ original precision.  It remembers the maximum absolute value for each of the inp
 and scales the gradients back to the original precision. It remembers the maximum absolute value for the incoming
 gradient and stores it in the gradient.
 
+## How Int8 works
+
+Int8 is in principle the same, though the details differ. AQT is a much more flexible library than the FP8 implementation,
+because it can be a bit more finicky. We use AQT directly, and we recommend you look at the
+[AQT documentation](https://github.com/google/aqt?tab=readme-ov-file#how-aqt-works-internally) for more
+information on how it works.
+
 # API Reference
 
 ## Functions
@@ -152,7 +177,8 @@ gradient and stores it in the gradient.
 
 ::: haliax.quantization.DefaultDotGeneralOp
 ::: haliax.quantization.Fp8DotGeneralOp
+::: haliax.quantization.Int8DotGeneralOp
 
 ## Configuration
 
-::: haliax.quantization.Fp8Config
+::: haliax.quantization.QuantizationConfig

@@ -1,5 +1,5 @@
 /* Indentation. */
-div.doc-contents:not(.first) {
+div.doc-contents {
   padding-left: 25px;
   border-left: .05rem solid var(--md-typeset-table-color);
 }

@@ -21,10 +21,16 @@ of the same module (e.g. transformer blocks), which is a common pattern in deep 
 
 ### Meta
 
-::: haliax.nn.scan.BlockFoldable
-::: haliax.nn.BlockSeq
-::: haliax.nn.Stacked
 ::: haliax.nn.MLP
+
+### Stacked
+
+See also the full documentation of [Stacked](stacked.md).
+
+::: haliax.nn.Stacked
+::: haliax.nn.BlockSeq
+::: haliax.nn.scan.BlockFoldable
+::: haliax.nn.StackedCheckpointPolicy
 
 ### Convolution
 
