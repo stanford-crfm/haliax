@@ -157,4 +157,21 @@ to join the prefix to the keys of the state dict.
 
 ## API Reference
 
-::: haliax.state_dict
+::: haliax.state_dict.StateDict
+::: haliax.state_dict.ModuleWithStateDictSerialization
+
+### Saving and Loading State Dicts
+::: haliax.state_dict.save_state_dict
+::: haliax.state_dict.load_state_dict
+
+### Converting betweewn State Dicts and Modules
+
+::: haliax.state_dict.from_state_dict
+::: haliax.state_dict.to_state_dict
+
+### Torch Compatibility
+
+::: haliax.state_dict.from_torch_compatible_state_dict
+::: haliax.state_dict.to_torch_compatible_state_dict
+::: haliax.state_dict.flatten_linear_layers
+::: haliax.state_dict.unflatten_linear_layers

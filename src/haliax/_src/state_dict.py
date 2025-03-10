@@ -395,7 +395,7 @@ def flatten_linear_layers(tree: T) -> T:
         new_In: Axis = flatten_axes(layer.In, "__IN__")
 
         if weight.array is not None:
-            out_first = layer.out_first
+            out_first = layer._out_first
             weight = weight.flatten_axes(layer.Out, new_Out).flatten_axes(layer.In, new_In)
 
             if out_first:

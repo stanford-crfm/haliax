@@ -72,7 +72,10 @@ class Linear(eqx.Module):
         return q
 
     @property
-    def out_first(self):
+    def _out_first(self):
+        """
+        Returns: bool: Whether the output axes are first in the weight matrix
+        """
         # We do it this way because of scan layers
         if isinstance(self.Out, hax.Axis):
             return self.weight.axes[-1] != self.Out
