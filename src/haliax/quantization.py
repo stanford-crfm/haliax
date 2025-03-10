@@ -14,7 +14,7 @@ import jax.random as jrandom
 from aqt.jax.v2.aqt_dot_general import DotGeneral
 from jax import numpy as jnp
 from jax.tree_util import DictKey, FlattenedIndexKey, GetAttrKey, SequenceKey
-from jax.typing import DTypeLike
+from jaxtyping import DTypeLike, PyTree
 
 import haliax.nn as hnn
 from haliax.types import PrecisionLike
