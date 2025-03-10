@@ -34,9 +34,9 @@ plugins:
   - mkdocstrings:
       handlers:
         python:
-          setup_commands:
-              - import pytkdocs_tweaks
-              - pytkdocs_tweaks.main()
+#          setup_commands:
+#              - import pytkdocs_tweaks
+#              - pytkdocs_tweaks.main()
           paths: [src]
           import:
             - https://docs.python.org/3/objects.inv
