@@ -206,6 +206,10 @@ class Int8DotGeneralOp(OverwriteWithGradient):
         cfg = aqt_config.set_context(self.cfg, jrandom.PRNGKey(42), train_step=None)
         return cfg(lhs, rhs, dimension_numbers, precision, preferred_element_type)
 
+    def to_state_dict(tree: PyTree, prefix: Optional[str] = None) -> StateDict:
+        warnings.warn("Ignore all int8 states (if any) for now.")
+        return {}
+
 
 @dataclass(frozen=True)
 class QuantizationConfig:
