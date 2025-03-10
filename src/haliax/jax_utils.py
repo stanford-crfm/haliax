@@ -1,5 +1,6 @@
 import functools as ft
 import typing
+import warnings
 from typing import Any, Callable, Optional, Sequence, Union
 
 import equinox as eqx
@@ -8,8 +9,8 @@ import numpy as np
 from jax import Array
 from jax import numpy as jnp
 from jax import random as jrandom
-from jax._src.numpy import lax_numpy
-from jax._src.typing import DTypeLike
+from jax.ad_checkpoint import checkpoint_name
+from jax.typing import DTypeLike
 from jaxtyping import PRNGKeyArray
 
 import haliax
@@ -27,6 +28,7 @@ except ImportError:
 
 
 F = typing.TypeVar("F", bound=Callable[..., Any])
+T = typing.TypeVar("T")
 
 
 class Static(eqx.Module):
@@ -70,23 +72,9 @@ def filter_eval_shape(*args, **kwargs):
 def filter_checkpoint(fun: Callable, *, prevent_cse: bool = True, policy: Optional[Callable[..., bool]] = None):
     """As `jax.checkpoint`, but allows any Python object as inputs and outputs"""
 
-    @ft.wraps(fun)
-    def _fn(_static, _dynamic):
-        _args, _kwargs = eqx.combine(_static, _dynamic)
-        _out = fun(*_args, **_kwargs)
-        _dynamic_out, _static_out = eqx.partition(_out, is_jax_array_like)
-        return _dynamic_out, Static(_static_out)
+    warnings.warn("filter_checkpoint is deprecated, use eqx.filter_checkpoint instead", DeprecationWarning)
 
-    checkpointed_fun = jax.checkpoint(_fn, prevent_cse=prevent_cse, policy=policy, static_argnums=(0,))
-
-    @ft.wraps(fun)
-    def wrapper(*args, **kwargs):
-        dynamic, static = eqx.partition((args, kwargs), is_jax_array_like)
-        dynamic_out, static_out = checkpointed_fun(static, dynamic)
-
-        return eqx.combine(dynamic_out, static_out.value)
-
-    return wrapper
+    return eqx.filter_checkpoint(fun, prevent_cse=prevent_cse, policy=policy)
 
 
 def is_jax_array_like(x):
@@ -202,7 +190,7 @@ def _jittable_dg_einsum(
         contract_path = opt_einsum.contract_path
     else:
         ty = next(iter(non_constant_dim_types))
-        contract_path = lax_numpy._poly_einsum_handlers.get(ty, lax_numpy._default_poly_einsum_handler)
+        contract_path = jax_einsum._poly_einsum_handlers.get(ty, jax_einsum._default_poly_einsum_handler)
     # using einsum_call=True here is an internal api for opt_einsum... sorry
     operands, contractions = contract_path(*operands, einsum_call=True, use_blas=True, optimize=optimize)
 
@@ -212,3 +200,23 @@ def _jittable_dg_einsum(
     if spec is not None:
         einsum = jax.named_call(einsum, name=spec)
     return einsum(operands, contractions, precision, preferred_element_type, _dot_general)  # type: ignore[operator]
+
+
+def tree_checkpoint_name(x: T, name: str) -> T:
+    """
+    Checkpoint a tree of arrays with a given name. This is useful for gradient checkpointing.
+    This is equivalent to calling [jax.ad_checkpoint.checkpoint_name][]
+    except that it works for any PyTree, not just arrays.
+
+    See Also:
+        * [jax.ad_checkpoint.checkpoint_name][]
+        * [haliax.nn.StackedCheckpointPolicy][]
+    """
+
+    def _checkpoint_leaf(x):
+        if is_jax_array_like(x):
+            return checkpoint_name(x, name)
+        else:
+            return x
+
+    return jax.tree.map(_checkpoint_leaf, x)

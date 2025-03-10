@@ -38,10 +38,7 @@ from .loss import binary_cross_entropy_loss, cross_entropy_loss, cross_entropy_l
 from .mlp import MLP
 from .normalization import LayerNorm, log_softmax, logsumexp, softmax, standardize
 from .pool import max_pool, mean_pool, min_pool
-from .scan import BlockSeq, Stacked
-
-
-# TODO: support where in softmax, etc
+from .scan import BlockSeq, Stacked, StackedCheckpointPolicy
 
 
 def one_hot(x: NamedArray | int, class_axis: Axis, *, dtype=None) -> NamedArray:
