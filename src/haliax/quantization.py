@@ -17,6 +17,7 @@ from jax.tree_util import DictKey, FlattenedIndexKey, GetAttrKey, SequenceKey
 from jaxtyping import DTypeLike, PyTree
 
 import haliax.nn as hnn
+from haliax.state_dict import StateDict
 from haliax.types import PrecisionLike
 
 from ._src.fp8 import dot_general_with_precision, in_qdq, out_qdq
