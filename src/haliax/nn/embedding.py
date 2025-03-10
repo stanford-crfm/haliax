@@ -32,14 +32,11 @@ class Embedding(eqx.Module):
           `init_scale / output_size`.
 
         Args:
-            Vocab: Axis: The vocabulary axis
-            Embed:
-            init_scale:
-            key:
-            initializer_range:
-
-        Returns:
-
+            Vocab: Size of the vocabulary
+            Embed: Shape of the embedding vectors. May be a single axis or a full AxisSpec
+            init_scale: Scale of the initialization
+            key: PRNG key
+            initializer_range: Deprecated. Use init_scale instead.
         """
         if initializer_range is not None:
             warnings.warn("initializer_range is deprecated. Use init_std instead.", DeprecationWarning)
@@ -51,6 +48,7 @@ class Embedding(eqx.Module):
         return Embedding(weight=weight, Vocab=Vocab, Embed=Embed)
 
     def __call__(self, input_ids: NamedArray, *, key: Optional[PRNGKeyArray] = None):
+        """Alias for `embed`. key is ignored."""
         return self.embed(input_ids)
 
     @named_call
@@ -62,9 +60,24 @@ class Embedding(eqx.Module):
         input_embeds = self.weight.take(self.Vocab, input_ids)
         return input_embeds
 
-    def unembed(self, input_embeds):
+    def unembed(self, input_embeds: NamedArray):
+        """
+        Unembed the input embeddings back to the vocabulary space.
+
+        Equivalent to `input_embeds.dot(self.weight, axis=self.Embed)`.
+        """
         return input_embeds.dot(self.weight, axis=self.Embed)
 
     def resize_embeddings(self, new_size: int, key: Optional[PRNGKeyArray] = None):
+        """
+        Resize the embedding layer to a new size.
+        Args:
+            new_size: New size of the vocabulary
+            key: PRNG key for initialization of any new weights
+
+        Returns:
+            Embedding: Resized embedding layer
+
+        """
         new_weights = resize_axis(self.weight, self.Vocab, new_size, key=key)
         return dataclasses.replace(self, Vocab=self.Vocab.resize(new_size), weight=new_weights)  # type: ignore

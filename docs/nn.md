@@ -5,6 +5,7 @@
 
 Haliax provides a small number of neural network modules that are compatible with Equinox, though
 they naturally all use [haliax.NamedArray][]. (We welcome PRs for more modules! Nothing too exotic though.)
+
 The most interesting of these modules is [haliax.nn.Stacked][], which allows you to create homogenous "stacks"
 of the same module (e.g. transformer blocks), which is a common pattern in deep learning.
 
@@ -25,12 +26,7 @@ of the same module (e.g. transformer blocks), which is a common pattern in deep 
 
 ### Stacked
 
-See also the full documentation of [Stacked](stacked.md).
-
-::: haliax.nn.Stacked
-::: haliax.nn.BlockSeq
-::: haliax.nn.scan.BlockFoldable
-::: haliax.nn.StackedCheckpointPolicy
+See the full documentation of [Stacked](stacked.md).
 
 ### Convolution
 

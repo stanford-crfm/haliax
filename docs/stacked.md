@@ -192,3 +192,12 @@ which is double that required by the default policy.
 
 Both `save_carries` and `save_outputs` can either be a boolean or the string "offload". If "offload", then the
 checkpointed values will be offloaded to the host during the forward pass, and reloaded during the backward pass.
+
+
+## API
+
+::: haliax.nn.Stacked
+::: haliax.nn.BlockSeq
+::: haliax.nn.scan.BlockFoldable
+
+::: haliax.nn.StackedCheckpointPolicy

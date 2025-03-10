@@ -54,6 +54,7 @@ plugins:
               - "!^_"
             heading_level: 4
             inherited_members: true
+            members_order: source
             merge_init_into_class: true
             parameter_headings: true
             separate_signature: false

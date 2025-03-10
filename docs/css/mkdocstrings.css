@@ -4,6 +4,16 @@ div.doc-contents {
   border-left: .05rem solid var(--md-typeset-table-color);
 }
 
+
+div.doc-class:not(.doc-contents .doc-contents)::after {
+  content: "";
+  display: block;
+  width: 100%;
+  height: 1px; /* Adjust thickness */
+  background-color: black; /* Adjust color */
+  margin: 10px 0; /* Adjust spacing */
+}
+
 /* Mark external links as such. */
 a.external::after,
 a.autorefs-external::after {
