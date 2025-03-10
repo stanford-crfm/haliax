@@ -14,9 +14,10 @@ import jax.random as jrandom
 from aqt.jax.v2.aqt_dot_general import DotGeneral
 from jax import numpy as jnp
 from jax.tree_util import DictKey, FlattenedIndexKey, GetAttrKey, SequenceKey
-from jax.typing import DTypeLike
+from jaxtyping import DTypeLike, PyTree
 
 import haliax.nn as hnn
+from haliax.state_dict import StateDict
 from haliax.types import PrecisionLike
 
 from ._src.fp8 import dot_general_with_precision, in_qdq, out_qdq
@@ -205,6 +206,10 @@ class Int8DotGeneralOp(OverwriteWithGradient):
     ):
         cfg = aqt_config.set_context(self.cfg, jrandom.PRNGKey(42), train_step=None)
         return cfg(lhs, rhs, dimension_numbers, precision, preferred_element_type)
+
+    def to_state_dict(tree: PyTree, prefix: Optional[str] = None) -> StateDict:
+        warnings.warn("Ignore all int8 states (if any) for now.")
+        return {}
 
 
 @dataclass(frozen=True)
