@@ -24,6 +24,7 @@ def uniform(
     minval = broadcast_to(minval, shape).array
     maxval = broadcast_to(maxval, shape).array
     jax_shape = _to_jax_shape(shape)
+    print(jax_shape, minval, maxval)
     jax_array = jrandom.uniform(key=key, shape=jax_shape, dtype=dtype, minval=minval, maxval=maxval)
     return haliax.auto_sharded(NamedArray(jax_array, shape))
 

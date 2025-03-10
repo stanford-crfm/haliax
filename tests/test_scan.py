@@ -1,11 +1,9 @@
 import equinox as eqx
 import jax
 import pytest
-from equinox import filter_value_and_grad
 
 import haliax as hax
-from haliax.jax_utils import tree_checkpoint_name
-from haliax.nn.scan import BlockSeq, Stacked, StackedCheckpointPolicy
+from haliax.nn.scan import BlockSeq, Stacked
 
 
 def test_unstacked():
@@ -132,6 +130,8 @@ def test_scan_with_aux_named_args():
     z_seq, z_seq_scan = m_seq.scan(x, initial_y, key=jax.random.split(jax.random.PRNGKey(2), Block.size))
     assert hax.all(hax.isclose(z, z_seq, atol=1e-5))
 
+    z_seq_scan = hax.stack(Block, z_seq_scan)
+
     assert hax.all(hax.isclose(z_scan, z_seq_scan, atol=1e-5))
 
 
@@ -164,56 +164,3 @@ def test_stacked_to_state_dict():
     y2 = m2.fold(input, key=key)
 
     assert hax.all(hax.equal(y, y2))
-
-
-def test_checkpoint_carries():
-    class Module(eqx.Module):
-        named: hax.NamedArray
-
-        def __call__(self, x):
-            y = tree_checkpoint_name(hax.sin(x + self.named), "sin")
-            y = tree_checkpoint_name(hax.cos(y + x), "cos")
-            return y + x
-
-        @staticmethod
-        def init(named):
-            return Module(named=named)
-
-    Block = hax.Axis("block", 4)
-    E = hax.Axis("E", 10)
-
-    initial_named = hax.random.uniform(jax.random.PRNGKey(0), (Block, E))
-
-    carry_policy = StackedCheckpointPolicy(save_carries=True, save_outputs=False, save_block_internals=False)
-    save_nothing = StackedCheckpointPolicy(save_carries=False, save_outputs=False, save_block_internals=False)
-    save_everything = StackedCheckpointPolicy(save_carries=True, save_outputs=True, save_block_internals=True)
-    save_internals = StackedCheckpointPolicy(save_carries=False, save_outputs=False, save_block_internals=True)
-    save_cos = StackedCheckpointPolicy(save_carries=False, save_outputs=False, save_block_internals=["cos"])
-    save_sin_carry = StackedCheckpointPolicy(save_carries=True, save_outputs=False, save_block_internals=["sin"])
-
-    for name, (policy, expected_scan_shapes) in {
-        "carry": (carry_policy, [(E.size,), (Block.size, E.size)]),
-        "nothing": (save_nothing, [(E.size,)]),
-        "everything": (save_everything, [(E.size,), (Block.size, E.size), (Block.size, E.size)]),
-        "internals": (save_internals, [(E.size,), (Block.size, E.size), (Block.size, E.size)]),
-        "cos": (save_cos, [(E.size,), (Block.size, E.size)]),
-        "sin": (save_sin_carry, [(E.size,), (Block.size, E.size), (Block.size, E.size)]),
-    }.items():
-        m = Stacked.init(
-            Block,
-            Module,
-            gradient_checkpointing=policy,
-        )(named=initial_named)
-
-        def loss_fn(m, x):
-            y = m.fold(x)
-            return hax.sum(y).scalar()
-
-        grad_fn = filter_value_and_grad(loss_fn)
-
-        jaxpr = jax.make_jaxpr(grad_fn)(m, hax.random.uniform(jax.random.PRNGKey(1), (E,)))
-        closed_call = next(eqn for eqn in jaxpr.jaxpr.eqns if eqn.primitive == jax.core.closed_call_p)
-        out_shapes = [out.aval.shape for out in closed_call.outvars]
-
-        # saved_residuals doesn't give me sensible results, so I'm doing this by hand
-        assert out_shapes == expected_scan_shapes, f"{name}: Expected {expected_scan_shapes}, got {out_shapes}"

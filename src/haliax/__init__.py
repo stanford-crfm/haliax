@@ -61,7 +61,7 @@ from .core import (
     updated_slice,
 )
 from .hof import fold, map, scan, vmap
-from .jax_utils import tree_checkpoint_name
+from .jax_utils import filter_checkpoint
 from .ops import clip, isclose, pad_left, trace, tril, triu, where
 from .partitioning import auto_sharded, axis_mapping, fsdp, named_jit, shard, shard_with_axis_mapping
 from .specialized_fns import top_k
@@ -887,6 +887,7 @@ def true_divide(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
 # deprecated name
 concat_axis_specs = concat_axes
 
+
 __all__ = [
     "debug",
     "random",
@@ -1070,5 +1071,4 @@ __all__ = [
     "ravel",
     "flatten",
     "is_named_array",
-    "tree_checkpoint_name",
 ]
