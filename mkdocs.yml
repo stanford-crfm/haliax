@@ -91,6 +91,7 @@ nav:
     - Rearrange: 'rearrange.md'
     - Matrix Multiplication: 'matmul.md'
   - Neural Networks: 'nn.md'
+  - Module Stacks: 'stacked.md'
   - Partitioning: 'partitioning.md'
   - Higher Order Functions: 'hof.md'
   - FP8: 'fp8.md'
