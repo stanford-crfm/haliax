@@ -144,9 +144,13 @@ class StackedCheckpointPolicy:
             return eqx.filter_checkpoint(callable, policy=policy, prevent_cse=self.prevent_cse)
 
     def _to_jax_policy(self, carry_name: str, output_name: str):
+        assert isinstance(carry_name, str)
+        assert isinstance(output_name, str)
         our_names_to_save = []
         our_names_to_offload = []
         our_names_to_remat = []
+
+        # return jax.checkpoint_policies.save_only_these_names(carry_name, output_name)
 
         if self.save_outputs is True:
             our_names_to_save.append(output_name)
@@ -182,18 +186,23 @@ class StackedCheckpointPolicy:
                 if self.save_block_internals is True:
                     p1 = jax.checkpoint_policies.save_anything_except_these_names(*our_names_to_remat)
                     if len(our_names_to_save) > 0:
+                        print(f"Saving {our_names_to_save} and anything else except {our_names_to_remat}")
                         p2 = jax.checkpoint_policies.save_only_these_names(*our_names_to_save)
                         return jax.checkpoint_policies.save_from_both_policies(p1, p2)
                     else:
+                        print(f"Saving anything except {our_names_to_remat}")
                         return p1
                 else:
+                    print(f"Saving only {our_names_to_save}")
                     return jax.checkpoint_policies.save_only_these_names(*our_names_to_save)
             elif len(our_names_to_save) > 0:
                 p1 = jax.checkpoint_policies.save_only_these_names(*our_names_to_save)
                 if self.save_block_internals is True:
                     p2 = jax.checkpoint_policies.save_anything_except_these_names(*our_names_to_remat)
+                    print(f"Saving {our_names_to_save} and anything else except {our_names_to_remat}")
                     return jax.checkpoint_policies.save_from_both_policies(p1, p2)
                 else:
+                    print(f"Saving only {our_names_to_save}")
                     return p1
             elif self.save_block_internals is True:
                 return jax.checkpoint_policies.save_anything_except_these_names(*our_names_to_remat)
@@ -521,8 +530,6 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
 
         def do_scan(init, *extra_args, **extra_kwargs):
             carry, out = haliax.scan(do_block, self.Block)(init, self.stacked, *extra_args, **extra_kwargs)
-            # carry = _tree_checkpoint_name(carry, carry_name)
-            # out = _tree_checkpoint_name(out, output_name)
             return carry, out
 
         do_scan = self.gradient_checkpointing.checkpoint(carry_name, output_name, do_scan)
@@ -559,11 +566,12 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
             return carry
 
         def do_fold(init, *extra_args, **extra_kwargs):
-            return haliax.fold(do_block, self.Block)(init, self.stacked, *extra_args, **extra_kwargs)
+            carry = haliax.fold(do_block, self.Block)(init, self.stacked, *extra_args, **extra_kwargs)
+            return carry
 
-        do_scan = self.gradient_checkpointing.checkpoint(carry_name, self._output_ckpt_name, do_fold)
+        do_fold = self.gradient_checkpointing.checkpoint(carry_name, self._output_ckpt_name, do_fold)
 
-        return do_scan(init, *args, **kwargs)
+        return do_fold(init, *args, **kwargs)
 
     @staticmethod
     def _do_block(carry, block, *extra_args, **extra_kwargs):
@@ -616,11 +624,13 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
 
     @property
     def _carry_ckpt_name(self):
-        return f"Stacked[{self.Block}, {self.stacked.__class__.__name__}].carry"
+        # return f"Stacked[{self.Block}, {self.stacked.__class__.__name__}].carry"
+        return "carry"
 
     @property
     def _output_ckpt_name(self):
-        return f"Stacked[{self.Block}, {self.stacked.__class__.__name__}].outputs"
+        # return f"Stacked[{self.Block}, {self.stacked.__class__.__name__}].outputs"
+        return "outputs"
 
 
 def _stack_state_dict(state_dict: StateDict, prefix: Optional[str] = None) -> StateDict:

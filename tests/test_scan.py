@@ -1,7 +1,7 @@
 import equinox as eqx
 import jax
 import pytest
-from equinox import filter_value_and_grad
+from equinox import filter_grad
 
 import haliax as hax
 from haliax.jax_utils import tree_checkpoint_name
@@ -190,8 +190,11 @@ def test_checkpoint_carries():
     save_internals = StackedCheckpointPolicy(save_carries=False, save_outputs=False, save_block_internals=True)
     save_cos = StackedCheckpointPolicy(save_carries=False, save_outputs=False, save_block_internals=["cos"])
     save_sin_carry = StackedCheckpointPolicy(save_carries=True, save_outputs=False, save_block_internals=["sin"])
+    disabled = StackedCheckpointPolicy(disable=True)
 
     for name, (policy, expected_scan_shapes) in {
+        "disabled": (disabled, [(E.size,), (Block.size, E.size), (Block.size, E.size)]),
+        "carry_true": (True, [(E.size,), (Block.size, E.size)]),
         "carry": (carry_policy, [(E.size,), (Block.size, E.size)]),
         "nothing": (save_nothing, [(E.size,)]),
         "everything": (save_everything, [(E.size,), (Block.size, E.size), (Block.size, E.size)]),
@@ -202,18 +205,23 @@ def test_checkpoint_carries():
         m = Stacked.init(
             Block,
             Module,
-            gradient_checkpointing=policy,
+            gradient_checkpointing=policy,  # type: ignore
         )(named=initial_named)
 
         def loss_fn(m, x):
             y = m.fold(x)
             return hax.sum(y).scalar()
 
-        grad_fn = filter_value_and_grad(loss_fn)
+        grad_fn = filter_grad(loss_fn)
 
         jaxpr = jax.make_jaxpr(grad_fn)(m, hax.random.uniform(jax.random.PRNGKey(1), (E,)))
-        closed_call = next(eqn for eqn in jaxpr.jaxpr.eqns if eqn.primitive == jax.core.closed_call_p)
+        closed_call = next(
+            eqn for eqn in jaxpr.jaxpr.eqns if eqn.primitive in [jax.lax.scan_p, jax.core.closed_call_p]
+        )
         out_shapes = [out.aval.shape for out in closed_call.outvars]
+
+        # for residual in saved_residuals(loss_fn, m, hax.random.uniform(jax.random.PRNGKey(1), (E,))):
+        #     print(residual)
 
         # saved_residuals doesn't give me sensible results, so I'm doing this by hand
         assert out_shapes == expected_scan_shapes, f"{name}: Expected {expected_scan_shapes}, got {out_shapes}"
