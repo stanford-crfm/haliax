@@ -41,7 +41,7 @@ class Linear(eqx.Module):
             key: PRNGKeyArray: The PRNG key to use for initialization
             use_bias: bool: Whether to use a bias term
             out_first: bool: Whether to put output axes first in the weight matrix. out_first is how PyTorch does it.
-            dot_general: Callable: The dot_general function to use. Defaults to jax.lax.dot_general. For fp8 or int8
+            dot_general: Callable: The dot_general function to use. Defaults to jax.lax.dot_general.
             init_scale: float: The scale to use for initialization. We scale init by 1/sqrt(Input.size)*init_scale
         """
         joint_spec = hax.concat_axis_specs(Out, In) if out_first else hax.concat_axis_specs(In, Out)
