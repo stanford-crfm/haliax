@@ -8,7 +8,7 @@ import pytest
 import haliax as hax
 from haliax.nn import Linear
 from haliax.nn.scan import _stack_state_dict, _unstack_state_dict
-from haliax.state_dict import flatten_linear_layers, from_state_dict, to_state_dict, unflatten_linear_layers
+from haliax.state_dict import from_state_dict, to_state_dict
 
 
 @pytest.mark.parametrize("out_dims_first", [True, False])
@@ -24,7 +24,7 @@ def test_flatten_linear_layers(out_dims_first: bool):
     else:
         assert linear.weight.axes == (H, W, D, B)
 
-    flat_linear = flatten_linear_layers(linear)
+    flat_linear = linear.flatten_for_export()
 
     flat_state_dict = to_state_dict(flat_linear)
     if out_dims_first:
@@ -36,7 +36,7 @@ def test_flatten_linear_layers(out_dims_first: bool):
 
     # now unflatten it
     linear2 = Linear.init((H, W), (D, B), key=jax.random.PRNGKey(1), use_bias=True, out_first=out_dims_first)
-    new_linear = unflatten_linear_layers(linear2, flat_linear)
+    new_linear = flat_linear.unflatten_from_export(linear2)
 
     if out_dims_first:
         assert new_linear.weight.axes == (D, B, H, W)

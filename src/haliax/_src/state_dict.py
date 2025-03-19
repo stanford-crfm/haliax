@@ -47,6 +47,32 @@ def from_torch_compatible_state_dict(
     return t
 
 
+def flatten_modules_for_export(t: T) -> T:
+    """
+    Flatten all modules in a tree for export to torch.
+    """
+    def _flatten_module(module):
+        if isinstance(module, ModuleWithStateDictSerialization):
+            module = module.flatten_for_export()
+            module = jax.tree.map(_flatten_module, module, is_leaf=lambda x: x is not module and isinstance(x, ModuleWithStateDictSerialization))
+        return module
+
+    return jax.tree.map(_flatten_module, t, is_leaf=lambda x: isinstance(x, ModuleWithStateDictSerialization))
+
+
+def unflatten_modules_from_export(t: T, template: T) -> T:
+    """
+    Unflatten all modules in a tree after import from torch.
+    """
+    def _unflatten_module(module, template):
+        if isinstance(module, ModuleWithStateDictSerialization):
+            module = module.unflatten_from_export(template)
+            module = jax.tree.map(_unflatten_module, module, template, is_leaf=lambda x: x is not module and isinstance(x, ModuleWithStateDictSerialization))
+        return module
+
+    return jax.tree.map(_unflatten_module, t, template, is_leaf=lambda x: isinstance(x, ModuleWithStateDictSerialization))
+
+
 def _flatten_to_unflatten(t, state_dict, prefix):
     """
     Flatten the torch compatible state_dict before loading into t, and then recover the unflattened layers.
@@ -59,9 +85,9 @@ def _flatten_to_unflatten(t, state_dict, prefix):
         return jnp.zeros(struct.shape, struct.dtype)
 
     t = jax.tree.map(_dt_struct_to_array, t)
-    flat_t = flatten_linear_layers(t)
+    flat_t = flatten_modules_for_export(t)
     flat_t = from_state_dict(flat_t, state_dict, prefix=prefix)
-    t = unflatten_linear_layers(t, flat_t)
+    t = unflatten_modules_from_export(flat_t, t)
     return t
 
 
@@ -102,6 +128,26 @@ class ModuleWithStateDictSerialization(eqx.Module):
     def _state_dict_key_map(self) -> dict[str, Optional[str]]:
         """Returns a dict mapping eqx.Module keys to torch keys that need to be renamed for serialization"""
         return {}
+
+    def flatten_for_export(self: Mod) -> Mod:
+        """
+        Flatten articulated named arrays for export to torch
+
+        Note tht if this modules contains other modules,
+        the implementation of this method should call flatten_for_export
+        on those modules as well.
+        """
+        return self
+
+    def unflatten_from_export(self: Mod, template: Mod) -> Mod:
+        """
+        Unflatten the module after import from torch.
+
+        Template has the proper structure (e.g. articulated named axes) but the values are meaningless.
+
+        """
+        del template
+        return self
 
 
 def from_state_dict(tree: T, state_dict: StateDict, prefix: Optional[str] = None) -> T:

@@ -1,3 +1,4 @@
+import dataclasses
 from typing import Optional, TypeVar
 
 import equinox as eqx
@@ -6,6 +7,7 @@ from jax import numpy as jnp
 
 import haliax
 import haliax as hax
+from .._src.state_dict import Mod, ModuleWithStateDictSerialization
 
 from ..axis import AxisSelection, AxisSpec
 from ..core import NamedArray
@@ -15,36 +17,114 @@ from ..wrap import unwrap_namedarrays, wrap_axiswise_call, wrap_reduction_call
 
 A = TypeVar("A", Scalar, NamedArray, jnp.ndarray)
 
-
-class LayerNorm(eqx.Module):
-    r"""
-    Normalises the input along the specified axis (or axes), using the mean and variance of the
-    input along that axis.
-    """
+class _LayerNormBase(ModuleWithStateDictSerialization):
     axis: AxisSpec = eqx.static_field()
     weight: Optional[NamedArray]
     bias: Optional[NamedArray]
-
     eps: float = eqx.static_field(default=1e-5)
+    dtype: Optional[jnp.dtype] = eqx.field(default=None, static=True)
 
-    @staticmethod
-    def init(axis: AxisSpec, eps: float = 1e-5, use_weight: bool = True, use_bias: bool = True):
+    @classmethod
+    def init(
+        cls,
+        axis: AxisSpec,
+        eps: float = 1e-5,
+        *,
+        use_weight: bool = True,
+        use_bias: bool = True,
+        dtype: Optional[jnp.dtype] = None,
+    ):
         if use_weight:
             weight = hax.ones(axis)
         else:
             weight = None
+
         if use_bias:
             bias = hax.zeros(axis)
         else:
             bias = None
 
-        return LayerNorm(axis, weight, bias, eps)
+        return cls(axis, weight, bias, eps, dtype)
+
+    def flatten_for_export(self: Mod) -> Mod:
+        if isinstance(self.axis, hax.Axis):
+            return self
+
+        if self.weight is not None:
+            weight = self.weight.flatten("__OUT")
+        else:
+            weight = None
+
+        if self.bias is not None:
+            bias = self.bias.flatten("__OUT")
+        else:
+            bias = None
+
+        return dataclasses.replace(
+            self, weight=weight, bias=bias, axis=hax.flatten_axes(self.axis, "__OUT")
+        )
+
+
+    def unflatten_from_export(self: Mod, template: Mod) -> Mod:
+        if template.axis == self.axis:
+            return self
+
+        if self.weight is not None:
+            assert isinstance(self.axis, hax.Axis), "Cannot unflatten weight with non-axis axis"
+            weight = hax.unflatten_axis(self.weight, self.axis, template.axis)
+        else:
+            weight = None
+
+        if self.bias is not None:
+            assert isinstance(self.axis, hax.Axis), "Cannot unflatten weight with non-axis axis"
+            bias = hax.unflatten_axis(self.bias, self.axis, template.axis)
+
+        else:
+            bias = None
+
+        return dataclasses.replace(
+            self, weight=weight, bias=bias, axis=template.axis
+        )
+
+
+class LayerNorm(_LayerNormBase):
+    r"""
+    Normalises the input along the specified axis (or axes), using the mean and variance of the
+    input along that axis.
+    """
+    axis: AxisSpec = eqx.field(static=True)
+    weight: Optional[NamedArray]
+    bias: Optional[NamedArray]
+
+    eps: float = eqx.field(default=1e-5, static=True)
+    dtype: Optional[jnp.dtype] = eqx.field(default=None, static=True)
 
     def __call__(self, x: NamedArray) -> NamedArray:
+        dtype = x.dtype
         mean = x.mean(self.axis)
         var = x.var(self.axis)
         inv = hax.rsqrt(var + self.eps)
         out = (x - mean) * inv
+        out = out.astype(dtype)
+
+        if self.weight is not None:
+            out = self.weight * out
+        if self.bias is not None:
+            out = out + self.bias
+        return out
+
+
+class RmsNorm(_LayerNormBase):
+    r"""
+    Implements RMS normalization, which normalizes the input by dividing by the root mean square of the input.
+    """
+    def __call__(self, x: NamedArray) -> NamedArray:
+        in_dtype = x.dtype
+        x = x.astype(self.dtype)
+        var = hax.mean(hax.square(x), axis=self.axis)
+        inv = hax.rsqrt(var + self.eps)
+        out = x * inv
+        out = out.astype(in_dtype)
 
         if self.weight is not None:
             out = self.weight * out

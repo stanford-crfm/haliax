@@ -50,8 +50,6 @@ __all__ = [
     "load_state_dict",
     "save_state_dict",
     "from_state_dict",
-    "flatten_linear_layers",
-    "unflatten_linear_layers",
     "with_prefix",
     "to_state_dict",
     "to_numpy_state_dict",
