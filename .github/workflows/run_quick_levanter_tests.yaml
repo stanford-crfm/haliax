@@ -26,6 +26,8 @@ jobs:
           cd levanter
           pip install -e .[tests]
           pip install -r tests/requirements.txt
+          # i don't know why this is necessary
+          pip install tensorboardX
       - name: Install Haliax on top
         run: |
           # install second since levanter will install a built version of haliax
