@@ -19,8 +19,9 @@ of the same module (e.g. transformer blocks), which is a common pattern in deep 
 
 ### Normalization
 
+::: haliax.nn.normalization.LayerNormBase
 ::: haliax.nn.LayerNorm
-::: haliax.nn.RMSNorm
+::: haliax.nn.RmsNorm
 
 ### Meta
 

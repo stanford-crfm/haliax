@@ -8,14 +8,14 @@ from haliax.types import FilterSpec
 from ._src.state_dict import (
     ModuleWithStateDictSerialization,
     StateDict,
-    flatten_linear_layers,
+    flatten_modules_for_export,
     from_state_dict,
     from_torch_compatible_state_dict,
     load_state_dict,
     save_state_dict,
     to_numpy_state_dict,
     to_state_dict,
-    unflatten_linear_layers,
+    unflatten_modules_from_export,
     with_prefix,
 )
 
@@ -24,23 +24,23 @@ T = TypeVar("T")
 
 
 def to_torch_compatible_state_dict(
-    t: T, *, flatten_linear: bool = True, prefix: Optional[str] = None, filter: FilterSpec = is_jax_array_like
+    t: T, *, flatten: bool = True, prefix: Optional[str] = None, filter: FilterSpec = is_jax_array_like
 ) -> StateDict:
     """
     Convert a tree to a state dict that is compatible with torch-style state dicts.
 
-    This applies [haliax.state_dict.flatten_linear_layers][] followed by [haliax.state_dict.to_state_dict][]
+    This applies the same logic as [to_state_dict][] but also uses [haliax.state_dict.ModuleWithStateDictSerialization.flatten_for_export][] to flatten
 
     Args:
         t: The tree to convert
-        flatten_linear: Whether to flatten linear layers
+        flatten: Whether to flatten axes using flatten_for_export
         prefix: The prefix to use for the state dict keys
         filter: The filter to use for selecting which nodes to include in the state dict. By default, this includes only
             array-like objects (e.g. JAX and NumPy arrays).
     """
     t = equinox.filter(t, filter)
-    if flatten_linear:
-        t = flatten_linear_layers(t)
+    if flatten:
+        t = flatten_modules_for_export(t)
     return to_numpy_state_dict(t, prefix=prefix)
 
 
@@ -55,4 +55,6 @@ __all__ = [
     "to_numpy_state_dict",
     "StateDict",
     "to_torch_compatible_state_dict",
+    "flatten_modules_for_export",
+    "unflatten_modules_from_export",
 ]

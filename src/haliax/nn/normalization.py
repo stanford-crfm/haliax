@@ -1,4 +1,5 @@
 import dataclasses
+from abc import abstractmethod
 from typing import Optional, TypeVar
 
 import equinox as eqx
@@ -7,8 +8,8 @@ from jax import numpy as jnp
 
 import haliax
 import haliax as hax
-from .._src.state_dict import Mod, ModuleWithStateDictSerialization
 
+from .._src.state_dict import Mod, ModuleWithStateDictSerialization
 from ..axis import AxisSelection, AxisSpec
 from ..core import NamedArray
 from ..types import Scalar
@@ -17,12 +18,17 @@ from ..wrap import unwrap_namedarrays, wrap_axiswise_call, wrap_reduction_call
 
 A = TypeVar("A", Scalar, NamedArray, jnp.ndarray)
 
-class _LayerNormBase(ModuleWithStateDictSerialization):
+
+class LayerNormBase(ModuleWithStateDictSerialization):
     axis: AxisSpec = eqx.static_field()
     weight: Optional[NamedArray]
     bias: Optional[NamedArray]
     eps: float = eqx.static_field(default=1e-5)
     dtype: Optional[jnp.dtype] = eqx.field(default=None, static=True)
+
+    @abstractmethod
+    def __call__(self, x: NamedArray) -> NamedArray:
+        pass
 
     @classmethod
     def init(
@@ -60,10 +66,7 @@ class _LayerNormBase(ModuleWithStateDictSerialization):
         else:
             bias = None
 
-        return dataclasses.replace(
-            self, weight=weight, bias=bias, axis=hax.flatten_axes(self.axis, "__OUT")
-        )
-
+        return dataclasses.replace(self, weight=weight, bias=bias, axis=hax.flatten_axes(self.axis, "__OUT"))
 
     def unflatten_from_export(self: Mod, template: Mod) -> Mod:
         if template.axis == self.axis:
@@ -82,12 +85,10 @@ class _LayerNormBase(ModuleWithStateDictSerialization):
         else:
             bias = None
 
-        return dataclasses.replace(
-            self, weight=weight, bias=bias, axis=template.axis
-        )
+        return dataclasses.replace(self, weight=weight, bias=bias, axis=template.axis)
 
 
-class LayerNorm(_LayerNormBase):
+class LayerNorm(LayerNormBase):
     r"""
     Normalises the input along the specified axis (or axes), using the mean and variance of the
     input along that axis.
@@ -114,10 +115,11 @@ class LayerNorm(_LayerNormBase):
         return out
 
 
-class RmsNorm(_LayerNormBase):
+class RmsNorm(LayerNormBase):
     r"""
     Implements RMS normalization, which normalizes the input by dividing by the root mean square of the input.
     """
+
     def __call__(self, x: NamedArray) -> NamedArray:
         in_dtype = x.dtype
         x = x.astype(self.dtype)
