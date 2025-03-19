@@ -6,8 +6,8 @@ import equinox as eqx
 from jax.random import PRNGKey
 
 import haliax as hax
-from .._src.state_dict import Mod, ModuleWithStateDictSerialization
 
+from .._src.state_dict import Mod, ModuleWithStateDictSerialization
 from ..axis import AxisSpec
 from ..core import NamedArray
 from ..jax_utils import named_call
@@ -113,7 +113,6 @@ class Linear(ModuleWithStateDictSerialization):
             bias = bias.rearrange(template.bias.axes)
 
         return dataclasses.replace(template, weight=weight, bias=bias)
-
 
     @property
     def _out_first(self):
