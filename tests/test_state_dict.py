@@ -1,3 +1,4 @@
+import dataclasses
 from typing import Any
 
 import equinox as eqx
@@ -127,3 +128,26 @@ def test_to_from_state_dict():
     m2 = from_state_dict(m2, state_dict)
     assert jnp.all(m2.a == a)
     assert jnp.all(m2.b == b)
+
+
+def test_export_layer_norm():
+    D = hax.Axis("D", 10)
+    E = hax.Axis("E", 20)
+    layer_norm = hax.nn.LayerNorm.init((D, E), eps=1e-5, use_weight=True, use_bias=True)
+
+    flat_layer_norm = layer_norm.flatten_for_export()
+
+    flat_state_dict = to_state_dict(flat_layer_norm)
+
+    assert flat_state_dict["weight"].shape == (D.size * E.size,)
+    assert flat_state_dict["bias"].shape == (D.size * E.size,)
+    assert flat_state_dict["weight"].dtype == flat_state_dict["bias"].dtype == layer_norm.weight.dtype
+
+    # now unflatten it
+    layer_norm2 = hax.nn.LayerNorm.init((D, E), eps=1e-5, use_weight=True, use_bias=True)
+    # ensure we have different weights
+    layer_norm2 = dataclasses.replace(layer_norm2, weight=layer_norm2.weight + 1, bias=layer_norm2.bias + 1)
+
+    new_layer_norm = flat_layer_norm.unflatten_from_export(layer_norm2)
+
+    assert layer_norm == new_layer_norm
