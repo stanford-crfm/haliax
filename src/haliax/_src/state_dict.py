@@ -58,7 +58,7 @@ def flatten_modules_for_export(t: T) -> T:
     def _flatten_module(module):
         if isinstance(module, ModuleWithStateDictSerialization):
             module = module.flatten_for_export()
-            module = jax.tree.map(
+            module = scan_aware_tree_map(
                 _flatten_module,
                 module,
                 is_leaf=lambda x: x is not module and isinstance(x, ModuleWithStateDictSerialization),
@@ -76,7 +76,7 @@ def unflatten_modules_from_export(t: T, template: T) -> T:
     def _unflatten_module(module, template):
         if isinstance(module, ModuleWithStateDictSerialization):
             module = module.unflatten_from_export(template)
-            module = jax.tree.map(
+            module = scan_aware_tree_map(
                 _unflatten_module,
                 module,
                 template,
