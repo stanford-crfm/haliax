@@ -191,6 +191,7 @@ def test_checkpoint_carries():
     save_cos = StackedCheckpointPolicy(save_carries=False, save_outputs=False, save_block_internals=["cos"])
     save_sin_carry = StackedCheckpointPolicy(save_carries=True, save_outputs=False, save_block_internals=["sin"])
     disabled = StackedCheckpointPolicy(disable=True)
+    simple = StackedCheckpointPolicy(simple=True)
 
     for name, (policy, expected_scan_shapes) in {
         "disabled": (disabled, [(E.size,), (Block.size, E.size), (Block.size, E.size)]),
@@ -201,6 +202,7 @@ def test_checkpoint_carries():
         "internals": (save_internals, [(E.size,), (Block.size, E.size), (Block.size, E.size)]),
         "cos": (save_cos, [(E.size,), (Block.size, E.size)]),
         "sin": (save_sin_carry, [(E.size,), (Block.size, E.size), (Block.size, E.size)]),
+        "simple": (simple, [(E.size,), (Block.size, E.size)]),
     }.items():
         m = Stacked.init(
             Block,
@@ -220,8 +222,11 @@ def test_checkpoint_carries():
         )
         out_shapes = [out.aval.shape for out in closed_call.outvars]
 
-        # for residual in saved_residuals(loss_fn, m, hax.random.uniform(jax.random.PRNGKey(1), (E,))):
-        #     print(residual)
+        print(name)
+        print(jaxpr)
+        from jax._src.ad_checkpoint import saved_residuals
+        for residual in saved_residuals(loss_fn, m, hax.random.uniform(jax.random.PRNGKey(1), (E,))):
+            print(residual)
 
         # saved_residuals doesn't give me sensible results, so I'm doing this by hand
         assert out_shapes == expected_scan_shapes, f"{name}: Expected {expected_scan_shapes}, got {out_shapes}"

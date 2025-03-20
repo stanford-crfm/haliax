@@ -101,6 +101,15 @@ class StackedCheckpointPolicy:
     Whether to disable gradient checkpointing entirely. This is useful for debugging.
     """
 
+    simple: bool = False
+    """
+    Whether to use the simple gradient checkpointing policy. This is useful for debugging.
+    """
+
+    @property
+    def is_save_nothing(self):
+        return self.save_carries is False and self.save_outputs is False and self.save_block_internals is False
+
     @staticmethod
     def from_bool_or_str(remat_policy: bool | str):
         """
@@ -121,7 +130,8 @@ class StackedCheckpointPolicy:
         elif remat_policy == "save_all":
             return StackedCheckpointPolicy(save_carries=True, save_outputs=True, save_block_internals=True)
         elif remat_policy is True:
-            return StackedCheckpointPolicy(save_carries=True, save_outputs=True, save_block_internals=False)
+            # return StackedCheckpointPolicy(save_carries=True, save_outputs=True, save_block_internals=False)
+            return StackedCheckpointPolicy(simple=True)
         elif remat_policy is False:
             return StackedCheckpointPolicy(save_carries=True, save_outputs=True, save_block_internals=True)
         else:
@@ -523,8 +533,8 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
         output_name = self._output_ckpt_name
 
         def do_block(carry, block, *args, **kwargs):
-            carry, out = block(carry, *args, **kwargs)
             carry = tree_checkpoint_name(carry, carry_name)
+            carry, out = block(carry, *args, **kwargs)
             out = tree_checkpoint_name(out, output_name)
             return carry, out
 
@@ -561,15 +571,29 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
         carry_name = self._carry_ckpt_name
 
         def do_block(carry, block, *args, **kwargs):
-            carry = block(carry, *args, **kwargs)
             carry = tree_checkpoint_name(carry, carry_name)
+            carry = block(carry, *args, **kwargs)
             return carry
+
+        if self.gradient_checkpointing.is_save_nothing:
+            pass
+        elif self.gradient_checkpointing.simple:
+            do_block = jax.checkpoint(do_block, prevent_cse=self.gradient_checkpointing.prevent_cse)
+        else:
+            do_block = self.gradient_checkpointing.checkpoint(carry_name, self._output_ckpt_name, do_block)
 
         def do_fold(init, *extra_args, **extra_kwargs):
+            # if self.gradient_checkpointing.simple:
             carry = haliax.fold(do_block, self.Block)(init, self.stacked, *extra_args, **extra_kwargs)
+            # else:
+            #     carry = haliax.fold(do_block, self.Block)(init, self.stacked, *extra_args, **extra_kwargs)
             return carry
 
-        do_fold = self.gradient_checkpointing.checkpoint(carry_name, self._output_ckpt_name, do_fold)
+        if self.gradient_checkpointing.is_save_nothing:
+            do_fold = jax.checkpoint(do_fold, prevent_cse=self.gradient_checkpointing.prevent_cse)
+
+        # if not self.gradient_checkpointing.simple:
+        #     do_fold = self.gradient_checkpointing.checkpoint(carry_name, self._output_ckpt_name, do_fold)
 
         return do_fold(init, *args, **kwargs)
 
