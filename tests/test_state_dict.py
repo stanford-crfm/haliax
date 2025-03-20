@@ -7,8 +7,9 @@ import jax.numpy as jnp
 import pytest
 
 import haliax as hax
+from haliax._src.state_dict import flatten_modules_for_export, unflatten_modules_from_export
 from haliax.nn import Linear
-from haliax.nn.scan import _stack_state_dict, _unstack_state_dict
+from haliax.nn.scan import Stacked, _stack_state_dict, _unstack_state_dict
 from haliax.state_dict import from_state_dict, to_state_dict
 
 
@@ -151,3 +152,26 @@ def test_export_layer_norm():
     new_layer_norm = flat_layer_norm.unflatten_from_export(layer_norm2)
 
     assert layer_norm == new_layer_norm
+
+
+def test_stacked_layer_norm():
+    L = hax.Axis("L", 4)
+    D = hax.Axis("D", 10)
+    E = hax.Axis("E", 20)
+
+    norms = Stacked.init(L, hax.nn.LayerNorm)((D, E), eps=1e-5, use_weight=True, use_bias=True)
+
+    norms_flat = flatten_modules_for_export(norms)
+
+    flat_state_dict = to_state_dict(norms_flat)
+
+    assert flat_state_dict["0.weight"].shape == (D.size * E.size,)
+    assert flat_state_dict["0.bias"].shape == (D.size * E.size,)
+    assert flat_state_dict["1.weight"].shape == (D.size * E.size,)
+
+    # now unflatten it
+    norms2 = Stacked.init(L, hax.nn.LayerNorm)((D, E), eps=1e-5, use_weight=True, use_bias=True)
+
+    new_norms = unflatten_modules_from_export(norms_flat, norms2)
+
+    assert norms == new_norms
