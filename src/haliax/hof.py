@@ -14,7 +14,7 @@ import haliax.tree_util as htu
 from ._src.util import index_where
 from .axis import Axis, AxisSelector, selects_axis
 from .core import NamedArray
-from .jax_utils import Static, broadcast_prefix, is_jax_array_like
+from .jax_utils import Static, broadcast_prefix, checkpointing_scan, is_jax_array_like
 from .partitioning import physical_axis_name
 from .util import is_jax_or_hax_array_like, is_named_array
 
@@ -42,6 +42,7 @@ def scan(
     f: Callable[[Carry, X], Tuple[Carry, Y]],
     axis: AxisSelector,
     *,
+    nested_scan: bool | int = False,
     reverse: bool = False,
     unroll: int = 1,
     is_scanned: BoolAxisSpec = is_named_or_shaped_array_like,
@@ -54,6 +55,7 @@ def scan(
     f: Callable,
     axis: AxisSelector,
     *,
+    nested_scan: bool | int = False,
     reverse: bool = False,
     unroll: int = 1,
     is_scanned: BoolAxisSpec = is_named_or_shaped_array_like,
@@ -65,6 +67,7 @@ def scan(
     f: Callable,  # : ScanFn[Carry, Args, Y],  This confuses mypy too much
     axis: AxisSelector,
     *,
+    nested_scan: bool | int = False,
     reverse=False,
     unroll=1,
     is_scanned: BoolAxisSpec = is_named_or_shaped_array_like,
@@ -82,6 +85,9 @@ def scan(
         axis (AxisSelector): axis to scan over
         reverse (bool): if True, scan in reverse
         unroll (int): unroll the loop by this amount
+        nested_scan: Use nested scans to reduce memory usage. If an integer, use that many nested scans.
+                If true, use the closest int to sqrt(axis.size) that divides axis.size, which gives
+                O(sqrt(N)) memory and O(N) time.
         is_scanned (BoolAxisSpec): a function that takes a leaf of the tree and returns True if it should be scanned over,
                     False otherwise. Behaves similarly to the `default` argument in filter_jit
     """
@@ -128,11 +134,26 @@ def scan(
             y = htu.tree_map(_pacify_named_arrays, y)
             return carry, y
 
+        axis_size = _infer_axis_size_from_tree(axis_first_xs, axis).size
+
+        outer_block_size: int | None
+        if nested_scan is True:
+            outer_block_size = find_closest_divisible_int_to_sqrt(axis_size)
+        elif nested_scan is False:
+            outer_block_size = None
+        else:
+            outer_block_size = nested_scan
+
         # as above, we don't want to use htu.tree_leaves here because we want to eliminate the leading axis
         leaves = jax.tree_util.tree_leaves(axis_first_xs)
         with jax.named_scope(f"scan({haliax.axis_name(axis)})"):
-            carry, ys = lax.scan(wrapped_fn, init, leaves, reverse=reverse, unroll=unroll)
-        true_axis = _infer_axis_size_from_result(ys, axis)
+            if outer_block_size is not None:
+                carry, ys = checkpointing_scan(
+                    wrapped_fn, init, leaves, outer_block_size, reverse=reverse, unroll=unroll, length=axis_size
+                )
+            else:
+                carry, ys = lax.scan(wrapped_fn, init, leaves, reverse=reverse, unroll=unroll, length=axis_size)
+        true_axis = _infer_axis_size_from_tree(ys, axis)
         ys = jax.tree_util.tree_map(_prepend_named_batch_axis(true_axis), ys, is_leaf=_is_passive_array)
 
         return carry, ys
@@ -147,6 +168,7 @@ def fold(
     *,
     reverse: bool = False,
     unroll: int = 1,
+    nested_scan: bool | int = False,
     is_scanned: BoolAxisSpec = is_jax_or_hax_array_like,
 ) -> Callable[[Carry, PyTree[X]], Carry]:
     ...
@@ -159,6 +181,7 @@ def fold(
     *,
     reverse: bool = False,
     unroll: int = 1,
+    nested_scan: bool | int = False,
     is_scanned: BoolAxisSpec = is_jax_or_hax_array_like,
 ) -> Callable:
     ...
@@ -170,6 +193,7 @@ def fold(
     *,
     reverse: bool = False,
     unroll: int = 1,
+    nested_scan: bool | int = False,
     is_scanned: BoolAxisSpec = is_named_or_shaped_array_like,
 ) -> Callable:
     """
@@ -186,6 +210,9 @@ def fold(
         axis: axis to reduce over
         reverse: if True, reduce in reverse
         unroll: unroll the loop by this amount
+        nested_scan: Use nested scans to reduce memory usage. If an integer, use that many nested scans.
+                If true, use the closest int to sqrt(axis.size) that divides axis.size, which gives
+                O(sqrt(N)) memory and O(N) time.
         is_scanned: a function that takes a leaf of the tree and returns True if it should be scanned over,
                     False otherwise. Behaves similarly to the `default` argument in filter_jit
 
@@ -196,7 +223,9 @@ def fold(
     def scan_compatible_fn(carry, *args, **kwargs):
         return fn(carry, *args, **kwargs), None
 
-    scan_preconfig = scan(scan_compatible_fn, axis, reverse=reverse, unroll=unroll, is_scanned=is_scanned)
+    scan_preconfig = scan(
+        scan_compatible_fn, axis, reverse=reverse, unroll=unroll, is_scanned=is_scanned, nested_scan=nested_scan
+    )
 
     def scanned_f(init, *args, **kwargs):
         return scan_preconfig(init, *args, **kwargs)[0]
@@ -359,7 +388,7 @@ def vmap(
         result = eqx.combine(result_dynamic, result_static.value)
 
         # if we were passed in a string arg, we need to get its axis size out from some result
-        true_axis = _infer_axis_size_from_result(result, axis)
+        true_axis = _infer_axis_size_from_tree(result, axis)
         if true_axis is None:
             raise ValueError("vmap failed to infer axis size from result")
 
@@ -369,7 +398,7 @@ def vmap(
     return wrapped_vmap_fn
 
 
-def _infer_axis_size_from_result(result, axis):
+def _infer_axis_size_from_tree(result, axis):
     if isinstance(axis, str):
         result_leaves = jax.tree_util.tree_leaves(result, is_leaf=_is_passive_array)
         if len(result_leaves) == 0:
@@ -482,6 +511,18 @@ def _ensure_first(axis):
             return leaf
 
     return ensure_first
+
+
+def find_closest_divisible_int_to_sqrt(n: int) -> int:
+    """
+    Find the closest integer to the square root of n (less than or equal to sqrt(n)) that divides n.
+    """
+    assert n > 0, f"Expected n > 0, got {n}"
+    for i in range(int(n**0.5), 0, -1):
+        if n % i == 0:
+            return i
+
+    return 1
 
 
 __all__ = ["scan", "fold", "vmap", "map"]

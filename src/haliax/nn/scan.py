@@ -106,6 +106,13 @@ class StackedCheckpointPolicy:
     Whether to use the simple gradient checkpointing policy. This is useful for debugging.
     """
 
+    nested_remat: bool | int = False
+    """
+    Allows for nested remat with a double scan. We reshape the stack into [nested_remat, -1] and then scan over both
+    in sequence. If True, we find the closest int to sqrt(len(stack)) such that len(stack) % int == 0.
+    If False, we don't do anything.
+    """
+
     @property
     def is_save_nothing(self):
         return self.save_carries is False and self.save_outputs is False and self.save_block_internals is False
@@ -200,19 +207,15 @@ class StackedCheckpointPolicy:
                         p2 = jax.checkpoint_policies.save_only_these_names(*our_names_to_save)
                         return jax.checkpoint_policies.save_from_both_policies(p1, p2)
                     else:
-                        print(f"Saving anything except {our_names_to_remat}")
                         return p1
                 else:
-                    print(f"Saving only {our_names_to_save}")
                     return jax.checkpoint_policies.save_only_these_names(*our_names_to_save)
             elif len(our_names_to_save) > 0:
                 p1 = jax.checkpoint_policies.save_only_these_names(*our_names_to_save)
                 if self.save_block_internals is True:
                     p2 = jax.checkpoint_policies.save_anything_except_these_names(*our_names_to_remat)
-                    print(f"Saving {our_names_to_save} and anything else except {our_names_to_remat}")
                     return jax.checkpoint_policies.save_from_both_policies(p1, p2)
                 else:
-                    print(f"Saving only {our_names_to_save}")
                     return p1
             elif self.save_block_internals is True:
                 return jax.checkpoint_policies.save_anything_except_these_names(*our_names_to_remat)

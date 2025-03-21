@@ -119,6 +119,22 @@ def test_scan_doesnt_scan_init():
     assert jnp.all(jnp.isclose(total.array, init + jnp.sum(named1.array * 4.0)))
 
 
+def test_scan_hierarchical():
+    Height = Axis("Height", 10)
+    Width = Axis("Width", 3)
+    Depth = Axis("Depth", 4)
+    named1 = hax.random.uniform(PRNGKey(0), (Height, Width, Depth))
+
+    def scan_fun(acc, x):
+        return acc + jnp.sum(x.array), x.take("Width", 2)
+
+    total, selected = hax.scan(scan_fun, "Height")(0.0, named1)
+    total_blocked, selected_blocked = hax.scan(scan_fun, "Height", nested_scan=True)(0.0, named1)
+
+    assert jnp.all(jnp.isclose(total, total_blocked))
+    assert jnp.all(jnp.equal(selected.array, selected_blocked.array))
+
+
 def test_reduce():
     Height = Axis("Height", 10)
     Width = Axis("Width", 3)

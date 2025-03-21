@@ -220,3 +220,30 @@ def tree_checkpoint_name(x: T, name: str) -> T:
             return x
 
     return jax.tree.map(_checkpoint_leaf, x)
+
+
+def checkpointing_scan(f, carry, xs, outer_size, length, **scan_kwargs):
+    """Credit to Roy and Matt."""
+
+    inner_size = length // outer_size
+
+    if inner_size * outer_size != length:
+        raise ValueError(f"Length {length} must be divisible by outer_size {outer_size}")
+
+    def _reshape(x):
+        if is_jax_array_like(x) and x.shape != ():
+            return x.reshape([outer_size, inner_size, *x.shape[1:]])
+        else:
+            return x
+
+    xs_shaped = jax.tree.map(_reshape, xs)
+
+    scanned = jax.lax.scan(jax.remat(ft.partial(jax.lax.scan, f, **scan_kwargs)), carry, xs_shaped)
+
+    def _deshape(x):
+        if is_jax_array_like(x) and x.shape != ():
+            return x.reshape([length, *x.shape[2:]])
+        else:
+            return x
+
+    return jax.tree.map(_deshape, scanned)
