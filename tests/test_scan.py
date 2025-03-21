@@ -5,7 +5,7 @@ from equinox import filter_grad
 
 import haliax as hax
 from haliax.jax_utils import tree_checkpoint_name
-from haliax.nn.scan import BlockSeq, Stacked, StackedCheckpointPolicy
+from haliax.nn.scan import BlockSeq, ScanCheckpointPolicy, Stacked
 
 
 def test_unstacked():
@@ -184,14 +184,14 @@ def test_checkpoint_carries():
 
     initial_named = hax.random.uniform(jax.random.PRNGKey(0), (Block, E))
 
-    carry_policy = StackedCheckpointPolicy(save_carries=True, save_outputs=False, save_block_internals=False)
-    save_nothing = StackedCheckpointPolicy(save_carries=False, save_outputs=False, save_block_internals=False)
-    save_everything = StackedCheckpointPolicy(save_carries=True, save_outputs=True, save_block_internals=True)
-    save_internals = StackedCheckpointPolicy(save_carries=False, save_outputs=False, save_block_internals=True)
-    save_cos = StackedCheckpointPolicy(save_carries=False, save_outputs=False, save_block_internals=["cos"])
-    save_sin_carry = StackedCheckpointPolicy(save_carries=True, save_outputs=False, save_block_internals=["sin"])
-    disabled = StackedCheckpointPolicy(disable=True)
-    simple = StackedCheckpointPolicy(simple=True)
+    carry_policy = ScanCheckpointPolicy(save_carries=True, save_outputs=False, save_block_internals=False)
+    save_nothing = ScanCheckpointPolicy(save_carries=False, save_outputs=False, save_block_internals=False)
+    save_everything = ScanCheckpointPolicy(save_carries=True, save_outputs=True, save_block_internals=True)
+    save_internals = ScanCheckpointPolicy(save_carries=False, save_outputs=False, save_block_internals=True)
+    save_cos = ScanCheckpointPolicy(save_carries=False, save_outputs=False, save_block_internals=["cos"])
+    save_sin_carry = ScanCheckpointPolicy(save_carries=True, save_outputs=False, save_block_internals=["sin"])
+    disabled = ScanCheckpointPolicy(disable=True)
+    simple = ScanCheckpointPolicy(simple=True)
 
     for name, (policy, expected_scan_shapes) in {
         "disabled": (disabled, [(E.size,), (Block.size, E.size), (Block.size, E.size)]),
@@ -225,6 +225,7 @@ def test_checkpoint_carries():
         print(name)
         print(jaxpr)
         from jax._src.ad_checkpoint import saved_residuals
+
         for residual in saved_residuals(loss_fn, m, hax.random.uniform(jax.random.PRNGKey(1), (E,))):
             print(residual)
 

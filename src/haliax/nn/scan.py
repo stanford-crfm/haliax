@@ -29,7 +29,7 @@ class ModuleInit(Protocol[M_co]):
 
 
 @dataclasses.dataclass
-class StackedCheckpointPolicy:
+class ScanCheckpointPolicy:
     """
     A class that represents a gradient checkpoint policy for blocks in a Stacked module. This is used to control
     gradient checkpointing in [haliax.nn.Stacked][] and [haliax.nn.BlockSeq][].
@@ -131,25 +131,25 @@ class StackedCheckpointPolicy:
             * "save_all": save outputs and block internals. Equivalent to False
         """
         if remat_policy == "offload":
-            return StackedCheckpointPolicy(save_carries="offload", save_outputs="offload", save_block_internals=False)
+            return ScanCheckpointPolicy(save_carries="offload", save_outputs="offload", save_block_internals=False)
         elif remat_policy == "recompute" or remat_policy == "full":
-            return StackedCheckpointPolicy(save_carries=False, save_outputs=False, save_block_internals=False)
+            return ScanCheckpointPolicy(save_carries=False, save_outputs=False, save_block_internals=False)
         elif remat_policy == "save_all":
-            return StackedCheckpointPolicy(save_carries=True, save_outputs=True, save_block_internals=True)
+            return ScanCheckpointPolicy(save_carries=True, save_outputs=True, save_block_internals=True)
         elif remat_policy is True:
             # return StackedCheckpointPolicy(save_carries=True, save_outputs=True, save_block_internals=False)
-            return StackedCheckpointPolicy(simple=True)
+            return ScanCheckpointPolicy(simple=True)
         elif remat_policy is False:
-            return StackedCheckpointPolicy(save_carries=True, save_outputs=True, save_block_internals=True)
+            return ScanCheckpointPolicy(save_carries=True, save_outputs=True, save_block_internals=True)
         else:
             raise ValueError(f"Invalid checkpoint policy {remat_policy}")
 
     @staticmethod
-    def _mk(remat_policy: Union[bool, str, "StackedCheckpointPolicy"]) -> "StackedCheckpointPolicy":
-        if isinstance(remat_policy, StackedCheckpointPolicy):
+    def _mk(remat_policy: Union[bool, str, "ScanCheckpointPolicy"]) -> "ScanCheckpointPolicy":
+        if isinstance(remat_policy, ScanCheckpointPolicy):
             return remat_policy
         else:
-            return StackedCheckpointPolicy.from_bool_or_str(remat_policy)
+            return ScanCheckpointPolicy.from_bool_or_str(remat_policy)
 
     def checkpoint(self, carry_name: str, output_name: str, callable):
         if self.disable:
@@ -203,7 +203,6 @@ class StackedCheckpointPolicy:
                 if self.save_block_internals is True:
                     p1 = jax.checkpoint_policies.save_anything_except_these_names(*our_names_to_remat)
                     if len(our_names_to_save) > 0:
-                        print(f"Saving {our_names_to_save} and anything else except {our_names_to_remat}")
                         p2 = jax.checkpoint_policies.save_only_these_names(*our_names_to_save)
                         return jax.checkpoint_policies.save_from_both_policies(p1, p2)
                     else:
@@ -240,7 +239,7 @@ class BlockFoldable(Protocol[M]):
         Block: Axis,
         module: Type[M],
         *,
-        gradient_checkpointing: bool | StackedCheckpointPolicy = False,
+        gradient_checkpointing: bool | ScanCheckpointPolicy = False,
         prevent_cse: bool = False,
     ) -> ModuleInit[S]:
         ...
@@ -272,7 +271,7 @@ class BlockSeq(ModuleWithStateDictSerialization, Generic[M]):
 
     blocks: Sequence[M]
     Block: Axis = eqx.static_field()
-    gradient_checkpointing: StackedCheckpointPolicy = eqx.static_field()
+    gradient_checkpointing: ScanCheckpointPolicy = eqx.static_field()
 
     @classmethod
     def init(
@@ -280,7 +279,7 @@ class BlockSeq(ModuleWithStateDictSerialization, Generic[M]):
         Block: Axis,
         module: Type[M],
         *,
-        gradient_checkpointing: bool | StackedCheckpointPolicy = False,
+        gradient_checkpointing: bool | ScanCheckpointPolicy = False,
         prevent_cse: bool | None = None,
     ) -> ModuleInit[S]:
         """
@@ -289,7 +288,7 @@ class BlockSeq(ModuleWithStateDictSerialization, Generic[M]):
         Block axis (if it exists). JAX arrays will be sliced along the first axis.
         """
 
-        gradient_checkpointing = StackedCheckpointPolicy._mk(gradient_checkpointing)
+        gradient_checkpointing = ScanCheckpointPolicy._mk(gradient_checkpointing)
 
         if prevent_cse is not None:
             warnings.warn(
@@ -463,7 +462,7 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
 
     stacked: M
     Block: Axis = eqx.static_field()
-    gradient_checkpointing: StackedCheckpointPolicy = eqx.static_field()
+    gradient_checkpointing: ScanCheckpointPolicy = eqx.static_field()
 
     @classmethod
     def init(
@@ -471,7 +470,7 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
         Block: Axis,
         module: Type[M],
         *,
-        gradient_checkpointing: bool | StackedCheckpointPolicy | str = False,
+        gradient_checkpointing: bool | ScanCheckpointPolicy | str = False,
         prevent_cse: bool | None = None,
     ) -> ModuleInit["Stacked[M]"]:
         """
@@ -487,7 +486,7 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
                 for debugging, but may slow down the function.
         """
 
-        gradient_checkpointing = StackedCheckpointPolicy._mk(gradient_checkpointing)
+        gradient_checkpointing = ScanCheckpointPolicy._mk(gradient_checkpointing)
 
         if prevent_cse is not None:
             warnings.warn(
