@@ -29,7 +29,7 @@ of the same module (e.g. transformer blocks), which is a common pattern in deep 
 
 ### Stacked
 
-See the full documentation of [Stacked](stacked.md).
+See the full documentation of [Stacked](scan.md#stacked).
 
 ### Convolution
 
