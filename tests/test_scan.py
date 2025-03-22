@@ -201,6 +201,7 @@ E = hax.Axis("E", 10)
             [(E.size,), (Block.size, E.size), (Block.size, E.size)],
         ),
         ("simple", ScanCheckpointPolicy(simple=True), [(E.size,), (Block.size, E.size)]),
+        ("nested", ScanCheckpointPolicy(simple=True, nested_remat=2), [(E.size,), (2, E.size)]),
     ],
 )
 def test_checkpoint_carries(name, policy, expected_scan_shapes):
@@ -231,7 +232,7 @@ def test_checkpoint_carries(name, policy, expected_scan_shapes):
     grad_fn = filter_grad(loss_fn)
 
     jaxpr = jax.make_jaxpr(grad_fn)(m, hax.random.uniform(jax.random.PRNGKey(1), (E,)))
-    closed_call = next(eqn for eqn in jaxpr.jaxpr.eqns if eqn.primitive in [jax.lax.scan_p, jax.core.closed_call_p])
+    closed_call = next(eqn for eqn in jaxpr.jaxpr.eqns if eqn.primitive in [jax.lax.scan_p])
     out_shapes = [out.aval.shape for out in closed_call.outvars]
 
     print(name)
