@@ -210,7 +210,7 @@ def tree_checkpoint_name(x: T, name: str) -> T:
 
     See Also:
         * [jax.ad_checkpoint.checkpoint_name][]
-        * [haliax.nn.StackedCheckpointPolicy][]
+        * [haliax.nn.ScanCheckpointPolicy][]
     """
 
     def _checkpoint_leaf(x):
@@ -222,7 +222,7 @@ def tree_checkpoint_name(x: T, name: str) -> T:
     return jax.tree.map(_checkpoint_leaf, x)
 
 
-def checkpointing_scan(f, carry, xs, outer_size, length, **scan_kwargs):
+def multilevel_scan(f, carry, xs, outer_size, length, reverse=False, unroll=1):
     """Credit to Roy and Matt."""
 
     inner_size = length // outer_size
@@ -238,7 +238,9 @@ def checkpointing_scan(f, carry, xs, outer_size, length, **scan_kwargs):
 
     xs_shaped = jax.tree.map(_reshape, xs)
 
-    scanned = jax.lax.scan(jax.remat(ft.partial(jax.lax.scan, f, **scan_kwargs)), carry, xs_shaped)
+    carry, scanned = jax.lax.scan(
+        ft.partial(jax.lax.scan, f, reverse=reverse), carry, xs_shaped, reverse=reverse, unroll=unroll
+    )
 
     def _deshape(x):
         if is_jax_array_like(x) and x.shape != ():
@@ -246,4 +248,4 @@ def checkpointing_scan(f, carry, xs, outer_size, length, **scan_kwargs):
         else:
             return x
 
-    return jax.tree.map(_deshape, scanned)
+    return carry, jax.tree.map(_deshape, scanned)

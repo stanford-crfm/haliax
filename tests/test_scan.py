@@ -166,7 +166,44 @@ def test_stacked_to_state_dict():
     assert hax.all(hax.equal(y, y2))
 
 
-def test_checkpoint_carries():
+Block = hax.Axis("block", 4)
+E = hax.Axis("E", 10)
+
+
+@pytest.mark.parametrize(
+    "name,policy,expected_scan_shapes",
+    [
+        ("disabled", ScanCheckpointPolicy(disable=True), [(E.size,), (Block.size, E.size), (Block.size, E.size)]),
+        ("carry_true", True, [(E.size,), (Block.size, E.size)]),
+        (
+            "carry",
+            ScanCheckpointPolicy(save_carries=True, save_block_internals=False),
+            [(E.size,), (Block.size, E.size)],
+        ),
+        (
+            "everything",
+            ScanCheckpointPolicy(save_carries=True, save_inputs=True, save_block_internals=True),
+            [(E.size,), (Block.size, E.size), (Block.size, E.size)],
+        ),
+        (
+            "internals",
+            ScanCheckpointPolicy(save_carries=False, save_block_internals=True),
+            [(E.size,), (Block.size, E.size), (Block.size, E.size)],
+        ),
+        (
+            "cos",
+            ScanCheckpointPolicy(save_carries=False, save_block_internals=["cos"]),
+            [(E.size,), (Block.size, E.size)],
+        ),
+        (
+            "sin",
+            ScanCheckpointPolicy(save_carries=True, save_block_internals=["sin"]),
+            [(E.size,), (Block.size, E.size), (Block.size, E.size)],
+        ),
+        ("simple", ScanCheckpointPolicy(simple=True), [(E.size,), (Block.size, E.size)]),
+    ],
+)
+def test_checkpoint_carries(name, policy, expected_scan_shapes):
     class Module(eqx.Module):
         named: hax.NamedArray
 
@@ -179,55 +216,29 @@ def test_checkpoint_carries():
         def init(named):
             return Module(named=named)
 
-    Block = hax.Axis("block", 4)
-    E = hax.Axis("E", 10)
-
     initial_named = hax.random.uniform(jax.random.PRNGKey(0), (Block, E))
 
-    carry_policy = ScanCheckpointPolicy(save_carries=True, save_outputs=False, save_block_internals=False)
-    save_nothing = ScanCheckpointPolicy(save_carries=False, save_outputs=False, save_block_internals=False)
-    save_everything = ScanCheckpointPolicy(save_carries=True, save_outputs=True, save_block_internals=True)
-    save_internals = ScanCheckpointPolicy(save_carries=False, save_outputs=False, save_block_internals=True)
-    save_cos = ScanCheckpointPolicy(save_carries=False, save_outputs=False, save_block_internals=["cos"])
-    save_sin_carry = ScanCheckpointPolicy(save_carries=True, save_outputs=False, save_block_internals=["sin"])
-    disabled = ScanCheckpointPolicy(disable=True)
-    simple = ScanCheckpointPolicy(simple=True)
+    m = Stacked.init(
+        Block,
+        Module,
+        gradient_checkpointing=policy,  # type: ignore
+    )(named=initial_named)
 
-    for name, (policy, expected_scan_shapes) in {
-        "disabled": (disabled, [(E.size,), (Block.size, E.size), (Block.size, E.size)]),
-        "carry_true": (True, [(E.size,), (Block.size, E.size)]),
-        "carry": (carry_policy, [(E.size,), (Block.size, E.size)]),
-        "nothing": (save_nothing, [(E.size,)]),
-        "everything": (save_everything, [(E.size,), (Block.size, E.size), (Block.size, E.size)]),
-        "internals": (save_internals, [(E.size,), (Block.size, E.size), (Block.size, E.size)]),
-        "cos": (save_cos, [(E.size,), (Block.size, E.size)]),
-        "sin": (save_sin_carry, [(E.size,), (Block.size, E.size), (Block.size, E.size)]),
-        "simple": (simple, [(E.size,), (Block.size, E.size)]),
-    }.items():
-        m = Stacked.init(
-            Block,
-            Module,
-            gradient_checkpointing=policy,  # type: ignore
-        )(named=initial_named)
+    def loss_fn(m, x):
+        y = m.fold(x)
+        return hax.sum(y).scalar()
 
-        def loss_fn(m, x):
-            y = m.fold(x)
-            return hax.sum(y).scalar()
+    grad_fn = filter_grad(loss_fn)
 
-        grad_fn = filter_grad(loss_fn)
+    jaxpr = jax.make_jaxpr(grad_fn)(m, hax.random.uniform(jax.random.PRNGKey(1), (E,)))
+    closed_call = next(eqn for eqn in jaxpr.jaxpr.eqns if eqn.primitive in [jax.lax.scan_p, jax.core.closed_call_p])
+    out_shapes = [out.aval.shape for out in closed_call.outvars]
 
-        jaxpr = jax.make_jaxpr(grad_fn)(m, hax.random.uniform(jax.random.PRNGKey(1), (E,)))
-        closed_call = next(
-            eqn for eqn in jaxpr.jaxpr.eqns if eqn.primitive in [jax.lax.scan_p, jax.core.closed_call_p]
-        )
-        out_shapes = [out.aval.shape for out in closed_call.outvars]
+    print(name)
+    print(jaxpr)
+    from jax._src.ad_checkpoint import saved_residuals
 
-        print(name)
-        print(jaxpr)
-        from jax._src.ad_checkpoint import saved_residuals
+    for residual in saved_residuals(loss_fn, m, hax.random.uniform(jax.random.PRNGKey(1), (E,))):
+        print(residual)
 
-        for residual in saved_residuals(loss_fn, m, hax.random.uniform(jax.random.PRNGKey(1), (E,))):
-            print(residual)
-
-        # saved_residuals doesn't give me sensible results, so I'm doing this by hand
-        assert out_shapes == expected_scan_shapes, f"{name}: Expected {expected_scan_shapes}, got {out_shapes}"
+    assert out_shapes == expected_scan_shapes, f"{name}: Expected {expected_scan_shapes}, got {out_shapes}"

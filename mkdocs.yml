@@ -90,10 +90,11 @@ nav:
     - Indexing and Slicing: 'indexing.md'
     - Rearrange: 'rearrange.md'
     - Matrix Multiplication: 'matmul.md'
+  - Higher Order Functions:
+    - Scan and Fold: 'scan.md'
+    - Vectorization: 'vmap.md'
   - Neural Networks: 'nn.md'
-  - Module Stacks: 'stacked.md'
   - Partitioning: 'partitioning.md'
-  - Higher Order Functions: 'hof.md'
   - FP8: 'fp8.md'
   - Serialization: 'state-dict.md'
   - API Reference: 'api.md'

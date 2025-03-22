@@ -21,6 +21,7 @@ import haliax.util as util
 from ._src.dot import dot
 from ._src.einsum import einsum
 from ._src.rearrange import rearrange
+from ._src.scan import ScanCheckpointPolicy
 from .axis import (
     Axis,
     AxisSelection,
@@ -1071,4 +1072,5 @@ __all__ = [
     "flatten",
     "is_named_array",
     "tree_checkpoint_name",
+    "ScanCheckpointPolicy",
 ]

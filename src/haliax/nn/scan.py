@@ -13,6 +13,7 @@ import haliax.util
 from haliax.jax_utils import tree_checkpoint_name
 from haliax.util import is_jax_or_hax_array_like
 
+from .._src.scan import ScanCheckpointPolicy
 from .._src.state_dict import ModuleWithStateDictSerialization, StateDict, with_prefix
 from ..axis import Axis
 
@@ -26,200 +27,6 @@ T = TypeVar("T")
 class ModuleInit(Protocol[M_co]):
     def __call__(self, *args, **kwargs) -> M_co:
         ...
-
-
-@dataclasses.dataclass
-class ScanCheckpointPolicy:
-    """
-    A class that represents a gradient checkpoint policy for blocks in a Stacked module. This is used to control
-    gradient checkpointing in [haliax.nn.Stacked][] and [haliax.nn.BlockSeq][].
-
-    Gradient checkpointing is a technique for reducing memory usage in training large models. It works by saving only a
-    subset of the forward pass and recomputing the rest in the backward pass. (By doing parts of the forward pass again)
-    JAX suggests that this usually isn't necessary when not using scan-over-layers (i.e. Stacked), so this is mostly
-    useful for Stacked modules.
-
-    A scan block takes a "carry" and some extra arguments, and returns a "carry" and an "output". The "carry" is passed
-    to the next block, and the "output" is concatenated into a final result (sort of like an RNN).
-
-    Schematically it might look like this:
-
-    ```
-          I       I       I       I
-          |       |       |       |
-    C ->  B -C->  B -C->  B -C->  B --> C
-          |       |       |       |
-          O       O       O       O
-    ```
-
-    where "C" is the carry and "O" is the output. A block will typically do some computation (e.g. a Transformer block)
-    as well, which might require saving or recomputing in the backward pass.
-
-    Imagine we save just the carries, then during the backward pass, we can recompute the outputs using the carries
-    and the inputs (and the blocks), and then compute the gradient as usual. This requires O(N) memory and O(N) time,
-    where N is the number of blocks. This is the default behavior in Haliax and works well for most models.
-
-    Alternatively, we could only save the initial and final carry. (This corresponds to
-    `StackedCheckpointPolicy(save_carries=False, save_outputs=False)` or `"recompute"`)
-    Then, during the backward pass, for each block we
-    can compute all blocks up to that point (to get its input carry) and then compute the block itself.
-    This requires O(1) memory and O(N^2) time.
-
-    Intermediate approaches exist (including O(sqrt(N)) memory and O(N) time), but we don't support them yet.
-
-    Another choice is to "offload" carries and outputs to the host, which can reduce memory usage on the device.
-    We support offloading carries and outputs to the host, but not internals.
-
-    See Also:
-        * [JAX docs on gradient checkpointing](https://docs.jax.dev/en/latest/gradient-checkpointing.html)
-    """
-
-    save_carries: bool | Literal["offload"] = True
-    """
-    Whether to save all carries in the forward pass. If True, carries are saved in the forward pass and used in the
-    backward pass. If "offload", carries are saved in the forward pass and offloaded to the host
-    """
-    save_outputs: bool | Literal["offload"] = True
-    """
-    Whether to save scan outputs in the forward pass. If True, outputs are saved in the forward pass and
-    used in the backward pass. If "offload", outputs are saved in the forward pass and offloaded to the host
-    """
-    save_block_internals: bool | list[str] = True
-    """
-    Whether to save internal state of blocks. If a list, only the listed names are saved, as
-    with [jax.checkpoint_policies.save_only_these_names][].
-
-    See Also: https://docs.jax.dev/en/latest/gradient-checkpointing.html#custom-policies-for-offload
-    """
-    prevent_cse: bool = False
-    """
-    Whether to prevent common subexpression elimination in the checkpointed function.
-    """
-
-    disable: bool = False
-    """
-    Whether to disable gradient checkpointing entirely. This is useful for debugging.
-    """
-
-    simple: bool = False
-    """
-    Whether to use the simple gradient checkpointing policy. This is useful for debugging.
-    """
-
-    nested_remat: bool | int = False
-    """
-    Allows for nested remat with a double scan. We reshape the stack into [nested_remat, -1] and then scan over both
-    in sequence. If True, we find the closest int to sqrt(len(stack)) such that len(stack) % int == 0.
-    If False, we don't do anything.
-    """
-
-    @property
-    def is_save_nothing(self):
-        return self.save_carries is False and self.save_outputs is False and self.save_block_internals is False
-
-    @staticmethod
-    def from_bool_or_str(remat_policy: bool | str):
-        """
-        Convert a boolean or string into a BlockCheckpointPolicy. This is useful for converting user input
-        into a BlockCheckpointPolicy.
-
-        Choices:
-            * True: save outputs, don't save block internals. This is the classic Haliax behavior.
-            * False: save everything.
-            * "offload": offload outputs to the host, don't save block internals.
-            * "recompute" or "full": don't save outputs or block internals.
-            * "save_all": save outputs and block internals. Equivalent to False
-        """
-        if remat_policy == "offload":
-            return ScanCheckpointPolicy(save_carries="offload", save_outputs="offload", save_block_internals=False)
-        elif remat_policy == "recompute" or remat_policy == "full":
-            return ScanCheckpointPolicy(save_carries=False, save_outputs=False, save_block_internals=False)
-        elif remat_policy == "save_all":
-            return ScanCheckpointPolicy(save_carries=True, save_outputs=True, save_block_internals=True)
-        elif remat_policy is True:
-            # return StackedCheckpointPolicy(save_carries=True, save_outputs=True, save_block_internals=False)
-            return ScanCheckpointPolicy(simple=True)
-        elif remat_policy is False:
-            return ScanCheckpointPolicy(save_carries=True, save_outputs=True, save_block_internals=True)
-        else:
-            raise ValueError(f"Invalid checkpoint policy {remat_policy}")
-
-    @staticmethod
-    def _mk(remat_policy: Union[bool, str, "ScanCheckpointPolicy"]) -> "ScanCheckpointPolicy":
-        if isinstance(remat_policy, ScanCheckpointPolicy):
-            return remat_policy
-        else:
-            return ScanCheckpointPolicy.from_bool_or_str(remat_policy)
-
-    def checkpoint(self, carry_name: str, output_name: str, callable):
-        if self.disable:
-            return callable
-        policy = self._to_jax_policy(carry_name, output_name)
-        if policy is None:
-            return callable
-        else:
-            return eqx.filter_checkpoint(callable, policy=policy, prevent_cse=self.prevent_cse)
-
-    def _to_jax_policy(self, carry_name: str, output_name: str):
-        assert isinstance(carry_name, str)
-        assert isinstance(output_name, str)
-        our_names_to_save = []
-        our_names_to_offload = []
-        our_names_to_remat = []
-
-        # return jax.checkpoint_policies.save_only_these_names(carry_name, output_name)
-
-        if self.save_outputs is True:
-            our_names_to_save.append(output_name)
-        elif self.save_outputs == "offload":
-            our_names_to_offload.append(output_name)
-        else:
-            assert self.save_outputs is False, f"Invalid save_outputs {self.save_outputs}"
-            our_names_to_remat.append(output_name)
-
-        if self.save_carries is True:
-            our_names_to_save.append(carry_name)
-        elif self.save_carries == "offload":
-            our_names_to_offload.append(carry_name)
-        else:
-            assert self.save_carries is False, f"Invalid save_carries {self.save_carries}"
-            our_names_to_remat.append(carry_name)
-
-        if isinstance(self.save_block_internals, Sequence):
-            our_names_to_save.extend(self.save_block_internals)
-
-        if len(our_names_to_offload) > 0:
-            if self.save_block_internals is True:
-                raise ValueError("Can't save all block internals and offload outputs. Use a list of names instead.")
-
-            return jax.checkpoint_policies.save_and_offload_only_these_names(
-                names_which_can_be_saved=our_names_to_save,
-                names_which_can_be_offloaded=our_names_to_offload,
-                offload_src="device",
-                offload_dst="pinned_host",
-            )
-        else:
-            if len(our_names_to_remat) > 0:
-                if self.save_block_internals is True:
-                    p1 = jax.checkpoint_policies.save_anything_except_these_names(*our_names_to_remat)
-                    if len(our_names_to_save) > 0:
-                        p2 = jax.checkpoint_policies.save_only_these_names(*our_names_to_save)
-                        return jax.checkpoint_policies.save_from_both_policies(p1, p2)
-                    else:
-                        return p1
-                else:
-                    return jax.checkpoint_policies.save_only_these_names(*our_names_to_save)
-            elif len(our_names_to_save) > 0:
-                p1 = jax.checkpoint_policies.save_only_these_names(*our_names_to_save)
-                if self.save_block_internals is True:
-                    p2 = jax.checkpoint_policies.save_anything_except_these_names(*our_names_to_remat)
-                    return jax.checkpoint_policies.save_from_both_policies(p1, p2)
-                else:
-                    return p1
-            elif self.save_block_internals is True:
-                return jax.checkpoint_policies.save_anything_except_these_names(*our_names_to_remat)
-            else:
-                return None
 
 
 class BlockFoldable(Protocol[M]):
@@ -293,7 +100,7 @@ class BlockSeq(ModuleWithStateDictSerialization, Generic[M]):
         if prevent_cse is not None:
             warnings.warn(
                 "The prevent_cse argument is deprecated and will be removed in a future version of Haliax. Use the"
-                " StackedCheckpointPolicy instead.",
+                " ScanCheckpointPolicy instead.",
                 DeprecationWarning,
             )
             gradient_checkpointing = dataclasses.replace(gradient_checkpointing, prevent_cse=prevent_cse)
@@ -342,8 +149,6 @@ class BlockSeq(ModuleWithStateDictSerialization, Generic[M]):
 
             return carry, haliax.tree_util.tree_map(lambda *x: haliax.stack(self.Block, x), *out)
 
-        do_scan = self.gradient_checkpointing.checkpoint(self._carry_ckpt_name, self._output_ckpt_name, do_scan)
-
         return do_scan(init, *extra_args, **extra_kwargs)
 
     def fold(self, init: T, *args, **kwargs) -> T:
@@ -356,8 +161,6 @@ class BlockSeq(ModuleWithStateDictSerialization, Generic[M]):
                 carry = block(carry, *block_args, **block_kwargs)
                 carry = tree_checkpoint_name(carry, self._carry_ckpt_name)
             return carry
-
-        do_fold = self.gradient_checkpointing.checkpoint(self._carry_ckpt_name, self._output_ckpt_name, do_fold)
 
         return do_fold(init, *args, **kwargs)
 
@@ -481,7 +284,7 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
             Block: The axis that will be stacked over. This is typically a "layer" axis, but could be any axis.
             module: The module that will be stacked. This module must take a batched input and return a batched output.
             gradient_checkpointing: Whether to use gradient checkpointing. If True, uses the default policy. If a string,
-                uses the policy specified by the string. If a StackedCheckpointPolicy, uses that policy.
+                uses the policy specified by the string. If a ScanCheckpointPolicy, uses that policy.
             prevent_cse: Whether to prevent common subexpression elimination in the checkpointed function. This is useful
                 for debugging, but may slow down the function.
         """
@@ -491,7 +294,7 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
         if prevent_cse is not None:
             warnings.warn(
                 "The prevent_cse argument is deprecated and will be removed in a future version of Haliax. Use the"
-                " StackedCheckpointPolicy instead.",
+                " ScanCheckpointPolicy instead.",
                 DeprecationWarning,
             )
 
@@ -531,20 +334,14 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
         Returns:
 
         """
-        carry_name = self._carry_ckpt_name
-        output_name = self._output_ckpt_name
 
         def do_block(carry, block, *args, **kwargs):
-            carry = tree_checkpoint_name(carry, carry_name)
             carry, out = block(carry, *args, **kwargs)
-            out = tree_checkpoint_name(out, output_name)
             return carry, out
 
         def do_scan(init, *extra_args, **extra_kwargs):
             carry, out = haliax.scan(do_block, self.Block)(init, self.stacked, *extra_args, **extra_kwargs)
             return carry, out
-
-        do_scan = self.gradient_checkpointing.checkpoint(carry_name, output_name, do_scan)
 
         return do_scan(init, *extra_args, **extra_kwargs)
 
@@ -570,32 +367,19 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
         Returns:
 
         """
-        carry_name = self._carry_ckpt_name
 
         def do_block(carry, block, *args, **kwargs):
-            carry = tree_checkpoint_name(carry, carry_name)
             carry = block(carry, *args, **kwargs)
             return carry
 
-        if self.gradient_checkpointing.is_save_nothing:
-            pass
-        elif self.gradient_checkpointing.simple:
-            do_block = jax.checkpoint(do_block, prevent_cse=self.gradient_checkpointing.prevent_cse)
-        else:
-            do_block = self.gradient_checkpointing.checkpoint(carry_name, self._output_ckpt_name, do_block)
-
         def do_fold(init, *extra_args, **extra_kwargs):
             # if self.gradient_checkpointing.simple:
-            carry = haliax.fold(do_block, self.Block)(init, self.stacked, *extra_args, **extra_kwargs)
+            carry = haliax.fold(do_block, self.Block, remat=self.gradient_checkpointing)(
+                init, self.stacked, *extra_args, **extra_kwargs
+            )
             # else:
             #     carry = haliax.fold(do_block, self.Block)(init, self.stacked, *extra_args, **extra_kwargs)
             return carry
-
-        if self.gradient_checkpointing.is_save_nothing:
-            do_fold = jax.checkpoint(do_fold, prevent_cse=self.gradient_checkpointing.prevent_cse)
-
-        # if not self.gradient_checkpointing.simple:
-        #     do_fold = self.gradient_checkpointing.checkpoint(carry_name, self._output_ckpt_name, do_fold)
 
         return do_fold(init, *args, **kwargs)
 
@@ -647,16 +431,6 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
         stacked = _stack_state_dict(state_dict, prefix=prefix)
         out = super().from_state_dict(stacked, prefix=prefix)  # type: ignore
         return out
-
-    @property
-    def _carry_ckpt_name(self):
-        # return f"Stacked[{self.Block}, {self.stacked.__class__.__name__}].carry"
-        return "carry"
-
-    @property
-    def _output_ckpt_name(self):
-        # return f"Stacked[{self.Block}, {self.stacked.__class__.__name__}].outputs"
-        return "outputs"
 
 
 def _stack_state_dict(state_dict: StateDict, prefix: Optional[str] = None) -> StateDict:
