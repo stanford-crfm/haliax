@@ -1,3 +1,4 @@
+import dataclasses
 from typing import Any
 
 import equinox as eqx
@@ -8,7 +9,7 @@ import pytest
 import haliax as hax
 from haliax.nn import Linear
 from haliax.nn.scan import _stack_state_dict, _unstack_state_dict
-from haliax.state_dict import flatten_linear_layers, from_state_dict, to_state_dict, unflatten_linear_layers
+from haliax.state_dict import from_state_dict, to_state_dict
 
 
 @pytest.mark.parametrize("out_dims_first", [True, False])
@@ -24,7 +25,7 @@ def test_flatten_linear_layers(out_dims_first: bool):
     else:
         assert linear.weight.axes == (H, W, D, B)
 
-    flat_linear = flatten_linear_layers(linear)
+    flat_linear = linear.flatten_for_export()
 
     flat_state_dict = to_state_dict(flat_linear)
     if out_dims_first:
@@ -36,7 +37,7 @@ def test_flatten_linear_layers(out_dims_first: bool):
 
     # now unflatten it
     linear2 = Linear.init((H, W), (D, B), key=jax.random.PRNGKey(1), use_bias=True, out_first=out_dims_first)
-    new_linear = unflatten_linear_layers(linear2, flat_linear)
+    new_linear = flat_linear.unflatten_from_export(linear2)
 
     if out_dims_first:
         assert new_linear.weight.axes == (D, B, H, W)
@@ -127,3 +128,26 @@ def test_to_from_state_dict():
     m2 = from_state_dict(m2, state_dict)
     assert jnp.all(m2.a == a)
     assert jnp.all(m2.b == b)
+
+
+def test_export_layer_norm():
+    D = hax.Axis("D", 10)
+    E = hax.Axis("E", 20)
+    layer_norm = hax.nn.LayerNorm.init((D, E), eps=1e-5, use_weight=True, use_bias=True)
+
+    flat_layer_norm = layer_norm.flatten_for_export()
+
+    flat_state_dict = to_state_dict(flat_layer_norm)
+
+    assert flat_state_dict["weight"].shape == (D.size * E.size,)
+    assert flat_state_dict["bias"].shape == (D.size * E.size,)
+    assert flat_state_dict["weight"].dtype == flat_state_dict["bias"].dtype == layer_norm.weight.dtype
+
+    # now unflatten it
+    layer_norm2 = hax.nn.LayerNorm.init((D, E), eps=1e-5, use_weight=True, use_bias=True)
+    # ensure we have different weights
+    layer_norm2 = dataclasses.replace(layer_norm2, weight=layer_norm2.weight + 1, bias=layer_norm2.bias + 1)
+
+    new_layer_norm = flat_layer_norm.unflatten_from_export(layer_norm2)
+
+    assert layer_norm == new_layer_norm

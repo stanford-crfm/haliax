@@ -1,3 +1,4 @@
+import dataclasses
 import math
 from typing import Optional
 
@@ -6,13 +7,14 @@ from jax.random import PRNGKey
 
 import haliax as hax
 
+from .._src.state_dict import Mod, ModuleWithStateDictSerialization
 from ..axis import AxisSpec
 from ..core import NamedArray
 from ..jax_utils import named_call
 from ..quantization import DotGeneralOp
 
 
-class Linear(eqx.Module):
+class Linear(ModuleWithStateDictSerialization):
     """A named Linear layer. This module allows you to specify multiple named axes for both input
     and output, which is occasionally useful."""
 
@@ -41,7 +43,7 @@ class Linear(eqx.Module):
             key: PRNGKeyArray: The PRNG key to use for initialization
             use_bias: bool: Whether to use a bias term
             out_first: bool: Whether to put output axes first in the weight matrix. out_first is how PyTorch does it.
-            dot_general: Callable: The dot_general function to use. Defaults to jax.lax.dot_general. For fp8 or int8
+            dot_general: Callable: The dot_general function to use. Defaults to jax.lax.dot_general.
             init_scale: float: The scale to use for initialization. We scale init by 1/sqrt(Input.size)*init_scale
         """
         joint_spec = hax.concat_axis_specs(Out, In) if out_first else hax.concat_axis_specs(In, Out)
@@ -70,6 +72,47 @@ class Linear(eqx.Module):
             q = hax.auto_sharded(q)
 
         return q
+
+    def flatten_for_export(self: Mod) -> Mod:
+        if isinstance(self.Out, hax.Axis) and isinstance(self.In, hax.Axis):
+            return self
+
+        weight = self.weight
+        bias = self.bias
+
+        new_Out = hax.flatten_axes(self.Out, "__OUT__")
+        new_In = hax.flatten_axes(self.In, "__IN__")
+
+        if weight.array is not None:
+            out_first = self._out_first
+            weight = weight.flatten_axes(self.Out, new_Out).flatten_axes(self.In, new_In)
+
+            if out_first:
+                weight = weight.rearrange((..., "__OUT__", "__IN__"))
+            else:
+                weight = weight.rearrange((..., "__IN__", "__OUT__"))
+
+        if isinstance(bias, NamedArray):
+            bias = bias.flatten_axes(self.Out, new_Out)
+
+        return dataclasses.replace(self, weight=weight, bias=bias, In=new_In, Out=new_Out)
+
+    def unflatten_from_export(self: Mod, template: Mod) -> Mod:
+        weight = self.weight
+        bias = self.bias
+
+        if (template.In, template.Out) == (self.In, self.Out):
+            return self
+
+        if weight.array is not None:
+            weight = weight.unflatten_axis("__OUT__", template.Out).unflatten_axis("__IN__", template.In)
+            weight = weight.rearrange(template.weight.axes)
+
+        if isinstance(bias, NamedArray):
+            bias = bias.unflatten_axis("__OUT__", template.Out)
+            bias = bias.rearrange(template.bias.axes)
+
+        return dataclasses.replace(template, weight=weight, bias=bias)
 
     @property
     def _out_first(self):

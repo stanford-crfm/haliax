@@ -13,7 +13,7 @@ import haliax.util
 from haliax.jax_utils import tree_checkpoint_name
 from haliax.util import is_jax_or_hax_array_like
 
-from .._src.scan import ScanCheckpointPolicy
+from .._src.scan import ScanCheckpointPolicy, ScanCheckpointSpec
 from .._src.state_dict import ModuleWithStateDictSerialization, StateDict, with_prefix
 from ..axis import Axis
 
@@ -46,7 +46,7 @@ class BlockFoldable(Protocol[M]):
         Block: Axis,
         module: Type[M],
         *,
-        gradient_checkpointing: bool | ScanCheckpointPolicy = False,
+        gradient_checkpointing: ScanCheckpointSpec = False,
         prevent_cse: bool = False,
     ) -> ModuleInit[S]:
         ...
@@ -86,7 +86,7 @@ class BlockSeq(ModuleWithStateDictSerialization, Generic[M]):
         Block: Axis,
         module: Type[M],
         *,
-        gradient_checkpointing: bool | ScanCheckpointPolicy = False,
+        gradient_checkpointing: ScanCheckpointSpec = False,
         prevent_cse: bool | None = None,
     ) -> ModuleInit[S]:
         """
@@ -273,7 +273,7 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
         Block: Axis,
         module: Type[M],
         *,
-        gradient_checkpointing: bool | ScanCheckpointPolicy | str = False,
+        gradient_checkpointing: ScanCheckpointSpec = False,
         prevent_cse: bool | None = None,
     ) -> ModuleInit["Stacked[M]"]:
         """
@@ -340,7 +340,9 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
             return carry, out
 
         def do_scan(init, *extra_args, **extra_kwargs):
-            carry, out = haliax.scan(do_block, self.Block)(init, self.stacked, *extra_args, **extra_kwargs)
+            carry, out = haliax.scan(do_block, self.Block, remat=self.gradient_checkpointing)(
+                init, self.stacked, *extra_args, **extra_kwargs
+            )
             return carry, out
 
         return do_scan(init, *extra_args, **extra_kwargs)
@@ -373,12 +375,9 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
             return carry
 
         def do_fold(init, *extra_args, **extra_kwargs):
-            # if self.gradient_checkpointing.simple:
             carry = haliax.fold(do_block, self.Block, remat=self.gradient_checkpointing)(
                 init, self.stacked, *extra_args, **extra_kwargs
             )
-            # else:
-            #     carry = haliax.fold(do_block, self.Block)(init, self.stacked, *extra_args, **extra_kwargs)
             return carry
 
         return do_fold(init, *args, **kwargs)

@@ -30,17 +30,10 @@ def tree_map(fn, tree, *rest, is_leaf=None):
 
 def scan_aware_tree_map(fn, tree, *rest, is_leaf=None):
     """
-    Version of [haliax.tree_util.tree_map][] that is aware of the scan-layer pattern, specifically as implmeneted
+    Version of [haliax.tree_util.tree_map][] that is aware of the scan-layer pattern, specifically as implemented
     in hax.nn.Stacked. This function will (implicitly) apply the transform to each layer in each Stacked module
     (using vmap). If there are no Stacked modules in the tree, this function is equivalent to [haliax.tree_util.tree_map][].
 
-    Args:
-        fn:
-        tree:
-        *rest:
-        is_leaf:
-
-    Returns:
     """
     old_is_leaf = is_leaf
     if is_leaf is None:
@@ -55,7 +48,7 @@ def scan_aware_tree_map(fn, tree, *rest, is_leaf=None):
             new_inner = haliax.vmap(mapped_fn, x.Block)(x.stacked, *[r.stacked for r in rest])
             return dataclasses.replace(x, stacked=new_inner)  # type: ignore
         else:
-            return fn(x)
+            return fn(x, *rest)
 
     return tree_map(rec_fn, tree, *rest, is_leaf=is_leaf)
 
