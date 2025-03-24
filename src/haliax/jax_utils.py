@@ -239,7 +239,8 @@ def multilevel_scan(f, carry, xs, outer_size, length, reverse=False, unroll=1):
     xs_shaped = jax.tree.map(_reshape, xs)
 
     carry, scanned = jax.lax.scan(
-        jax.remat(ft.partial(jax.lax.scan, f, reverse=reverse, unroll=unroll)), carry, xs_shaped, reverse=reverse
+        jax.remat(ft.partial(jax.lax.scan, f, reverse=reverse, unroll=unroll)), carry, xs_shaped, reverse=reverse,
+        unroll=True
     )
 
     def _deshape(x):
