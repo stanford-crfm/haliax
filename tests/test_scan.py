@@ -1,9 +1,11 @@
 import equinox as eqx
 import jax
 import pytest
+from equinox import filter_grad
 
 import haliax as hax
-from haliax.nn.scan import BlockSeq, Stacked
+from haliax.jax_utils import tree_checkpoint_name
+from haliax.nn.scan import BlockSeq, ScanCheckpointPolicy, Stacked
 
 
 def test_unstacked():
@@ -130,8 +132,6 @@ def test_scan_with_aux_named_args():
     z_seq, z_seq_scan = m_seq.scan(x, initial_y, key=jax.random.split(jax.random.PRNGKey(2), Block.size))
     assert hax.all(hax.isclose(z, z_seq, atol=1e-5))
 
-    z_seq_scan = hax.stack(Block, z_seq_scan)
-
     assert hax.all(hax.isclose(z_scan, z_seq_scan, atol=1e-5))
 
 
@@ -164,3 +164,82 @@ def test_stacked_to_state_dict():
     y2 = m2.fold(input, key=key)
 
     assert hax.all(hax.equal(y, y2))
+
+
+Block = hax.Axis("block", 4)
+E = hax.Axis("E", 10)
+
+
+@pytest.mark.parametrize(
+    "name,policy,expected_scan_shapes",
+    [
+        ("disabled", ScanCheckpointPolicy(disable=True), [(E.size,), (Block.size, E.size), (Block.size, E.size)]),
+        ("carry_true", True, [(E.size,), (Block.size, E.size)]),
+        (
+            "carry",
+            ScanCheckpointPolicy(save_carries=True, save_block_internals=False),
+            [(E.size,), (Block.size, E.size)],
+        ),
+        (
+            "everything",
+            ScanCheckpointPolicy(save_carries=True, save_inputs=True, save_block_internals=True),
+            [(E.size,), (Block.size, E.size), (Block.size, E.size)],
+        ),
+        (
+            "internals",
+            ScanCheckpointPolicy(save_carries=False, save_block_internals=True),
+            [(E.size,), (Block.size, E.size), (Block.size, E.size)],
+        ),
+        (
+            "cos",
+            ScanCheckpointPolicy(save_carries=False, save_block_internals=["cos"]),
+            [(E.size,), (Block.size, E.size)],
+        ),
+        (
+            "sin",
+            ScanCheckpointPolicy(save_carries=True, save_block_internals=["sin"]),
+            [(E.size,), (Block.size, E.size), (Block.size, E.size)],
+        ),
+        ("simple", ScanCheckpointPolicy(simple=True), [(E.size,), (Block.size, E.size)]),
+        ("nested", ScanCheckpointPolicy(simple=True, nested=2), [(E.size,), (2, E.size)]),
+    ],
+)
+def test_checkpoint_carries(name, policy, expected_scan_shapes):
+    class Module(eqx.Module):
+        named: hax.NamedArray
+
+        def __call__(self, x):
+            y = tree_checkpoint_name(hax.sin(x + self.named), "sin")
+            y = tree_checkpoint_name(hax.cos(y + x), "cos")
+            return y + x
+
+        @staticmethod
+        def init(named):
+            return Module(named=named)
+
+    initial_named = hax.random.uniform(jax.random.PRNGKey(0), (Block, E))
+
+    m = Stacked.init(
+        Block,
+        Module,
+        gradient_checkpointing=policy,  # type: ignore
+    )(named=initial_named)
+
+    def loss_fn(m, x):
+        y = m.fold(x)
+        return hax.sum(y).scalar()
+
+    grad_fn = filter_grad(loss_fn)
+
+    jaxpr = jax.make_jaxpr(grad_fn)(m, hax.random.uniform(jax.random.PRNGKey(1), (E,)))
+    closed_call = next(eqn for eqn in jaxpr.jaxpr.eqns if eqn.primitive in [jax.lax.scan_p])
+    out_shapes = [out.aval.shape for out in closed_call.outvars]
+
+    print(name)
+    print(jaxpr)
+    from jax._src.ad_checkpoint import saved_residuals
+
+    for residual in saved_residuals(loss_fn, m, hax.random.uniform(jax.random.PRNGKey(1), (E,))):
+        print(residual)
+
+    assert out_shapes == expected_scan_shapes, f"{name}: Expected {expected_scan_shapes}, got {out_shapes}"

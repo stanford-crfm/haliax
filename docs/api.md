@@ -295,7 +295,7 @@ See also the section on [Partitioning](partitioning.md).
 Haliax mainly just defers to JAX and [equinox.filter_checkpoint][] for gradient checkpointing. However,
 we provide a few utilities to make it easier to use.
 
-See also [haliax.nn.StackedCheckpointPolicy][].
+See also [haliax.nn.ScanCheckpointPolicy][].
 
 ::: haliax.tree_checkpoint_name
 
