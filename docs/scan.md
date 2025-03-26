@@ -155,13 +155,29 @@ def my_fn(x):
 result = hax.map(my_fn, Time)(data)
 ```
 
-You would generally prefer to use [haliax.vmap][] instead of `haliax.map`, but it's there if you need it.
+You should generally prefer to use [haliax.vmap][] instead of `haliax.map`, but it's there if you need it.
+(It uses less memory than `haliax.vmap` but is slower.)
 
 
 ## Gradient Checkpointing / Rematerialization
 
 Both `haliax.scan` and `haliax.fold` support gradient checkpointing, which can be useful for deep models.
 Typically, you'd use this as part of [haliax.nn.Stacked][] or [haliax.nn.BlockSeq][] but you can also use it directly.
+
+Gradient checkpointing is a technique for reducing memory usage during backpropagation by recomputing some
+intermediate values during the backward pass. This can be useful when you have a deep model with many layers.
+
+###  TL;DR Guidance
+
+Here is some guidance on when to use gradient checkpointing:
+
+* Use `remat=False` if you need to reduce computation and have lots of memory. This is the default in [haliax.scan][].
+* Use `remat=True` for most models. It's usually good enough. This is the default in [haliax.nn.Stacked][].
+* Use `remat="nested"` if you need to reduce memory usage.
+* Use `save_block_internals` sparingly, but it is your best tool for trading increased memory usage for reduced computation
+if you need something between `remat=True` and `remat=False`.
+* Use `save_carries="offload"` if you need to reduce memory usage at the cost of recomputation. This is a new feature
+in JAX and doesn't seem to reliably work yet.
 
 
 ### Simple Checkpointing
@@ -177,6 +193,55 @@ final_state = hax.fold(running_stats, Time, remat=True)(init_state, data)
 This will preserve the intermediate "carries" and other inputs the fold function needs, while rematerializing
 (i.e. recomputing) the internal state of each block (i.e. call to the running_stats function) as needed during
 backpropagation.
+
+
+### Nested Scan
+
+Simple checkpointing requires `O(N)` memory where $N$ is the number of blocks. A nested scan lets you reduce
+this to `O(sqrt(N))` memory, at the cost of a bit more computation. You can enable this by passing `remat="nested"`:
+
+```python
+final_state = hax.fold(running_stats, Time, remat="nested")(init_state, data)
+```
+
+This will break the scan into a double loop, where the outer loop has `sqrt(N)` blocks and the inner loop has
+`sqrt(N)` blocks (with appropriate rounding).
+
+Functionally, it does something like:
+
+```
+outer_size = int(sqrt(N))  # ensuring outer_size divides N
+blocks = haliax.rearrange("block -> (outer inner)", blocks, outer=outer_size)
+
+state = init_state
+for o in range(outer_size):
+    inner_blocks = blocks["outer", o]
+
+    for i in range(inner_size):
+        state = f(state, inner_blocks["inner", i])
+
+    # not real jax
+    state = save_for_backward(state)
+```
+
+where we save only the carries from the outer loop, and fully rematerialize the inner loop.
+
+If `C` is the amount of memory needed for the carry, and `N` is the number of blocks, then the memory usage
+of the nested scan is `2 * C * sqrt(N)`. In addition, you need enough memory to do backward in one block.
+
+In practice, nested scan is about 20% slower than simple checkpointing (for Transformers), but uses much less memory.
+
+#### Advanced: customizing the number of blocks
+
+You can also customize the number of blocks in the outer loop by using a policy:
+
+```python
+policy = ScanCheckpointPolicy(nested=4)  # 4 outer blocks
+```
+
+Note that by itself this doesn't help you at all except potentially requiring more memory. You can potentially
+combine it with other policy options to make things faster though.
+
 
 ### Custom Checkpointing Policies
 
@@ -223,6 +288,7 @@ which is double that required by the default policy, but it reduces the amount o
 
 Both `save_carries` and `save_inputs` can either be a boolean or the string "offload". If "offload", then the
 checkpointed values will be offloaded to the host during the forward pass, and reloaded during the backward pass.
+
 
 
 ## Module Stacks

@@ -68,11 +68,15 @@ class ScanCheckpointPolicy:
     With this class, you can specify if you want to save the carries, or the internals/inputs. You can also offload
     the carries to the host, which can reduce memory usage on the device.
 
+    #### Nested Remat
 
     Alternatively, we can do something a bit more clever. We can break the computation into "blocks" of size "B", and
     save the carries and outputs of each block. Then, during the backward pass, we can recompute the outputs of each
     block using the carries and inputs, and then compute the gradient as usual. This requires O(B) memory and O(N)
     time. When B = sqrt(N), this is O(sqrt(N)) memory and O(N) time. This is the "nested scan" policy.
+    In practice, this is about 20% slower than the O(N) memory policy, but it can be worth it for large models.
+
+    #### Offloading
 
     Another choice is to "offload" carries and outputs to the host, which can reduce memory usage on the device.
     We support offloading carries and outputs to the host, but not internals.
@@ -117,7 +121,7 @@ class ScanCheckpointPolicy:
     Whether to use the simple gradient checkpointing policy. This is useful for debugging.
     """
 
-    nested_remat: bool | int = False
+    nested: bool | int = False
     """
     Allows for nested remat with a double scan. We reshape the stack into [nested_remat, -1] and then scan over both
     in sequence. If True, we find the closest int to sqrt(len(stack)) such that len(stack) % int == 0.
@@ -136,6 +140,7 @@ class ScanCheckpointPolicy:
             * "offload": offload outputs to the host, don't save block internals.
             * "recompute" or "full": don't save outputs or block internals.
             * "save_all": save outputs and block internals. Equivalent to False
+            * "nested": use nested remat. Equivalent to True
         """
         if remat_policy == "offload":
             return ScanCheckpointPolicy(save_carries="offload", save_inputs="offload", save_block_internals=False)
@@ -143,6 +148,8 @@ class ScanCheckpointPolicy:
             return ScanCheckpointPolicy(save_carries=False, save_inputs=False, save_block_internals=False)
         elif remat_policy == "save_all":
             return ScanCheckpointPolicy(save_carries=True, save_inputs=True, save_block_internals=True)
+        elif remat_policy == "nested":
+            return ScanCheckpointPolicy(nested=True)
         elif remat_policy is True:
             return ScanCheckpointPolicy(simple=True)
         elif remat_policy is False:
@@ -232,7 +239,7 @@ class ScanCheckpointPolicy:
                 return None
 
 
-ScanCheckpointSpec = Union[ScanCheckpointPolicy, bool, Literal["offload", "recompute", "full", "save_all"]]
+ScanCheckpointSpec = Union[ScanCheckpointPolicy, bool, Literal["offload", "recompute", "full", "save_all", "nested"]]
 
 
 @overload
@@ -343,7 +350,7 @@ def scan(
         true_axis = _infer_axis_size_from_tree(axis_first_xs, axis)
         axis_size = _infer_axis_size_from_tree(axis_first_xs, axis).size
 
-        nested_scan = checkpoint.nested_remat
+        nested_scan = checkpoint.nested
         outer_block_size = nested_scan_outer_block(nested_scan, axis_size)
 
         checkpointed_fn = checkpoint.checkpoint(carry_name, input_name, wrapped_fn)

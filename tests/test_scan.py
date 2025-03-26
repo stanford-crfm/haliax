@@ -201,7 +201,7 @@ E = hax.Axis("E", 10)
             [(E.size,), (Block.size, E.size), (Block.size, E.size)],
         ),
         ("simple", ScanCheckpointPolicy(simple=True), [(E.size,), (Block.size, E.size)]),
-        ("nested", ScanCheckpointPolicy(simple=True, nested_remat=2), [(E.size,), (2, E.size)]),
+        ("nested", ScanCheckpointPolicy(simple=True, nested=2), [(E.size,), (2, E.size)]),
     ],
 )
 def test_checkpoint_carries(name, policy, expected_scan_shapes):

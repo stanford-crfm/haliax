@@ -129,7 +129,7 @@ def test_scan_hierarchical():
         return acc + jnp.sum(x.array), x.take("Width", 2)
 
     total, selected = hax.scan(scan_fun, "Height")(0.0, named1)
-    ckpt = hax.ScanCheckpointPolicy(nested_remat=True)
+    ckpt = hax.ScanCheckpointPolicy(nested=True)
     total_blocked, selected_blocked = hax.scan(scan_fun, "Height", remat=ckpt)(0.0, named1)
 
     assert jnp.all(jnp.isclose(total, total_blocked))

@@ -223,7 +223,17 @@ def tree_checkpoint_name(x: T, name: str) -> T:
 
 
 def multilevel_scan(f, carry, xs, outer_size, length, reverse=False, unroll=1):
-    """Credit to Roy and Matt."""
+    """
+
+    Similar to jax.lax.scan, but "nested". You take your scanned axis and break it up into outer_size chunks, then
+    scan each chunk with a scan.
+
+    You use this if you want to save memory by, e.g., implementing the sqrt(N) memory trick for checkpointing.
+
+    This is typically ~20% slower than the O(n) memory thing, but it's often worthwhile.
+
+    Credit to Roy and Matt.
+    """
 
     inner_size = length // outer_size
 
@@ -239,8 +249,11 @@ def multilevel_scan(f, carry, xs, outer_size, length, reverse=False, unroll=1):
     xs_shaped = jax.tree.map(_reshape, xs)
 
     carry, scanned = jax.lax.scan(
-        jax.remat(ft.partial(jax.lax.scan, f, reverse=reverse, unroll=unroll)), carry, xs_shaped, reverse=reverse,
-        unroll=True
+        jax.remat(ft.partial(jax.lax.scan, f, reverse=reverse, unroll=unroll)),
+        carry,
+        xs_shaped,
+        reverse=reverse,
+        unroll=True,
     )
 
     def _deshape(x):
