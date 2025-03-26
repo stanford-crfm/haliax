@@ -290,6 +290,34 @@ Both `save_carries` and `save_inputs` can either be a boolean or the string "off
 checkpointed values will be offloaded to the host during the forward pass, and reloaded during the backward pass.
 
 
+### Summary of String and Boolean Aliases
+
+* `remat=True` is the same as `remat=ScanCheckpointPolicy(save_carries=True, save_inputs=True)`
+* `remat="full"` is the same as `remat=True`
+* `remat=False` is the same as `remat=ScanCheckpointPolicy(disable=True)`
+* `remat="nested"` is the same as `remat=ScanCheckpointPolicy(nested=True)`
+* `remat="offload"` is the same as `remat=ScanCheckpointPolicy(save_carries="offload", save_inputs="offload")`
+* `remat="save_all"` is the same as `remat=ScanCheckpointPolicy(save_carries=True, save_inputs=True, save_block_internals=True)`,
+which should be the same as not using remat at all...
+
+
+### Memory and Computation Tradeoffs
+
+Let `N` be the number of blocks, `C` be the memory needed for the carry, and `I` be the internal memory needed
+for each block. Let F be the amount of computation needed for each block. Constants are added for a bit more precision
+but are not exact. This is assuming that backward requires ~twice the flops as forward, which is roughly right for
+Transformers.
+
+| Policy           | Memory Usage             | Computation    |
+|------------------|--------------------------|----------------|
+| `remat=False`    | `O(N * C + N * I)`       | `O(3 * N * F)` |
+| `remat=True`     | `O(N * C + I)`           | `O(4 * N * F)` |
+| `remat="nested"` | `O(2 * sqrt(N) * C + I)` | `O(5 * N * F)` |
+
+
+(Which shows why nested scan is about 20% slower than simple checkpointing. The math says 25% but it's more like 20% in
+practice.) Any nested remat will require `5 * N * F` computation, which is about 25% more than simple remat.
+
 
 ## Module Stacks
 
