@@ -121,13 +121,38 @@ def full_like(a: NamedArray, fill_value: T, dtype: Optional[DTypeLike] = None) -
     return NamedArray(jnp.full_like(a.array, fill_value, dtype=dtype), a.axes)
 
 
-def arange(axis: Axis, *, start=0, step=1, dtype: Optional[DTypeLike] = None) -> NamedArray:
-    """Version of jnp.arange that returns a NamedArray"""
+def arange(axis: AxisSpec, *, start=0, step=1, dtype: Optional[DTypeLike] = None) -> NamedArray:
+    """
+    Version of jnp.arange that returns a NamedArray.
+
+    This version differs from jnp.arange (beyond the obvious NamedArray) in two ways:
+
+    1) It can work with a start that is a tracer (i.e. a JAX expression), whereas jax arange is not able to handle
+    tracers.
+    2) Axis can be more than one axis, in  which case it's equivalent to arange of the product of sizes, followed by
+    reshape.
+
+    Examples
+
+    ```python
+    X, Y = hax.make_axes(X=3, Y=4)
+    # Create a NamedArray along a single axis
+    arr = hax.arange(X)  # equivalent to jnp.arange(0, 3, 1)
+    # 2D
+    arr = hax.arange((X, Y))  # equivalent to jnp.arange(0, 12, 1).reshape(3, 4)
+    ```
+
+    """
+    from haliax.jax_utils import to_jax_shape
+    from haliax.util import ensure_tuple
+
     # if start is a tracer, we need to be a bit cleverer since arange doesn't support tracers
     # return NamedArray(jnp.arange(start, stop, step, dtype=dtype), (axis,))
+    size = axis_size(axis)
 
-    arr = jax.lax.iota(dtype=dtype or jnp.result_type(start), size=axis.size) * step + start
-    return NamedArray(arr, (axis,))
+    arr = jax.lax.iota(dtype=dtype or jnp.result_type(start), size=size) * step + start
+    arr = arr.reshape(to_jax_shape(axis))
+    return NamedArray(arr, ensure_tuple(axis))
 
 
 # TODO: add overrides for arraylike start/stop to linspace, logspace, geomspace
