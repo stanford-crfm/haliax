@@ -348,7 +348,13 @@ def scan(
             return carry, y
 
         true_axis = _infer_axis_size_from_tree(axis_first_xs, axis)
-        axis_size = _infer_axis_size_from_tree(axis_first_xs, axis).size
+        if true_axis is None:
+            raise ValueError(
+                "Unable to infer the size of the axis to scan over. "
+                "This may be due to an empty tree or all leaves being filtered out."
+            )
+
+        axis_size = true_axis.size
 
         nested_scan = checkpoint.nested
         outer_block_size = nested_scan_outer_block(nested_scan, axis_size)
