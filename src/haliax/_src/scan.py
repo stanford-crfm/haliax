@@ -316,9 +316,6 @@ def scan(
         xs = (args, kwargs)
         scanned_xs, unscanned_xs = eqx.partition(xs, is_scanned_with_axis, is_leaf=is_named_array)
 
-        carry_name = f"scan({haliax.axis_name(axis)})__carry"
-        input_name = f"scan({haliax.axis_name(axis)})__input"
-
         # Next we have to hoist the axis we're scanning over to the front of the array, because that's what scan
         # expects. Then we have to scan over the 0th dim of the arrays (as flattened non-pytrees)
         # We have to be careful that we don't try to create NamedArrays that have the shape of the scanned result
@@ -330,6 +327,10 @@ def scan(
         x_elem = htu.tree_map(_select_0th(axis), axis_first_xs)
         # NB: we don't want to use htu.tree_structure here because we want to eliminate the leading axis
         x_elem_structure = jax.tree_util.tree_structure(x_elem)
+
+        # For gradient checkpointing:
+        carry_name = f"scan({haliax.axis_name(axis)})__carry"
+        input_name = f"scan({haliax.axis_name(axis)})__input"
 
         # now we can fold over the axis
         @ft.wraps(f)
