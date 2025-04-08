@@ -210,7 +210,7 @@ def _parse_expression(expression: str, pos, comma_is_space: bool) -> tuple[Expre
                 raise_parse_error("Expected >", expression, pos)
             break
         elif expression[pos] == ",":
-            if comma_is_space:
+            if comma_is_space or not is_ordered:
                 pos += 1
                 continue
 
