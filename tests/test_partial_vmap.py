@@ -6,6 +6,137 @@ import numpy as np
 import pytest
 import haliax as hax
 import haliax.partitioning
+from jaxtyping import PyTree
+from typing import Tuple, Optional, Dict, List, Set
+import jax.tree_util as jtu
+
+
+def _get_mapped_axes(x: PyTree, kept_axes: Set[str]) -> List[hax.Axis]:
+    """
+    Identifies all axes in a PyTree that are not specified in the kept_axes set.
+
+    Args:
+        x (PyTree): The input PyTree containing NamedArrays.
+        kept_axes (Set[str]): A set of axis names to exclude.
+
+    Returns:
+        List[hax.Axis]: A list of unique hax.Axis objects present in the PyTree 
+                        whose names are not in kept_axes.
+    """
+    all_axes = set()
+
+    # If the input itself is a NamedArray, collect its axes
+    if isinstance(x, hax.NamedArray):
+        all_axes.update(x.axes)
+    else:
+        # Otherwise, traverse the PyTree looking for NamedArrays
+        def _collect_axes(leaf):
+            if isinstance(leaf, hax.NamedArray):
+                for ax in leaf.axes:
+                    all_axes.add(ax)
+        
+        jtu.tree_map(_collect_axes, x)
+
+    mapped_axes = [ax for ax in all_axes if ax.name not in kept_axes]
+    # Sort for deterministic order, although not strictly necessary
+    mapped_axes.sort(key=lambda ax: ax.name)
+    return mapped_axes
+
+
+def _reshape_in(x: PyTree, kept_axes: set, per_device_batch_size: int) -> Tuple[PyTree, Optional[Dict[str, int]], Optional[Dict[str, int]], Optional[str]]:
+    """
+    Reshape the input PyTree by splitting mapped axes into physical and local parts.
+
+    Args:
+        x (PyTree): The input PyTree to be reshaped.
+        kept_axes (set): A set of axis names to keep (not map over).
+        per_device_batch_size (int): The batch size per device for vectorization.
+
+    Returns:
+        Tuple[PyTree, Optional[Dict[str, int]], Optional[Dict[str, int]], Optional[str]]: 
+            - The reshaped PyTree.
+            - A dictionary of mesh sizes for each mapped axis.
+            - A dictionary of local sizes for each mapped axis.
+            - A string representing the local part of the rearrange operation.
+    """
+    # Determine the mapped axes (all axes not in kept_axes).
+    mapped_axes = _get_mapped_axes(x, kept_axes)
+    if not mapped_axes:
+        return x, None, None, None  # No reshaping needed
+
+    # Compute the physical and logical sizes for each mapped axis.
+    mesh_sizes = {}
+    local_sizes = {}
+    for ax in mapped_axes:
+        partitioned_size = haliax.partitioning.physical_axis_size(ax)
+        if partitioned_size is None:
+            partitioned_size = 1
+        mesh_sizes[ax.name] = partitioned_size
+        local_size = ax.size // partitioned_size
+        local_sizes[ax.name] = local_size
+
+    # Build a rearrange string to split each mapped axis into its physical and local parts.
+    local_names = []
+    rearrange_str = ""
+    for ax in x.axes:
+        assert ")" not in ax.name, f"Axis name {ax.name} contains a parenthesis"
+        if ax.name in mesh_sizes:
+            rearrange_str += f"({ax.name}: {ax.name} {ax.name}__local) "
+            local_names.append(f"{ax.name}__local")
+        else:
+            rearrange_str += ax.name + " "
+
+    rearrange_str = rearrange_str[:-1]
+    local_part = f"(__LOCAL__: {' '.join(local_names)}) "
+    rearrange_str += f"-> {local_part} "
+    for ax in x.axes:
+        rearrange_str += f"{ax.name} "
+    rearrange_str = rearrange_str[:-1]
+
+    # Rearrange the array to split mapped axes into their physical and local parts.
+    x = hax.rearrange(x, rearrange_str, **mesh_sizes)
+    x = hax.auto_sharded(x)
+
+    return x, mesh_sizes, local_sizes, local_part
+
+
+def _reshape_out(scanned: PyTree, mesh_sizes: Dict[str, int], local_sizes: Dict[str, int], local_part: str) -> PyTree:
+    """
+    Reshape the output PyTree by merging the physical and local parts back into the original mapped axes.
+
+    Args:
+        scanned (PyTree): The scanned PyTree to be reshaped.
+        mesh_sizes (Dict[str, int]): A dictionary of mesh sizes for each mapped axis.
+        local_sizes (Dict[str, int]): A dictionary of local sizes for each mapped axis.
+        local_part (str): A string representing the local part of the rearrange operation.
+
+    Returns:
+        PyTree: The reshaped PyTree with original mapped axes restored.
+    """
+    # Merge the physical and local parts back into the original mapped axes.
+    rearrange_str = "{" + local_part + " "
+    for ax in scanned.axes:
+        if ax.name == "__LOCAL__":
+            continue
+        rearrange_str += f"{ax.name} "
+
+    rearrange_str = rearrange_str[:-1]
+    rearrange_str += "}-> "
+
+    for ax in scanned.axes:
+        if ax.name == "__LOCAL__":
+            continue
+        if ax.name in mesh_sizes:
+            rearrange_str += f"({ax.name}: {ax.name} {ax.name}__local) "
+        else:
+            rearrange_str += ax.name + " "
+
+    rearrange_str = rearrange_str[:-1]
+
+    scanned = hax.rearrange(scanned, rearrange_str,
+                            **{f"{ax}__local": local_sizes[ax]
+                               for ax in mesh_sizes})
+    return scanned
 
 
 def map_axes_other_than(f, kept_axes, per_device_batch_size=1):
@@ -13,118 +144,43 @@ def map_axes_other_than(f, kept_axes, per_device_batch_size=1):
     Returns a new function that applies `f` over all axes not in `kept_axes`
     but only vectorizes up to `per_device_batch_size` elements per device.
 
-    For example, if you have a function `f` that operates on the axis `Vocab`,
-    but is implicitly batched over all other axes (e.g. `Batch`, `Time`, etc.),
-    you can use this to vectorize over all axes except `kept_axes`.
-
-    This has a similar effect to vmapping (in that it hides axes from the function f), but:
-    (1) you specify which axes to keep (i.e., not map over);
-    (2) it is "sharding-aware" meaning that it still parallelizes across devices,
-        processing up to `per_device_batch_size` elements per device in parallel;
-      (3) it limits the amount of vectorization that happens to help XLA not overallocate memory.
+    Args:
+        f: The function to apply.
+        kept_axes: A set or collection of axis names to keep (not map over).
+        per_device_batch_size: The batch size per device for vectorization.
     """
+    # Ensure kept_axes is a set
+    kept_axes = set(kept_axes)
 
-    def wrapped(x, *args, **kwargs):
-        # 1. Determine the mapped axes (all axes not in kept_axes).
-        mapped_axes = [ax for ax in x.axes if ax.name not in kept_axes]
-        if not mapped_axes:
-            # Nothing to map over; just apply f directly.
+    def wrapped(x: PyTree, *args, **kwargs):
+        x, mesh_sizes, local_sizes, local_part = _reshape_in(x, kept_axes, per_device_batch_size)
+        if mesh_sizes is None:
             return f(x, *args, **kwargs)
 
-        # 2. For each mapped axis, compute the physical and logical sizes.
-        mesh_sizes = {}
-        local_sizes = {}
-        for ax in mapped_axes:
-            partitioned_size = haliax.partitioning.physical_axis_size(ax)
-            if partitioned_size is None:
-                partitioned_size = 1
-            mesh_sizes[ax.name] = partitioned_size
-            local_size = ax.size // partitioned_size
-            local_sizes[ax.name] = local_size
-
-        # 3. Build a rearrange string that splits each mapped axis into two: a physical part and a local part.
-        local_names = []
-        rearrange_str = ""
-        for i, ax in enumerate(x.axes):
-            # Ensure that axis names do not contain a parenthesis (used for destructuring).
-            assert ")" not in ax.name, f"Axis name {ax.name} contains a parenthesis"
-            if ax.name in mesh_sizes:
-                # This axis will be destructured into a physical and a local component.
-                rearrange_str += f"({ax.name}: {ax.name} {ax.name}__local) "
-                local_names.append(f"{ax.name}__local")
-            else:
-                rearrange_str += ax.name + " "
-
-        rearrange_str = rearrange_str[:-1]
-
-        # We want the local parts to be grouped together; we assign them to a new axis "__LOCAL__".
-        local_part = f"(__LOCAL__: {' '.join(local_names)}) "
-
-        rearrange_str += f"-> {local_part} "
-
-        for i, ax in enumerate(x.axes):
-            rearrange_str += f"{ax.name} "
-
-        rearrange_str = rearrange_str[:-1]
-
-        # Rearrange the array to split mapped axes into their physical and local parts.
-        x = hax.rearrange(x, rearrange_str, **mesh_sizes)
-        # Ensure the array is auto-sharded based on the current axis mapping.
-        x = hax.auto_sharded(x)
-
-        # 4. If the local (__LOCAL__) axis is larger than per_device_batch_size, further split it.
         needs_vmapping = False
         local_size = x.axis_size("__LOCAL__")
         if per_device_batch_size != 1 and local_size > per_device_batch_size:
             if local_size % per_device_batch_size != 0:
-                # Raise an error to avoid unexpected behavior if the size is not divisible.
                 raise ValueError(f"The number of examples on a device {local_size} is not divisible by "
                                  f"per_device_batch_size {per_device_batch_size}.")
             needs_vmapping = True
-            # Split the "__LOCAL__" axis into two: one for the number of chunks and one for the per-device batch.
             num_chunks = local_size // per_device_batch_size
             x = hax.unflatten_axis(x, "__LOCAL__",
                                    (hax.Axis("__LOCAL__", num_chunks), hax.Axis("__LOCAL__CHUNK", per_device_batch_size)))
-            # Use vmap over the "__LOCAL__CHUNK" axis.
             mod_f = hax.vmap(f, "__LOCAL__CHUNK")
         else:
             mod_f = f
 
-        # 5. Run a scan over the "__LOCAL__" axis.
         def scan_fn(carry, slice_x):
             out = mod_f(slice_x, *args, **kwargs)
             return carry, out
 
         _, scanned = haliax.scan(scan_fn, "__LOCAL__")(None, x, *args, **kwargs)
 
-        # 6. If vmap was used, flatten the "__LOCAL__" and "__LOCAL__CHUNK" axes back into "__LOCAL__".
         if needs_vmapping:
             scanned = hax.flatten_axes(scanned, ("__LOCAL__", "__LOCAL__CHUNK"), "__LOCAL__")
 
-        # 7. Rearrange to merge the physical and local parts back into the original mapped axes.
-        rearrange_str = "{" + local_part + " "
-        for i, ax in enumerate(scanned.axes):
-            if ax.name == "__LOCAL__":
-                continue
-            rearrange_str += f"{ax.name} "
-
-        rearrange_str = rearrange_str[:-1]
-        rearrange_str += "}-> "
-
-        for i, ax in enumerate(scanned.axes):
-            if ax.name == "__LOCAL__":
-                continue
-            if ax.name in mesh_sizes:
-                # For mapped axes, we need to merge the physical and logical parts.
-                rearrange_str += f"({ax.name}: {ax.name} {ax.name}__local) "
-            else:
-                rearrange_str += ax.name + " "
-
-        rearrange_str = rearrange_str[:-1]
-
-        scanned = hax.rearrange(scanned, rearrange_str,
-                                **{f"{ax.name}__local": local_sizes[ax.name]
-                                   for ax in mapped_axes})
+        scanned = _reshape_out(scanned, mesh_sizes, local_sizes, local_part)
         return scanned
 
     return wrapped
@@ -208,6 +264,10 @@ def test_error_on_non_divisible():
     def dummy(x):
         return x
 
+    print("\nTest setup:")
+    print(f"Time axis size: {Time.size}")
+    print(f"per_device_batch_size: 3")
+    
     pv = map_axes_other_than(dummy, kept_axes={"batch"}, per_device_batch_size=3)
     with pytest.raises(ValueError, match="not divisible"):
         pv(x)
