@@ -168,7 +168,6 @@ class ScanCheckpointPolicy:
         if self.disable:
             return callable
         elif self.simple:
-            print("simple")
             return eqx.filter_checkpoint(callable, prevent_cse=self.prevent_cse)
         else:
             policy = self._to_jax_policy(carry_name, input_name)
