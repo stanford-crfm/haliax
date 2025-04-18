@@ -289,6 +289,12 @@ which is double that required by the default policy, but it reduces the amount o
 Both `save_carries` and `save_inputs` can either be a boolean or the string "offload". If "offload", then the
 checkpointed values will be offloaded to the host during the forward pass, and reloaded during the backward pass.
 
+In addition, you can offload block internals by passing a list of strings to `offload_block_internals`:
+
+```
+policy = ScanCheckpointPolicy(save_carries=True, save_block_internals=["y"], offload_block_internals=["z"])
+```
+
 
 ### Summary of String and Boolean Aliases
 
