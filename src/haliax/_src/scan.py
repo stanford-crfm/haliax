@@ -108,6 +108,10 @@ class ScanCheckpointPolicy:
     """
 
     offload_block_internals: list[str] = dataclasses.field(default_factory=list)
+    """
+    List of named block internals to offload to the host. This is useful for reducing memory usage on the device
+    while still avoiding rematerialization.
+    """
 
     prevent_cse: bool = False
     """
