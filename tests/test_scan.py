@@ -285,5 +285,3 @@ def test_checkpoint_carries(name, policy, expected_scan_shapes, check_offloading
 
             assert target is not None, f"Could not find named value for {name}"
             assert found_saved, f"Could not find offloaded value for {name}"
-        # TODO: Add offloading check here
-        pass
