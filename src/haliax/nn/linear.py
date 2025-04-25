@@ -83,7 +83,7 @@ class Linear(ModuleWithStateDictSerialization):
         new_Out = hax.flatten_axes(self.Out, "__OUT__")
         new_In = hax.flatten_axes(self.In, "__IN__")
 
-        if weight.array is not None:
+        if weight is not None and weight.array is not None:
             out_first = self._out_first
             weight = weight.flatten_axes(self.Out, new_Out).flatten_axes(self.In, new_In)
 
