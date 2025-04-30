@@ -145,9 +145,9 @@ class MoELinear(eqx.Module):
 
     @staticmethod
     def init(
-        Experts: AxisSpec,
-        In: AxisSpec,
-        Out: AxisSpec,
+        Experts: Axis,
+        In: Axis,
+        Out: Axis,
         *,
         key: PRNGKey,
         use_bias: bool = True,
@@ -156,20 +156,15 @@ class MoELinear(eqx.Module):
     ) -> "Linear":
         """
         Args:
-            In: AxisSpec: The input axis spec
-            Out: AxisSpec: The output axis spec
+            Experts: Axis: The expert axis
+            In: Axis: The input axis
+            Out: Axis: The output axis
             key: PRNGKeyArray: The PRNG key to use for initialization
             use_bias: bool: Whether to use a bias term
             out_first: bool: Whether to put output axes first in the weight matrix. out_first is how PyTorch does it.
             dot_general: Callable: The dot_general function to use. Defaults to jax.lax.dot_general. For fp8 or int8
             init_scale: float: The scale to use for initialization. We scale init by 1/sqrt(Input.size)*init_scale
         """
-
-        # TODO: naive implementation only supports single axis mapping for now
-        assert isinstance(Experts, Axis)
-        assert isinstance(In, Axis)
-        assert isinstance(Out, Axis)
-
         joint_spec = hax.concat_axis_specs(Out, In) if out_first else hax.concat_axis_specs(In, Out)
         joint_spec = hax.concat_axis_specs(Experts, joint_spec)
         input_size = hax.axis_size(In)
@@ -182,13 +177,14 @@ class MoELinear(eqx.Module):
     def __call__(self, inputs, group_sizes, *, key: Optional[PRNGKey] = None):
         """
         Args:
-            inputs (NamedArray): Input array    (Batch, Hidden)
+            inputs (NamedArray): Input array    (Batch, In)
             group_sizes (NamedArray): MoE expert sizes (Experts)
             key: Not used, but there for compat with other modules
         """
         del key
 
-        out_axes = inputs.axes[:-1] + (self.Out,)
+        inputs = inputs.rearrange((..., self.In))
+        out_axes = hax.replace_axis(inputs.axes, self.In, self.Out)
 
         q = _gmm(
             inputs,
