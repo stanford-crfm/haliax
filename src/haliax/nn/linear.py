@@ -1,14 +1,14 @@
 import dataclasses
 import math
-from typing import Optional
 from functools import partial
+from typing import Optional
 
 import equinox as eqx
 import jax
 import jax.numpy as jnp
-from jax.random import PRNGKey
-from jax.experimental.shard_map import shard_map
 from jax.experimental.pallas.ops.tpu.megablox import gmm
+from jax.experimental.shard_map import shard_map
+from jax.random import PRNGKey
 
 import haliax as hax
 
@@ -129,7 +129,7 @@ class Linear(ModuleWithStateDictSerialization):
             return self.weight.axes[-1] != self.Out
         else:
             return self.weight.axes[-len(self.Out) :] != self.Out
-        
+
 
 class MoELinear(eqx.Module):
     """A named Linear layer for MoE. This module allows you to specify multiple named axes for both input
@@ -191,8 +191,10 @@ class MoELinear(eqx.Module):
         out_axes = inputs.axes[:-1] + (self.Out,)
 
         q = _gmm(
-            inputs, self.weight, group_sizes,
-        )   # gmm((B, D), (E, D, d)) -> (B, d)
+            inputs,
+            self.weight,
+            group_sizes,
+        )  # gmm((B, D), (E, D, d)) -> (B, d)
         q = hax.NamedArray(q, axes=out_axes)
         q = hax.auto_sharded(q)
 
@@ -219,7 +221,7 @@ def _gmm(lhs, rhs, group_sizes, sharded=False):
         gmm_fn = gmm_sharded
     else:
         gmm_fn = shard_map(
-            gmm_sharded, 
+            gmm_sharded,
             mesh=hax.partitioning._get_mesh(),
             in_specs=(
                 hax.partitioning.pspec_for_axis(lhs.axes),
@@ -234,7 +236,7 @@ def _gmm(lhs, rhs, group_sizes, sharded=False):
 
 
 def gmm_sharded(
-    lhs_:jnp.ndarray,
+    lhs_: jnp.ndarray,
     rhs_: jnp.ndarray,
     group_sizes_: jnp.ndarray,
 ) -> jnp.ndarray:
@@ -246,10 +248,10 @@ def gmm_sharded(
     tile_size = (512, 1024, 1024)  # (m, k, n)
     m, k, n = lhs_.shape[0], lhs_.shape[1], rhs_.shape[2]
     out = gmm(
-        lhs_, 
-        rhs_, 
-        group_sizes_, 
-        preferred_element_type=lhs_.dtype, 
+        lhs_,
+        rhs_,
+        group_sizes_,
+        preferred_element_type=lhs_.dtype,
         tiling=(min(m, tile_size[0]), min(k, tile_size[1]), min(n, tile_size[2])),
         # interpret=True,
     )
