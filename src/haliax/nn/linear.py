@@ -16,6 +16,7 @@ from .._src.state_dict import Mod, ModuleWithStateDictSerialization
 from ..axis import Axis, AxisSpec
 from ..core import NamedArray
 from ..jax_utils import named_call
+from ..partitioning import ResourceAxis
 from ..quantization import DotGeneralOp
 
 
@@ -139,8 +140,8 @@ class MoELinear(eqx.Module):
     bias: Optional[NamedArray]
 
     Experts: AxisSpec = eqx.static_field()
-    In: AxisSpec = eqx.static_field()
-    Out: AxisSpec = eqx.static_field()
+    In: Axis = eqx.static_field()
+    Out: Axis = eqx.static_field()
     dot_general: DotGeneralOp = eqx.field(default_factory=DotGeneralOp.default)
 
     @staticmethod
@@ -153,7 +154,7 @@ class MoELinear(eqx.Module):
         use_bias: bool = True,
         out_first: bool = False,
         init_scale: float = 1.0,
-    ) -> "Linear":
+    ) -> "MoELinear":
         """
         Args:
             Experts: Axis: The expert axis
@@ -190,8 +191,9 @@ class MoELinear(eqx.Module):
             inputs,
             self.weight,
             group_sizes,
+            out_axes,
+            ar=hax.partitioning.physical_axis_name(self.In) == ResourceAxis.MODEL,
         )  # gmm((B, D), (E, D, d)) -> (B, d)
-        q = hax.NamedArray(q, axes=out_axes)
         q = hax.auto_sharded(q)
 
         if self.bias is not None:
@@ -212,30 +214,28 @@ class MoELinear(eqx.Module):
             return self.weight.axes[-len(self.Out) :] != self.Out
 
 
-def _gmm(lhs, rhs, group_sizes, sharded=False):
+def _gmm(lhs, rhs, group_sizes, out_axes, sharded=False, ar=False):
     if sharded:
         gmm_fn = gmm_sharded
     else:
         gmm_fn = shard_map(
-            gmm_sharded,
+            partial(gmm_sharded, ar=ar),
             mesh=hax.partitioning._get_mesh(),
             in_specs=(
                 hax.partitioning.pspec_for_axis(lhs.axes),
                 hax.partitioning.pspec_for_axis(rhs.axes),
                 hax.partitioning.pspec_for_axis(group_sizes.axes),
             ),
-            out_specs=hax.partitioning.pspec_for_axis((*lhs.axes[:-1], rhs.axes[-1])),
+            out_specs=hax.partitioning.pspec_for_axis(out_axes),
             check_rep=False,
         )
 
-    return gmm_fn(lhs.array, rhs.array, group_sizes.array)
+    out = gmm_fn(lhs.array, rhs.array, group_sizes.array)
+
+    return hax.NamedArray(out, axes=out_axes)
 
 
-def gmm_sharded(
-    lhs_: jnp.ndarray,
-    rhs_: jnp.ndarray,
-    group_sizes_: jnp.ndarray,
-) -> jnp.ndarray:
+def gmm_sharded(lhs_: jnp.ndarray, rhs_: jnp.ndarray, group_sizes_: jnp.ndarray, ar: bool = False) -> jnp.ndarray:
     hs_shape = lhs_.shape
     if hs_shape[0] % 512:
         pad_length = 512 - hs_shape[0] % 512
@@ -249,8 +249,11 @@ def gmm_sharded(
         group_sizes_,
         preferred_element_type=lhs_.dtype,
         tiling=(min(m, tile_size[0]), min(k, tile_size[1]), min(n, tile_size[2])),
-        # interpret=True,
+        interpret=True,
     )
+
+    if ar:
+        out = jax.lax.psum(out, ResourceAxis.MODEL)
 
     if hs_shape[0] % 512:
         out = out[: hs_shape[0]]
