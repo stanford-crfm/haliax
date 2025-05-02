@@ -249,7 +249,7 @@ def gmm_sharded(lhs_: jnp.ndarray, rhs_: jnp.ndarray, group_sizes_: jnp.ndarray,
         group_sizes_,
         preferred_element_type=lhs_.dtype,
         tiling=(min(m, tile_size[0]), min(k, tile_size[1]), min(n, tile_size[2])),
-        interpret=True,
+        # interpret=True,
     )
 
     if ar:
