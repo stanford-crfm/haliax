@@ -313,3 +313,9 @@ def test_examples():
 
     q = hax.rearrange(z, "{ B (H: h1 H) (W: w1 W) D} -> (B: B h1 w1) (E: H W D)...", H=2, W=2)
     assert q.axes == (Axis("B", B.size * sH.size * sW.size), Axis("E", 2 * 2 * D.size), C)
+
+
+def test_destructure_unordered_axis():
+    z = hax.random.randint(PRNGKey(0), (B, C), 0, 255)
+    r = einops_rearrange(z, "{(B: qq) C} -> (C: C qq) ...", qq=B.size)
+    assert r.axes == (Axis("C", C.size * B.size),)  # This is the new axis that combines C and qq
