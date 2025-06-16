@@ -106,6 +106,13 @@ class ScanCheckpointPolicy:
 
     See Also: https://docs.jax.dev/en/latest/gradient-checkpointing.html#custom-policies-for-offload
     """
+
+    offload_block_internals: list[str] = dataclasses.field(default_factory=list)
+    """
+    List of named block internals to offload to the host. This is useful for reducing memory usage on the device
+    while still avoiding rematerialization.
+    """
+
     prevent_cse: bool = False
     """
     Whether to prevent common subexpression elimination in the checkpointed function.
@@ -168,7 +175,6 @@ class ScanCheckpointPolicy:
         if self.disable:
             return callable
         elif self.simple:
-            print("simple")
             return eqx.filter_checkpoint(callable, prevent_cse=self.prevent_cse)
         else:
             policy = self._to_jax_policy(carry_name, input_name)
@@ -201,6 +207,9 @@ class ScanCheckpointPolicy:
 
         if isinstance(self.save_block_internals, Sequence):
             our_names_to_save.extend(self.save_block_internals)
+
+        if self.offload_block_internals:
+            our_names_to_offload.extend(self.offload_block_internals)
 
         if not our_names_to_save and not our_names_to_offload and not self.save_block_internals:
             return None
