@@ -171,40 +171,56 @@ E = hax.Axis("E", 10)
 
 
 @pytest.mark.parametrize(
-    "name,policy,expected_scan_shapes",
+    "name,policy,expected_scan_shapes,check_offloading",
     [
-        ("disabled", ScanCheckpointPolicy(disable=True), [(E.size,), (Block.size, E.size), (Block.size, E.size)]),
-        ("carry_true", True, [(E.size,), (Block.size, E.size)]),
+        (
+            "disabled",
+            ScanCheckpointPolicy(disable=True),
+            [(E.size,), (Block.size, E.size), (Block.size, E.size)],
+            None,
+        ),
+        ("carry_true", True, [(E.size,), (Block.size, E.size)], None),
         (
             "carry",
             ScanCheckpointPolicy(save_carries=True, save_block_internals=False),
             [(E.size,), (Block.size, E.size)],
+            None,
         ),
         (
             "everything",
             ScanCheckpointPolicy(save_carries=True, save_inputs=True, save_block_internals=True),
             [(E.size,), (Block.size, E.size), (Block.size, E.size)],
+            None,
         ),
         (
             "internals",
             ScanCheckpointPolicy(save_carries=False, save_block_internals=True),
             [(E.size,), (Block.size, E.size), (Block.size, E.size)],
+            None,
         ),
         (
             "cos",
             ScanCheckpointPolicy(save_carries=False, save_block_internals=["cos"]),
             [(E.size,), (Block.size, E.size)],
+            None,
         ),
         (
             "sin",
             ScanCheckpointPolicy(save_carries=True, save_block_internals=["sin"]),
             [(E.size,), (Block.size, E.size), (Block.size, E.size)],
+            None,
         ),
-        ("simple", ScanCheckpointPolicy(simple=True), [(E.size,), (Block.size, E.size)]),
-        ("nested", ScanCheckpointPolicy(simple=True, nested=2), [(E.size,), (2, E.size)]),
+        ("simple", ScanCheckpointPolicy(simple=True), [(E.size,), (Block.size, E.size)], None),
+        ("nested", ScanCheckpointPolicy(simple=True, nested=2), [(E.size,), (2, E.size)], None),
+        (
+            "sin_offload",
+            ScanCheckpointPolicy(save_carries=True, offload_block_internals=["sin"]),
+            [(E.size,), (Block.size, E.size), (Block.size, E.size)],
+            ["sin"],
+        ),
     ],
 )
-def test_checkpoint_carries(name, policy, expected_scan_shapes):
+def test_checkpoint_carries(name, policy, expected_scan_shapes, check_offloading):
     class Module(eqx.Module):
         named: hax.NamedArray
 
@@ -243,3 +259,29 @@ def test_checkpoint_carries(name, policy, expected_scan_shapes):
         print(residual)
 
     assert out_shapes == expected_scan_shapes, f"{name}: Expected {expected_scan_shapes}, got {out_shapes}"
+
+    # Add check for offloading if specified
+    if check_offloading is not None:
+        for name in check_offloading:
+            print(f"Checking offloading for {name}")
+            target = None
+            found_saved = False
+            for expr in jaxpr.jaxpr.eqns:
+                if expr.primitive.name == "scan":
+                    inner_jaxpr = expr.params["jaxpr"]
+                    for eqn in inner_jaxpr.eqns:
+                        if eqn.primitive.name == "name":
+                            this_name = eqn.params["name"]
+                            if this_name == name:
+                                # TODO in theory we can save more than one thing with the same name
+                                # not gonna worry about that for now
+                                target = eqn.outvars[0]
+                        elif eqn.primitive.name == "device_put":
+                            if eqn.invars[0] == target:
+                                found_saved = True
+                                break
+                    # found scan
+                    break
+
+            assert target is not None, f"Could not find named value for {name}"
+            assert found_saved, f"Could not find offloaded value for {name}"
