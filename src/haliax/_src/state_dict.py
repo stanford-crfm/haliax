@@ -215,6 +215,8 @@ def from_state_dict(tree: T, state_dict: StateDict, prefix: Optional[str] = None
             raise ValueError("Cannot extract a leaf value from a state dict without a prefix")
         # TODO: add "strict" flag so we can return None in cases where it's just missing
         return jnp.array(state_dict[prefix])
+    elif tree is None:
+        return None
     else:
         if prefix is None:
             return tree
