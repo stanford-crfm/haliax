@@ -20,6 +20,7 @@ from ._src.util import index_where, py_slice, slice_t
 from .axis import Axis, AxisSelection, AxisSelector, AxisSpec, axis_name, dslice, eliminate_axes, selects_axis
 from .types import GatherScatterModeStr, IntScalar, PrecisionLike, Scalar
 
+
 NamedOrNumeric = Union[Scalar, "NamedArray"]
 NamedIndex = Union[int, slice_t, "NamedArray", dslice, list[int], jnp.ndarray]
 
@@ -227,7 +228,8 @@ class NamedArray:
         ...
 
     @overload
-    def _lookup_indices(self, axis: Sequence[AxisSelector]) -> Tuple[Optional[int], ...]: ...
+    def _lookup_indices(self, axis: Sequence[AxisSelector]) -> Tuple[Optional[int], ...]:
+        ...
 
     def _lookup_indices(self, axis: AxisSelection) -> Union[Optional[int], Tuple[Optional[int], ...]]:
         """
@@ -310,12 +312,14 @@ class NamedArray:
     @typing.overload
     def slice(
         self, axis: AxisSelector, new_axis: Optional[AxisSelector] = None, start: int = 0, length: Optional[int] = None
-    ) -> "NamedArray": ...
+    ) -> "NamedArray":
+        ...
 
     @typing.overload
     def slice(
         self, start: Mapping[AxisSelector, int], length: Mapping[AxisSelector, Union[int, Axis]]
-    ) -> "NamedArray": ...
+    ) -> "NamedArray":
+        ...
 
     def slice(self, *args, **kwargs) -> "NamedArray":
         return haliax.slice(self, *args, **kwargs)
@@ -433,7 +437,8 @@ class NamedArray:
     @typing.overload
     def dot(
         self, axis: Optional[AxisSelection], *b, precision: PrecisionLike = None, dot_general=jax.lax.dot_general
-    ) -> "NamedArray": ...
+    ) -> "NamedArray":
+        ...
 
     @typing.overload
     def dot(
@@ -442,7 +447,8 @@ class NamedArray:
         axis: Optional[AxisSelection],
         precision: PrecisionLike = None,
         dot_general=jax.lax.dot_general,
-    ) -> "NamedArray": ...
+    ) -> "NamedArray":
+        ...
 
     def dot(self, *args, **kwargs) -> "NamedArray":
         if "axis" in kwargs or len(args) == 0:
@@ -1452,13 +1458,15 @@ def _is_subsequence(needle, haystack):
 @overload
 def broadcast_arrays(
     *arrays: NamedArray, require_subset: bool = True, ensure_order: bool = True
-) -> Tuple[NamedArray, ...]: ...
+) -> Tuple[NamedArray, ...]:
+    ...
 
 
 @overload
 def broadcast_arrays(
     *arrays: Optional[NamedOrNumeric], require_subset: bool = True, ensure_order: bool = True
-) -> Tuple[Optional[NamedOrNumeric], ...]: ...
+) -> Tuple[Optional[NamedOrNumeric], ...]:
+    ...
 
 
 def broadcast_arrays(
@@ -1486,19 +1494,22 @@ def broadcast_arrays(
 @overload
 def broadcast_arrays_and_return_axes(
     *arrays: NamedArray, require_subset: bool = True, ensure_order: bool = True
-) -> Tuple[Tuple[NamedArray, ...], Tuple[Axis, ...]]: ...
+) -> Tuple[Tuple[NamedArray, ...], Tuple[Axis, ...]]:
+    ...
 
 
 @overload
 def broadcast_arrays_and_return_axes(
     *arrays: NamedOrNumeric, require_subset: bool = True, ensure_order: bool = True
-) -> Tuple[Tuple[NamedOrNumeric, ...], Tuple[Axis, ...]]: ...
+) -> Tuple[Tuple[NamedOrNumeric, ...], Tuple[Axis, ...]]:
+    ...
 
 
 @overload
 def broadcast_arrays_and_return_axes(
     *arrays: Optional[NamedOrNumeric], require_subset: bool = True, ensure_order: bool = True
-) -> Tuple[Tuple[Optional[NamedOrNumeric], ...], Tuple[Axis, ...]]: ...
+) -> Tuple[Tuple[Optional[NamedOrNumeric], ...], Tuple[Axis, ...]]:
+    ...
 
 
 def broadcast_arrays_and_return_axes(

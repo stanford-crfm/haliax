@@ -1,7 +1,9 @@
 import jax
 import jax.numpy as jnp
+
 import haliax as hax
 from haliax import Axis, dslice
+
 
 # -----------------------------------------------------------------------------
 # Helper for reference via take_along_axis
