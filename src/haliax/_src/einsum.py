@@ -1,6 +1,6 @@
 import functools
 from types import EllipsisType
-from typing import Optional, Tuple
+from collections.abc import Tuple
 
 import jax.lax
 
@@ -19,7 +19,7 @@ def einsum(
     equation: str,
     *arrays: NamedArray,
     precision: PrecisionLike = None,
-    preferred_element_type: Optional[DTypeLike] = None,
+    preferred_element_type: DTypeLike | None = None,
     _dot_general: DotGeneralOp = jax.lax.dot_general,
     **axis_aliases: AxisSelector,
 ) -> NamedArray:

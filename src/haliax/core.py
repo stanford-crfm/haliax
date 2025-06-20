@@ -5,7 +5,8 @@ import warnings
 from dataclasses import dataclass
 from math import prod
 from types import EllipsisType
-from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Union, overload
+from typing import Any, Callable, overload
+from collections.abc import Mapping, Sequence
 
 import jax
 import jax.numpy as jnp
@@ -21,16 +22,16 @@ from .axis import Axis, AxisSelection, AxisSelector, AxisSpec, axis_name, dslice
 from .types import GatherScatterModeStr, IntScalar, PrecisionLike, Scalar
 
 
-NamedOrNumeric = Union[Scalar, "NamedArray"]
-NamedIndex = Union[int, slice_t, "NamedArray", dslice, list[int], jnp.ndarray]
+NamedOrNumeric = Scalar | "NamedArray"
+NamedIndex = int | slice_t | "NamedArray" | dslice | list[int] | jnp.ndarray
 
-SliceSpec = Union[
-    tuple[AxisSelector, NamedIndex],
-    tuple[AxisSelector, NamedIndex, AxisSelector, NamedIndex],
-    tuple[AxisSelector, NamedIndex, AxisSelector, NamedIndex, AxisSelector, NamedIndex],
-    tuple[AxisSelector | NamedOrNumeric, ...],
-    Mapping[AxisSelector, NamedIndex],
-]
+SliceSpec = (
+    tuple[AxisSelector, NamedIndex]
+    | tuple[AxisSelector, NamedIndex, AxisSelector, NamedIndex]
+    | tuple[AxisSelector, NamedIndex, AxisSelector, NamedIndex, AxisSelector, NamedIndex]
+    | tuple[AxisSelector | NamedOrNumeric, ...]
+    | Mapping[AxisSelector, NamedIndex]
+)
 
 
 _ENABLE_SHAPE_CHECKS = True
@@ -62,7 +63,7 @@ def are_shape_checks_enabled():
 @dataclass(frozen=True)
 class NamedArray:
     array: jnp.ndarray
-    axes: Tuple[Axis, ...]
+    axes: tuple[Axis, ...]
 
     def __post_init__(self):
         if not isinstance(self.axes, tuple):
@@ -118,7 +119,7 @@ class NamedArray:
             )
 
     @ft.cached_property
-    def shape(self) -> Dict[str, int]:
+    def shape(self) -> dict[str, int]:
         return {axis.name: axis.size for axis in self.axes}
 
     dtype = property(lambda self: self.array.dtype)
@@ -150,10 +151,10 @@ class NamedArray:
         ...
 
     @overload
-    def axis_size(self, axis: Sequence[AxisSelector]) -> Tuple[int, ...]:  # type: ignore
+    def axis_size(self, axis: Sequence[AxisSelector]) -> tuple[int, ...]:  # type: ignore
         ...
 
-    def axis_size(self, axis: AxisSelection) -> Union[int, Tuple[int, ...]]:
+    def axis_size(self, axis: AxisSelection) -> int | tuple[int, ...]:
         """
         Returns the size of the given axis, or a tuple of sizes if given multiple axes.
         """
@@ -175,7 +176,7 @@ class NamedArray:
         ...
 
     @overload
-    def resolve_axis(self, axis: Sequence[AxisSelector]) -> Tuple[Axis, ...]:  # type: ignore
+    def resolve_axis(self, axis: Sequence[AxisSelector]) -> tuple[Axis, ...]:  # type: ignore
         ...
 
     def resolve_axis(self, axes: AxisSelection) -> AxisSpec:  # type: ignore
@@ -224,14 +225,14 @@ class NamedArray:
             return pp.text(str(self))
 
     @overload
-    def _lookup_indices(self, axis: AxisSelector) -> Optional[int]:  # type: ignore
+    def _lookup_indices(self, axis: AxisSelector) -> int | None:  # type: ignore
         ...
 
     @overload
-    def _lookup_indices(self, axis: Sequence[AxisSelector]) -> Tuple[Optional[int], ...]:
+    def _lookup_indices(self, axis: Sequence[AxisSelector]) -> tuple[int | None, ...]:
         ...
 
-    def _lookup_indices(self, axis: AxisSelection) -> Union[Optional[int], Tuple[Optional[int], ...]]:
+    def _lookup_indices(self, axis: AxisSelection) -> int | None | tuple[int | None, ...]:
         """
         For a single axis, returns an int corresponding to the index of the axis.
         For multiple axes, returns a tuple of ints corresponding to the indices of the axes.
@@ -311,13 +312,13 @@ class NamedArray:
     # slicing
     @typing.overload
     def slice(
-        self, axis: AxisSelector, new_axis: Optional[AxisSelector] = None, start: int = 0, length: Optional[int] = None
+        self, axis: AxisSelector, new_axis: AxisSelector | None = None, start: int = 0, length: int | None = None
     ) -> "NamedArray":
         ...
 
     @typing.overload
     def slice(
-        self, start: Mapping[AxisSelector, int], length: Mapping[AxisSelector, Union[int, Axis]]
+        self, start: Mapping[AxisSelector, int], length: Mapping[AxisSelector, int | Axis]
     ) -> "NamedArray":
         ...
 
@@ -327,7 +328,7 @@ class NamedArray:
     def updated_slice(self, start: Mapping[AxisSelector, int], update: "NamedArray") -> "NamedArray":
         return haliax.updated_slice(self, start=start, update=update)
 
-    def take(self, axis: AxisSelector, index: Union[int, "NamedArray"]) -> "NamedArray":
+    def take(self, axis: AxisSelector, index: int | "NamedArray") -> "NamedArray":
         return haliax.take(self, axis=axis, index=index)
 
     @property
@@ -397,16 +398,16 @@ class NamedArray:
         return index(self, idx_dict)
 
     # np.ndarray methods:
-    def all(self, axis: Optional[AxisSelection] = None, *, where: Optional["NamedArray"] = None) -> "NamedArray":
+    def all(self, axis: AxisSelection | None = None, *, where: "NamedArray" | None = None) -> "NamedArray":
         return haliax.all(self, axis=axis, where=where)
 
-    def any(self, axis: Optional[AxisSelection] = None, *, where: Optional["NamedArray"] = None) -> "NamedArray":
+    def any(self, axis: AxisSelection | None = None, *, where: "NamedArray" | None = None) -> "NamedArray":
         return haliax.any(self, axis=axis, where=where)
 
-    def argmax(self, axis: Optional[AxisSelector] = None) -> "NamedArray":
+    def argmax(self, axis: AxisSelector | None = None) -> "NamedArray":
         return haliax.argmax(self, axis=axis)
 
-    def argmin(self, axis: Optional[AxisSelector]) -> "NamedArray":
+    def argmin(self, axis: AxisSelector | None) -> "NamedArray":
         return haliax.argmin(self, axis=axis)
 
     def argsort(self, axis: AxisSelector) -> "NamedArray":
@@ -436,7 +437,7 @@ class NamedArray:
     # Deprecated overload
     @typing.overload
     def dot(
-        self, axis: Optional[AxisSelection], *b, precision: PrecisionLike = None, dot_general=jax.lax.dot_general
+        self, axis: AxisSelection | None, *b, precision: PrecisionLike = None, dot_general=jax.lax.dot_general
     ) -> "NamedArray":
         ...
 
@@ -444,7 +445,7 @@ class NamedArray:
     def dot(
         self,
         *args: "NamedArray",
-        axis: Optional[AxisSelection],
+        axis: AxisSelection | None,
         precision: PrecisionLike = None,
         dot_general=jax.lax.dot_general,
     ) -> "NamedArray":
@@ -463,28 +464,28 @@ class NamedArray:
     def imag(self) -> "NamedArray":
         return NamedArray(self.array.imag, self.axes)
 
-    def max(self, axis: Optional[AxisSelection] = None, *, where=None) -> "NamedArray":
+    def max(self, axis: AxisSelection | None = None, *, where=None) -> "NamedArray":
         return haliax.max(self, axis=axis, where=where)
 
     def mean(
-        self, axis: Optional[AxisSelection] = None, *, dtype=None, where: Optional["NamedArray"] = None
+        self, axis: AxisSelection | None = None, *, dtype=None, where: "NamedArray" | None = None
     ) -> "NamedArray":
         return haliax.mean(self, axis=axis, dtype=dtype, where=where)
 
-    def min(self, axis: Optional[AxisSelection] = None, *, where: Optional["NamedArray"] = None) -> "NamedArray":
+    def min(self, axis: AxisSelection | None = None, *, where: "NamedArray" | None = None) -> "NamedArray":
         return haliax.min(self, axis=axis, where=where)
 
     def prod(
-        self, axis: Optional[AxisSelection] = None, *, dtype=None, where: Optional["NamedArray"] = None
+        self, axis: AxisSelection | None = None, *, dtype=None, where: "NamedArray" | None = None
     ) -> "NamedArray":
         return haliax.prod(self, axis=axis, dtype=dtype, where=where)
 
     def product(
-        self, axis: Optional[AxisSelection] = None, *, dtype=None, where: Optional["NamedArray"] = None
+        self, axis: AxisSelection | None = None, *, dtype=None, where: "NamedArray" | None = None
     ) -> "NamedArray":
         return haliax.product(self, axis=axis, dtype=dtype, where=where)
 
-    def ptp(self, axis: Optional[AxisSelection] = None) -> "NamedArray":
+    def ptp(self, axis: AxisSelection | None = None) -> "NamedArray":
         return haliax.ptp(self, axis=axis)
 
     @property
@@ -498,12 +499,12 @@ class NamedArray:
         return haliax.sort(self, axis=axis)
 
     def std(
-        self, axis: Optional[AxisSelection] = None, *, dtype=None, ddof=0, where: Optional["NamedArray"] = None
+        self, axis: AxisSelection | None = None, *, dtype=None, ddof=0, where: "NamedArray" | None = None
     ) -> "NamedArray":
         return haliax.std(self, axis=axis, dtype=dtype, ddof=ddof, where=where)
 
     def sum(
-        self, axis: Optional[AxisSelection] = None, *, dtype=None, where: Optional["NamedArray"] = None
+        self, axis: AxisSelection | None = None, *, dtype=None, where: "NamedArray" | None = None
     ) -> "NamedArray":
         return haliax.sum(
             self,
@@ -522,7 +523,7 @@ class NamedArray:
         return haliax.trace(self, offset=offset, axis1=axis1, axis2=axis2, dtype=dtype)
 
     def var(
-        self, axis: Optional[AxisSelection] = None, dtype=None, ddof=0, *, where: Optional["NamedArray"] = None
+        self, axis: AxisSelection | None = None, dtype=None, ddof=0, *, where: "NamedArray" | None = None
     ) -> "NamedArray":
         return haliax.var(self, axis=axis, dtype=dtype, ddof=ddof, where=where)
 
@@ -668,7 +669,7 @@ class NamedArray:
         return float(self.array)
 
 
-def take(array: NamedArray, axis: AxisSelector, index: Union[int, NamedArray]) -> NamedArray:
+def take(array: NamedArray, axis: AxisSelector, index: int | NamedArray) -> NamedArray:
     """
     Selects elements from an array along an axis, by an index or by another named array
 
@@ -723,9 +724,9 @@ def take(array: NamedArray, axis: AxisSelector, index: Union[int, NamedArray]) -
 def slice(
     array: NamedArray,
     axis: AxisSelector,
-    new_axis: Optional[AxisSelector] = None,
+    new_axis: AxisSelector | None = None,
     start: int = 0,
-    length: Optional[int] = None,
+    length: int | None = None,
 ) -> NamedArray:
     pass
 
@@ -734,7 +735,7 @@ def slice(
 def slice(
     array: NamedArray,
     start: Mapping[AxisSelector, IntScalar],
-    length: Optional[Mapping[AxisSelector, int]] = None,
+    length: Mapping[AxisSelector, int] | None = None,
 ) -> NamedArray:
     """
     Slices the array along the specified axes, replacing them with new axes (or a shortened version of the old one)
@@ -772,9 +773,9 @@ def slice(array: NamedArray, *args, **kwargs) -> NamedArray:
 def _slice_old(
     array: NamedArray,
     axis: AxisSelector,
-    new_axis: Optional[AxisSelector] = None,
+    new_axis: AxisSelector | None = None,
     start: int = 0,
-    length: Optional[int] = None,
+    length: int | None = None,
 ) -> NamedArray:
     """
     Selects elements from an array along an axis, either by an index or by another named array.
@@ -815,8 +816,8 @@ def _slice_old(
 
 def _slice_new(
     array: NamedArray,
-    start: Mapping[AxisSelector, Union[int, jnp.ndarray]],
-    length: Mapping[AxisSelector, Union[int, Axis]],
+    start: Mapping[AxisSelector, int | jnp.ndarray],
+    length: Mapping[AxisSelector, int | Axis],
 ) -> NamedArray:
     array_slice_indices = [0] * len(array.axes)
     new_axes = list(array.axes)
@@ -854,7 +855,7 @@ def _slice_new(
 
 
 def updated_slice(
-    array: NamedArray, start: Mapping[AxisSelector, Union[int, jnp.ndarray]], update: NamedArray
+    array: NamedArray, start: Mapping[AxisSelector, int | jnp.ndarray], update: NamedArray
 ) -> NamedArray:
     """
     Updates a slice of an array with another array.
@@ -1098,7 +1099,7 @@ def unbind(array: NamedArray, axis: AxisSelector) -> List[NamedArray]:
     return [haliax.auto_sharded(NamedArray(a, new_axes)) for a in arrays]
 
 
-def roll(array: NamedArray, shift: Union[int, Tuple[int, ...]], axis: AxisSelection) -> NamedArray:
+def roll(array: NamedArray, shift: int | tuple[int, ...], axis: AxisSelection) -> NamedArray:
     """
     Roll an array along an axis or axes. Analogous to np.roll
     """
@@ -1220,8 +1221,8 @@ def _full_flatten(
 
     # ensure that the old_axes are contiguous
     # we basically ensure that the old_axes occur after the index of the first old_axis
-    intermediate_axes: List[Axis] = []
-    new_axes: List[Axis] = []
+    intermediate_axes: list[Axis] = []
+    new_axes: list[Axis] = []
     index_of_first_old_axis = None
     for i, ax in enumerate(array.axes):
         if ax in old_axes:
@@ -1258,8 +1259,8 @@ def _flatten_axis_spec(axes: AxisSpec, old_axes: AxisSelection, new_axis: AxisSe
 
     # ensure that the old_axes are contiguous
     # we basically ensure that the old_axes occur after the index of the first old_axis
-    intermediate_axes: List[Axis] = []
-    new_axes: List[Axis] = []
+    intermediate_axes: list[Axis] = []
+    new_axes: list[Axis] = []
     index_of_first_old_axis = None
     for i, ax in enumerate(axes):
         if ax in old_axes:  # type: ignore
@@ -1330,7 +1331,7 @@ def named(a, axis: AxisSelection) -> NamedArray:
 
 
 # Broadcasting Support
-def _broadcast_order(a: NamedArray, b: NamedArray, require_subset: bool = True) -> Tuple[Axis, ...]:
+def _broadcast_order(a: NamedArray, b: NamedArray, require_subset: bool = True) -> tuple[Axis, ...]:
     """
     Returns an ordering of axes for broadcasting a and b.
 
@@ -1350,8 +1351,8 @@ def _broadcast_order(a: NamedArray, b: NamedArray, require_subset: bool = True) 
 
 
 def _broadcast_axes(
-    a_axes: Tuple[Axis, ...], b_axes: Tuple[Axis, ...], require_subset: bool = True
-) -> Optional[Tuple[Axis, ...]]:
+    a_axes: tuple[Axis, ...], b_axes: tuple[Axis, ...], require_subset: bool = True
+) -> tuple[Axis, ...] | None:
     if a_axes == b_axes:
         return a_axes
     if len(a_axes) == 0:
@@ -1440,22 +1441,22 @@ def _is_subsequence(needle, haystack):
 @overload
 def broadcast_arrays(
     *arrays: NamedArray, require_subset: bool = True, ensure_order: bool = True
-) -> Tuple[NamedArray, ...]:
+) -> tuple[NamedArray, ...]:
     ...
 
 
 @overload
 def broadcast_arrays(
-    *arrays: Optional[NamedOrNumeric], require_subset: bool = True, ensure_order: bool = True
-) -> Tuple[Optional[NamedOrNumeric], ...]:
+    *arrays: NamedOrNumeric | None, require_subset: bool = True, ensure_order: bool = True
+) -> tuple[NamedOrNumeric | None, ...]:
     ...
 
 
 def broadcast_arrays(
-    *arrays: Optional[NamedOrNumeric],
+    *arrays: NamedOrNumeric | None,
     require_subset: bool = True,
     ensure_order: bool = True,
-) -> Tuple[Optional[NamedOrNumeric], ...]:
+) -> tuple[NamedOrNumeric | None, ...]:
     """
     Broadcasts a sequence of arrays to a common set of axes.
     Args:
@@ -1476,29 +1477,29 @@ def broadcast_arrays(
 @overload
 def broadcast_arrays_and_return_axes(
     *arrays: NamedArray, require_subset: bool = True, ensure_order: bool = True
-) -> Tuple[Tuple[NamedArray, ...], Tuple[Axis, ...]]:
+) -> tuple[tuple[NamedArray, ...], tuple[Axis, ...]]:
     ...
 
 
 @overload
 def broadcast_arrays_and_return_axes(
     *arrays: NamedOrNumeric, require_subset: bool = True, ensure_order: bool = True
-) -> Tuple[Tuple[NamedOrNumeric, ...], Tuple[Axis, ...]]:
+) -> tuple[tuple[NamedOrNumeric, ...], tuple[Axis, ...]]:
     ...
 
 
 @overload
 def broadcast_arrays_and_return_axes(
-    *arrays: Optional[NamedOrNumeric], require_subset: bool = True, ensure_order: bool = True
-) -> Tuple[Tuple[Optional[NamedOrNumeric], ...], Tuple[Axis, ...]]:
+    *arrays: NamedOrNumeric | None, require_subset: bool = True, ensure_order: bool = True
+) -> tuple[tuple[NamedOrNumeric | None, ...], tuple[Axis, ...]]:
     ...
 
 
 def broadcast_arrays_and_return_axes(
-    *arrays: Optional[NamedOrNumeric],
+    *arrays: NamedOrNumeric | None,
     require_subset: bool = True,
     ensure_order: bool = True,
-) -> Tuple[Tuple[Optional[NamedOrNumeric], ...], Tuple[Axis, ...]]:
+) -> tuple[tuple[NamedOrNumeric | None, ...], tuple[Axis, ...]]:
     """
     Broadcasts a sequence of arrays to a common set of axes.
 
@@ -1547,12 +1548,12 @@ def broadcast_axis(a: NamedArray, axis: AxisSpec) -> NamedArray:
     return broadcast_to(a, axis, enforce_no_extra_axes=False, ensure_order=True)
 
 
-def check_shape(jnp_shape: Sequence[int], hax_axes: AxisSelection) -> Tuple[Axis, ...]:
+def check_shape(jnp_shape: Sequence[int], hax_axes: AxisSelection) -> tuple[Axis, ...]:
     """Check that the shape of a jax array matches the axes of a NamedArray"""
-    axes: Tuple[AxisSelector, ...] = ensure_tuple(hax_axes)
+    axes: tuple[AxisSelector, ...] = ensure_tuple(hax_axes)
     if len(jnp_shape) != len(axes):
         raise ValueError(f"Shape mismatch: jnp_shape={jnp_shape} hax_axes={hax_axes}")
-    result_axes: List[Axis] = []
+    result_axes: list[Axis] = []
     for i in range(len(axes)):
         ax = axes[i]
         if isinstance(ax, Axis):
@@ -1627,8 +1628,8 @@ class _NamedIndexUpdateRef:
         *,
         indices_are_sorted: bool = False,
         unique_indices: bool = False,
-        mode: Optional[GatherScatterModeStr] = None,
-        fill_value: Optional[Scalar] = None,
+        mode: GatherScatterModeStr | None = None,
+        fill_value: Scalar | None = None,
     ) -> NamedArray:
         slices, sliced_axes = _raw_indices_for_at(self._array, self._slices)
         new_array = self._array.array.at[tuple(slices)].get(
@@ -1642,7 +1643,7 @@ class _NamedIndexUpdateRef:
         *,
         indices_are_sorted: bool = False,
         unique_indices: bool = False,
-        mode: Optional[GatherScatterModeStr] = None,
+        mode: GatherScatterModeStr | None = None,
     ) -> NamedArray:
         slices, sliced_axes = _raw_indices_for_at(self._array, self._slices)
         update = haliax.broadcast_to(update, sliced_axes, enforce_no_extra_axes=True)
@@ -1657,7 +1658,7 @@ class _NamedIndexUpdateRef:
         *,
         indices_are_sorted: bool = False,
         unique_indices: bool = False,
-        mode: Optional[GatherScatterModeStr] = None,
+        mode: GatherScatterModeStr | None = None,
     ) -> NamedArray:
         slices, sliced_axes = _raw_indices_for_at(self._array, self._slices)
         update = haliax.broadcast_to(update, sliced_axes, enforce_no_extra_axes=True)
@@ -1672,7 +1673,7 @@ class _NamedIndexUpdateRef:
         *,
         indices_are_sorted: bool = False,
         unique_indices: bool = False,
-        mode: Optional[GatherScatterModeStr] = None,
+        mode: GatherScatterModeStr | None = None,
     ) -> NamedArray:
         slices, sliced_axes = _raw_indices_for_at(self._array, self._slices)
         update = haliax.broadcast_to(update, sliced_axes, enforce_no_extra_axes=True)
@@ -1687,7 +1688,7 @@ class _NamedIndexUpdateRef:
         *,
         indices_are_sorted: bool = False,
         unique_indices: bool = False,
-        mode: Optional[GatherScatterModeStr] = None,
+        mode: GatherScatterModeStr | None = None,
     ) -> NamedArray:
         slices, sliced_axes = _raw_indices_for_at(self._array, self._slices)
         update = haliax.broadcast_to(update, sliced_axes, enforce_no_extra_axes=True)
@@ -1702,7 +1703,7 @@ class _NamedIndexUpdateRef:
         *,
         indices_are_sorted: bool = False,
         unique_indices: bool = False,
-        mode: Optional[GatherScatterModeStr] = None,
+        mode: GatherScatterModeStr | None = None,
     ) -> NamedArray:
         slices, sliced_axes = _raw_indices_for_at(self._array, self._slices)
         update = haliax.broadcast_to(update, sliced_axes, enforce_no_extra_axes=True)
@@ -1717,7 +1718,7 @@ class _NamedIndexUpdateRef:
         *,
         indices_are_sorted: bool = False,
         unique_indices: bool = False,
-        mode: Optional[GatherScatterModeStr] = None,
+        mode: GatherScatterModeStr | None = None,
     ) -> NamedArray:
         slices, sliced_axes = _raw_indices_for_at(self._array, self._slices)
         update = haliax.broadcast_to(update, sliced_axes, enforce_no_extra_axes=True)
@@ -1732,7 +1733,7 @@ class _NamedIndexUpdateRef:
         *,
         indices_are_sorted: bool = False,
         unique_indices: bool = False,
-        mode: Optional[GatherScatterModeStr] = None,
+        mode: GatherScatterModeStr | None = None,
     ) -> NamedArray:
         slices, sliced_axes = _raw_indices_for_at(self._array, self._slices)
         update = haliax.broadcast_to(update, sliced_axes, enforce_no_extra_axes=True)
@@ -1747,7 +1748,7 @@ class _NamedIndexUpdateRef:
         *,
         indices_are_sorted: bool = False,
         unique_indices: bool = False,
-        mode: Optional[GatherScatterModeStr] = None,
+        mode: GatherScatterModeStr | None = None,
     ) -> NamedArray:
         # It's not really documented, but func can be any callable that takes a scalar array and returns a scalar array
         slices, sliced_axes = _raw_indices_for_at(self._array, self._slices)

@@ -1,15 +1,16 @@
 import dataclasses
 from types import EllipsisType
-from typing import Mapping, NoReturn, Optional, Sequence
+from collections.abc import Mapping, Sequence
+from typing import NoReturn
 
 from haliax.axis import Axis, AxisSelector
 
 
 @dataclasses.dataclass
 class _AxisCapture:
-    binding: Optional[str] = None
+    binding: str | None = None
     axes: tuple[str, ...] = ()
-    char_range: Optional[tuple[int, int]] = None
+    char_range: tuple[int, int] | None = None
 
     def __post_init__(self):
         if len(self.axes) == 0:
@@ -22,7 +23,7 @@ class Expression:
     is_ordered: bool
 
 
-def raise_parse_error(message: str, expression: str, pos: Optional[int | tuple[int, int]]) -> NoReturn:
+def raise_parse_error(message: str, expression: str, pos: int | tuple[int, int] | None) -> NoReturn:
     """Raise a ValueError with a message and the position in the expression."""
     fmt = f"Error while parsing:\n    {expression}"
     if pos is not None:
@@ -223,13 +224,13 @@ def _parse_expression(expression: str, pos) -> tuple[Expression, int]:
 class AliasTable:
     bindings: dict[str, AxisSelector]  # names in the string to axes
 
-    def __init__(self, bindings=None):
+    def __init__(self, bindings: Mapping[str, AxisSelector] | None = None):
         if bindings is None:
             self.bindings = {}
         else:
             self.bindings = {**bindings}
 
-    def dealias_binding(self, binding: str) -> Optional[AxisSelector]:
+    def dealias_binding(self, binding: str) -> AxisSelector | None:
         return self.bindings.get(binding, None)
 
     def bind_alias(self, alias: str, axis: Axis, expr, char_range):

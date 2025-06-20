@@ -1,4 +1,5 @@
-from typing import Callable, MutableMapping, Sequence, TypeAlias, TypeVar
+from collections.abc import Callable, MutableMapping, Sequence
+from typing import TypeAlias, TypeVar
 
 
 T = TypeVar("T")

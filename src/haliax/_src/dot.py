@@ -1,7 +1,7 @@
 import functools as ft
 import typing
 import warnings
-from typing import Dict, Optional, Tuple
+from collections.abc import Dict
 
 import jax
 import jax.numpy as jnp
@@ -25,11 +25,11 @@ from haliax.util import ensure_tuple
 # deprecated overload
 @typing.overload
 def dot(
-    axis: Optional[AxisSelection],
+    axis: AxisSelection | None,
     *arrays: NamedArray,
     precision: PrecisionLike = None,
-    preferred_element_type: Optional[DTypeLike] = None,
-    out_axes: Optional[PartialAxisSpec] = ...,
+    preferred_element_type: DTypeLike | None = None,
+    out_axes: PartialAxisSpec | None = ...,
     dot_general=jax.lax.dot_general,
 ) -> NamedArray:
     ...
@@ -38,10 +38,10 @@ def dot(
 @typing.overload
 def dot(
     *arrays: NamedArray,
-    axis: Optional[AxisSelection],
+    axis: AxisSelection | None,
     precision: PrecisionLike = None,
-    preferred_element_type: Optional[DTypeLike] = None,
-    out_axes: Optional[PartialAxisSpec] = ...,
+    preferred_element_type: DTypeLike | None = None,
+    out_axes: PartialAxisSpec | None = ...,
     dot_general=jax.lax.dot_general,
 ) -> NamedArray:
     ...
@@ -50,8 +50,8 @@ def dot(
 def dot(
     *arrays,
     precision: PrecisionLike = None,
-    preferred_element_type: Optional[DTypeLike] = None,
-    out_axes: Optional[PartialAxisSpec] = None,
+    preferred_element_type: DTypeLike | None = None,
+    out_axes: PartialAxisSpec | None = None,
     dot_general=jax.lax.dot_general,
     **kwargs,
 ) -> NamedArray:
@@ -105,8 +105,8 @@ def dot(
     # to call dot_general we need two things:
     # list of contractions and list of arrays
 
-    all_axes: Tuple[Axis, ...] = ft.reduce(union_axes, (a.axes for a in arrays), ())  # type: ignore
-    output_axes: Tuple[Axis, ...]
+    all_axes: tuple[Axis, ...] = ft.reduce(union_axes, (a.axes for a in arrays), ())  # type: ignore
+    output_axes: tuple[Axis, ...]
     if axis is None:
         # we want to contract over all the axes
         output_axes = ()
