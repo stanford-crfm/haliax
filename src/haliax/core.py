@@ -20,7 +20,6 @@ from ._src.util import index_where, py_slice, slice_t
 from .axis import Axis, AxisSelection, AxisSelector, AxisSpec, axis_name, dslice, eliminate_axes, selects_axis
 from .types import GatherScatterModeStr, IntScalar, PrecisionLike, Scalar
 
-
 NamedOrNumeric = Union[Scalar, "NamedArray"]
 NamedIndex = Union[int, slice_t, "NamedArray", dslice, list[int], jnp.ndarray]
 
@@ -228,8 +227,7 @@ class NamedArray:
         ...
 
     @overload
-    def _lookup_indices(self, axis: Sequence[AxisSelector]) -> Tuple[Optional[int], ...]:
-        ...
+    def _lookup_indices(self, axis: Sequence[AxisSelector]) -> Tuple[Optional[int], ...]: ...
 
     def _lookup_indices(self, axis: AxisSelection) -> Union[Optional[int], Tuple[Optional[int], ...]]:
         """
@@ -312,14 +310,12 @@ class NamedArray:
     @typing.overload
     def slice(
         self, axis: AxisSelector, new_axis: Optional[AxisSelector] = None, start: int = 0, length: Optional[int] = None
-    ) -> "NamedArray":
-        ...
+    ) -> "NamedArray": ...
 
     @typing.overload
     def slice(
         self, start: Mapping[AxisSelector, int], length: Mapping[AxisSelector, Union[int, Axis]]
-    ) -> "NamedArray":
-        ...
+    ) -> "NamedArray": ...
 
     def slice(self, *args, **kwargs) -> "NamedArray":
         return haliax.slice(self, *args, **kwargs)
@@ -437,8 +433,7 @@ class NamedArray:
     @typing.overload
     def dot(
         self, axis: Optional[AxisSelection], *b, precision: PrecisionLike = None, dot_general=jax.lax.dot_general
-    ) -> "NamedArray":
-        ...
+    ) -> "NamedArray": ...
 
     @typing.overload
     def dot(
@@ -447,8 +442,7 @@ class NamedArray:
         axis: Optional[AxisSelection],
         precision: PrecisionLike = None,
         dot_general=jax.lax.dot_general,
-    ) -> "NamedArray":
-        ...
+    ) -> "NamedArray": ...
 
     def dot(self, *args, **kwargs) -> "NamedArray":
         if "axis" in kwargs or len(args) == 0:
@@ -931,6 +925,7 @@ def _compute_new_axes_and_slices_for_index(
     ordered_slices: list = [py_slice(None, None, None)] * len(array.axes)  # type: ignore
     kept_axes = [True] * len(array.axes)
     array_slice_indices = []
+    index_axis_names = set()
 
     for axis, slice_ in slices.items():
         axis_index = array._lookup_indices(axis)
@@ -946,6 +941,8 @@ def _compute_new_axes_and_slices_for_index(
             ordered_slices[axis_index] = slice_
             array_slice_indices.append(axis_index)
             kept_axes[axis_index] = False
+            for ax in slice_.axes:
+                index_axis_names.add(ax.name)
         elif isinstance(slice_, list):
             # we'll let JAX complain if this is wrong
             ordered_slices[axis_index] = slice_
@@ -955,16 +952,31 @@ def _compute_new_axes_and_slices_for_index(
                 ordered_slices[axis_index] = slice_
                 kept_axes[axis_index] = False
             elif slice_.ndim == 1:
-                # we allow this if it's a 1-d array, in which case we treat it as sugar for NamedArray(slice_, sliced-axis)
-                ordered_slices[axis_index] = haliax.named(slice_, axis_name(axis))
+                target_axis = None
+                for i2, ax2 in enumerate(array.axes):
+                    if i2 != axis_index and kept_axes[i2] and ax2.size == slice_.shape[0]:
+                        target_axis = ax2
+                        break
+                if target_axis is None:
+                    target_axis = axis
+                ordered_slices[axis_index] = haliax.named(slice_, axis_name(target_axis))
                 kept_axes[axis_index] = False
                 array_slice_indices.append(axis_index)
+                index_axis_names.add(axis_name(target_axis))
             else:
                 raise ValueError(
                     f"Only 0-d or 1-d unnamed arrays can be used for indexing. Got {slice_} for axis {axis}"
                 )
         else:
             raise ValueError(f"Only NamedArrays can be used for advanced indexing. Got {slice_} for axis {axis}")
+
+    # If any index array uses axes that are already present in the array and not removed,
+    # we need to explicitly advance-index those axes so numpy broadcasting works.
+    for i, ax in enumerate(array.axes):
+        if kept_axes[i] and ax.name in index_axis_names:
+            ordered_slices[i] = haliax.arange(ax)
+            array_slice_indices.append(i)
+            kept_axes[i] = False
 
     # advanced indexing
     if len(array_slice_indices) > 0:
@@ -1440,15 +1452,13 @@ def _is_subsequence(needle, haystack):
 @overload
 def broadcast_arrays(
     *arrays: NamedArray, require_subset: bool = True, ensure_order: bool = True
-) -> Tuple[NamedArray, ...]:
-    ...
+) -> Tuple[NamedArray, ...]: ...
 
 
 @overload
 def broadcast_arrays(
     *arrays: Optional[NamedOrNumeric], require_subset: bool = True, ensure_order: bool = True
-) -> Tuple[Optional[NamedOrNumeric], ...]:
-    ...
+) -> Tuple[Optional[NamedOrNumeric], ...]: ...
 
 
 def broadcast_arrays(
@@ -1476,22 +1486,19 @@ def broadcast_arrays(
 @overload
 def broadcast_arrays_and_return_axes(
     *arrays: NamedArray, require_subset: bool = True, ensure_order: bool = True
-) -> Tuple[Tuple[NamedArray, ...], Tuple[Axis, ...]]:
-    ...
+) -> Tuple[Tuple[NamedArray, ...], Tuple[Axis, ...]]: ...
 
 
 @overload
 def broadcast_arrays_and_return_axes(
     *arrays: NamedOrNumeric, require_subset: bool = True, ensure_order: bool = True
-) -> Tuple[Tuple[NamedOrNumeric, ...], Tuple[Axis, ...]]:
-    ...
+) -> Tuple[Tuple[NamedOrNumeric, ...], Tuple[Axis, ...]]: ...
 
 
 @overload
 def broadcast_arrays_and_return_axes(
     *arrays: Optional[NamedOrNumeric], require_subset: bool = True, ensure_order: bool = True
-) -> Tuple[Tuple[Optional[NamedOrNumeric], ...], Tuple[Axis, ...]]:
-    ...
+) -> Tuple[Tuple[Optional[NamedOrNumeric], ...], Tuple[Axis, ...]]: ...
 
 
 def broadcast_arrays_and_return_axes(
