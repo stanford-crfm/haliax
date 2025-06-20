@@ -931,6 +931,7 @@ def _compute_new_axes_and_slices_for_index(
     ordered_slices: list = [py_slice(None, None, None)] * len(array.axes)  # type: ignore
     kept_axes = [True] * len(array.axes)
     array_slice_indices = []
+    index_axis_names = set()
 
     for axis, slice_ in slices.items():
         axis_index = array._lookup_indices(axis)
@@ -946,6 +947,8 @@ def _compute_new_axes_and_slices_for_index(
             ordered_slices[axis_index] = slice_
             array_slice_indices.append(axis_index)
             kept_axes[axis_index] = False
+            for ax in slice_.axes:
+                index_axis_names.add(ax.name)
         elif isinstance(slice_, list):
             # we'll let JAX complain if this is wrong
             ordered_slices[axis_index] = slice_
@@ -955,16 +958,31 @@ def _compute_new_axes_and_slices_for_index(
                 ordered_slices[axis_index] = slice_
                 kept_axes[axis_index] = False
             elif slice_.ndim == 1:
-                # we allow this if it's a 1-d array, in which case we treat it as sugar for NamedArray(slice_, sliced-axis)
-                ordered_slices[axis_index] = haliax.named(slice_, axis_name(axis))
+                target_axis = None
+                for i2, ax2 in enumerate(array.axes):
+                    if i2 != axis_index and kept_axes[i2] and ax2.size == slice_.shape[0]:
+                        target_axis = ax2
+                        break
+                if target_axis is None:
+                    target_axis = axis
+                ordered_slices[axis_index] = haliax.named(slice_, axis_name(target_axis))
                 kept_axes[axis_index] = False
                 array_slice_indices.append(axis_index)
+                index_axis_names.add(axis_name(target_axis))
             else:
                 raise ValueError(
                     f"Only 0-d or 1-d unnamed arrays can be used for indexing. Got {slice_} for axis {axis}"
                 )
         else:
             raise ValueError(f"Only NamedArrays can be used for advanced indexing. Got {slice_} for axis {axis}")
+
+    # If any index array uses axes that are already present in the array and not removed,
+    # we need to explicitly advance-index those axes so numpy broadcasting works.
+    for i, ax in enumerate(array.axes):
+        if kept_axes[i] and ax.name in index_axis_names:
+            ordered_slices[i] = haliax.arange(ax)
+            array_slice_indices.append(i)
+            kept_axes[i] = False
 
     # advanced indexing
     if len(array_slice_indices) > 0:
