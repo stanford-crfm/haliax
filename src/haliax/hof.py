@@ -55,7 +55,7 @@ def vmap(
     if kwargs is None:
         kwargs = {}
 
-    axes = ensure_tuple(axis)
+    axes = ensure_tuple(axis)  # type: ignore
     if len(axes) > 1:
         mapped = fn
         for ax in reversed(axes):
