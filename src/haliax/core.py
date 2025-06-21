@@ -913,14 +913,6 @@ def updated_slice(
 
     # broadcasting here is a bit delicate because the sizes aren't necessarily the same
     # we need to broadcast the update array to the same axis names as the array we're updating, adding them as necessary
-    broadcasted_axes = []
-    for axis in array.axes:
-        update_axis = update._lookup_indices(axis.name)
-        if update_axis is None:
-            broadcasted_axes.append(axis)
-        else:
-            broadcasted_axes.append(update.axes[update_axis])
-
     if update.ndim > 0:
         # if there are any axes in update that are not in array, it is an error:
         axes_in_update = haliax.axis.without_axes(update.axes, array.axes)
