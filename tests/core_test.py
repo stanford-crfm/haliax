@@ -603,3 +603,171 @@ def test_slice_nd_array_present_dims():
     assert jnp.all(jnp.equal(named1[{"H": index1}].array, named1.array[index1.array, :, :]))
 
     # this is not ok, since the H would not be eliminated
+
+
+# -----------------------------------------------------------------------------
+# Helper for reference via take_along_axis
+# -----------------------------------------------------------------------------
+
+def _ref_gather(src, axis, idx):
+    ax_num = src.axes.index(axis)
+    out = jnp.take_along_axis(src.array, idx.array[..., None], axis=ax_num)
+    return out.squeeze(ax_num)
+
+
+# ---------------------------- 1. single batched selector ----------------------
+
+def test_single_batched_selector():
+    B, S, V = Axis("batch", 4), Axis("seq", 3), Axis("vocab", 7)
+    x   = hax.arange((B, S, V))
+    idx = hax.arange((B, S), dtype=jnp.int32) % V.size
+    out = x["vocab", idx]
+    assert out.axes == (B, S)
+    assert jnp.array_equal(out.array, _ref_gather(x, V, idx))
+
+
+# ---------------------------- 2. selector adds new axis -----------------------
+
+def test_selector_adds_new_axis():
+    B, S, V, T = Axis("batch", 2), Axis("seq", 3), Axis("vocab", 5), Axis("step", 4)
+    logits = hax.arange((B, S, V))
+    idx    = (hax.arange((B, T), dtype=jnp.int32) % V.size)
+    out = logits["vocab", idx]
+    # The new logic should result in new_axes = broadcasted_axes + non_advanced_kept_axes
+    # broadcasted_axes from idx is (B,T). non_advanced_kept_axes is (S).
+    # So new_axes should be (B,T,S).
+    assert out.axes == (B, T, S)
+
+    expected_out_ref = jnp.zeros((B.size, T.size, S.size), dtype=out.dtype)
+    # JAX arrays need to be updated functionally for the reference
+    for b_idx in range(B.size):
+        for t_idx in range(T.size):
+            for s_idx in range(S.size):
+                expected_out_ref = expected_out_ref.at[b_idx, t_idx, s_idx].set(logits.array[b_idx, s_idx, idx.array[b_idx, t_idx]])
+    assert jnp.array_equal(out.array, expected_out_ref)
+
+
+
+# ------------------------ 3. two contiguous selector arrays -------------------
+
+def test_two_contiguous_selectors():
+    B, X, Y = Axis("batch", 3), Axis("x", 5), Axis("y", 7)
+    a = hax.arange((B, X, Y))
+    ix = hax.arange((B,), dtype=jnp.int32) % X.size
+    iy = hax.arange((B,), dtype=jnp.int32) % Y.size
+    out = a["x", ix, "y", iy]
+    assert out.axes == (B,)
+    ref = a.array[jnp.arange(B.size), ix.array, iy.array]
+    assert jnp.array_equal(out.array, ref)
+
+
+# ------------------ 4. non‑contiguous selectors → axes to front --------------
+
+def test_noncontig_selectors():
+    B, X, Z, Y = Axis("batch", 2), Axis("x", 4), Axis("z", 6), Axis("y", 5)
+    a = hax.arange((B, X, Z, Y))
+    ix = hax.arange((B,), dtype=jnp.int32) % X.size
+    iy = hax.arange((B,), dtype=jnp.int32) % Y.size
+    out = a["x", ix, "y", iy]
+    assert out.axes == (B, Z)
+    ref = a.array[jnp.arange(B.size), ix.array, :, iy.array]
+    assert jnp.array_equal(out.array, ref)
+
+
+# ----------------- 5. integer elimination + selector --------------------------
+
+def test_mixed_int_and_selector():
+    B, C, V = Axis("batch", 3), Axis("channel", 2), Axis("vocab", 6)
+    x = hax.arange((B, C, V))
+    idx = hax.arange((B,), dtype=jnp.int32) % V.size
+    out = x["channel", 1, "vocab", idx]
+    assert out.axes == (B,)
+    ref = x.array[jnp.arange(B.size), 1, idx.array]
+    assert jnp.array_equal(out.array, ref)
+
+
+def test_dslice_with_selector():
+    B, S, V = Axis("batch", 2), Axis("seq", 5), Axis("vocab", 10)
+    x   = hax.arange((B, S, V))
+    idx = (hax.arange((B, S), dtype=jnp.int32) + 2) % 4 # idx axes (B,S) values in [0,3]
+
+    shard_axis = V.resize(4)
+    # In Haliax, slicing with dslice replaces the axis. If new_axis_name is not given, it keeps the old name.
+    x_shard = x[V.name, hax.axis.dslice(0, shard_axis.size)]
+
+    out = x_shard[V.name, idx] # Index V.name (which is now size 4) with idx
+
+    assert out.axes == (B, S)
+
+    ref_intermediate = x.array[:, :, :shard_axis.size]
+    ref_final = ref_intermediate[jnp.arange(B.size)[:, None], jnp.arange(S.size)[None, :], idx.array]
+    assert jnp.array_equal(out.array, ref_final)
+
+
+def test_scalar_eliminates_axis():
+    B, S, V = Axis("batch", 2), Axis("seq", 3), Axis("vocab", 4)
+    x = hax.arange((B, S, V))
+    out = x["seq", 1]
+    assert out.axes == (B, V)
+    assert jnp.array_equal(out.array, x.array[:, 1, :])
+
+
+# ----------------- 9. plain ndarray selector sugar ----------------------------
+
+def test_plain_ndarray_selector():
+    B, V_ax = Axis("batch", 3), Axis("vocab", 5)
+    x = hax.arange((B, V_ax))
+    idx_np = jnp.array([0, 2, 4], dtype=jnp.int32)
+
+    out = x[V_ax, idx_np]
+
+    # Expected: V_ax is replaced by a new axis derived from idx_np, also named "vocab".
+    # The size of this new "vocab" axis is idx_np.shape[0].
+    V_indexed = Axis(V_ax.name, idx_np.shape[0])
+    assert out.axes == (B, V_indexed)
+    assert jnp.array_equal(out.array, x.array[:, idx_np])
+
+
+# ----------------- 10. two selectors needing broadcast ------------------------
+def test_multiselector_broadcast():
+    B, S, V = Axis("batch", 2), Axis("seq", 3), Axis("vocab", 6)
+    a = hax.arange((B, S, V))
+    idx1 = hax.arange((B, S), dtype=jnp.int32) % V.size
+    out = a["vocab", idx1]
+    assert out.axes == (B, S)
+    assert jnp.array_equal(out.array, _ref_gather(a, V, idx1))
+    # Original reference from problem for cross-check:
+    # The shapes (B,1), (1,S), (B,S) for the three indexer arrays broadcast to (B,S).
+    # So the output of this indexing a.array[idx_b, idx_s, idx_v] is (B,S).
+    ref_orig = a.array[jnp.arange(B.size)[:, None], jnp.arange(S.size)[None, :], idx1.array]
+    assert jnp.array_equal(out.array, ref_orig)
+
+
+# ----------------- 11. scatter‑ADD via .at[…].add -----------------------------
+
+def test_scatter_add():
+    B, S, V = Axis("batch", 2), Axis("seq", 3), Axis("vocab", 5)
+    x   = hax.zeros((B, S, V)) # Default dtype float32
+    idx = hax.arange((B, S), dtype=jnp.int32) % V.size
+    ones = hax.ones((B, S)) # Default dtype float32
+    y = x.at[{V: idx}].add(ones)
+
+    ref_x_jnp = jnp.zeros((B.size, S.size, V.size), dtype=x.dtype)
+    ref_ones_jnp = jnp.ones((B.size, S.size), dtype=ones.dtype)
+    ref = ref_x_jnp.at[jnp.arange(B.size)[:, None], jnp.arange(S.size)[None, :], idx.array].add(ref_ones_jnp)
+    assert jnp.array_equal(y.array, ref)
+
+
+# ----------------- 12. scatter‑SET via .at[…].set -----------------------------
+
+def test_scatter_set():
+    B, V = Axis("batch", 2), Axis("vocab", 6)
+    x = hax.zeros((B, V)) # Default dtype float32
+    idx = hax.named(jnp.array([1, 4], dtype=jnp.int32), B)
+    val = hax.ones(B) * 9.0 # Ensure float if x is float
+    y = x.at[{V: idx}].set(val)
+
+    ref_x_jnp = jnp.zeros((B.size, V.size), dtype=x.dtype)
+    ref_val_jnp = jnp.ones(B.size, dtype=val.dtype) * 9.0
+    ref = ref_x_jnp.at[jnp.arange(B.size), idx.array].set(ref_val_jnp)
+    assert jnp.array_equal(y.array, ref)

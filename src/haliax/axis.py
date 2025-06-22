@@ -2,7 +2,7 @@ import typing
 from dataclasses import dataclass
 from math import prod
 from types import EllipsisType
-from typing import Dict, List, Mapping, Optional, Sequence, Tuple, Union, overload
+from typing import Dict, List, Mapping, Optional, Sequence, Set, Tuple, Union, overload
 
 import equinox as eqx
 
@@ -274,6 +274,35 @@ def unsize_axes(axis_spec: AxisSelection, to_unsize: Optional[AxisSelection] = N
         axis_spec_dict[name] = None
 
     return _dict_to_spec(axis_spec_dict)
+
+
+def unique_axes_preserve_order(axes_list: Sequence[Axis]) -> Tuple[Axis, ...]:
+    """
+    Returns a tuple of unique Axis objects from a list, preserving the order of first appearance.
+    If an axis name appears multiple times, the first Axis object encountered for that name is used.
+    It also ensures that if different Axis objects with the same name appear, they must have the same size.
+    """
+    seen_names: Set[str] = set()
+    out_axes: list[Axis] = []
+    ax_map: Dict[str, Axis] = {}
+
+    for ax in axes_list:
+        if not isinstance(ax, Axis):
+            # This function specifically expects Axis objects.
+            # If AxisSelector is needed, the type hint and logic would need adjustment.
+            raise TypeError(f"Expected Axis object, got {type(ax)}: {ax}")
+
+        if ax.name not in seen_names:
+            seen_names.add(ax.name)
+            out_axes.append(ax)
+            ax_map[ax.name] = ax
+        elif ax != ax_map[ax.name]:
+            # If an axis with the same name appears again, it must be identical (same size).
+            # The Axis dataclass (frozen=True) should mean `ax == ax_map[ax.name]` checks both name and size.
+            raise ValueError(
+                f"Axis {ax.name} appeared multiple times with different definitions: {ax_map[ax.name]} and {ax}"
+            )
+    return tuple(out_axes)
 
 
 @overload
@@ -630,4 +659,5 @@ __all__ = [
     "without_axes",
     "unsize_axes",
     "rearrange_for_partial_order",
+    "unique_axes_preserve_order",
 ]

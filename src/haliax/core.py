@@ -17,7 +17,18 @@ from haliax.jax_utils import is_jax_array_like, is_pallas_dslice
 from haliax.util import ensure_tuple
 
 from ._src.util import index_where, py_slice, slice_t
-from .axis import Axis, AxisSelection, AxisSelector, AxisSpec, axis_name, dslice, eliminate_axes, selects_axis
+from .axis import (
+    Axis,
+    AxisSelection,
+    AxisSelector,
+    AxisSpec,
+    axis_name,
+    dslice,
+    eliminate_axes,
+    selects_axis,
+    unique_axes_preserve_order,
+)
+# from .specialized_fns import arange # Moved into _compute_new_axes_and_slices_for_index
 from .types import GatherScatterModeStr, IntScalar, PrecisionLike, Scalar
 
 
@@ -926,99 +937,182 @@ def index(array: NamedArray, slices: Mapping[AxisSelector, NamedIndex]) -> Named
 
 
 def _compute_new_axes_and_slices_for_index(
-    array, slices
+    array: NamedArray, slices: Mapping[AxisSelector, NamedIndex]
 ) -> tuple[AxisSpec, list[py_slice | dslice | jnp.ndarray | int | list[int]]]:
-    ordered_slices: list = [py_slice(None, None, None)] * len(array.axes)  # type: ignore
-    kept_axes = [True] * len(array.axes)
-    array_slice_indices = []
+    # arange is now accessed via the top-level 'haliax' import (e.g. haliax.arange)
+    # from .specialized_fns import arange # Incorrect path, arange is in haliax/__init__.py
 
-    for axis, slice_ in slices.items():
-        axis_index = array._lookup_indices(axis)
+    ordered_slices: list[py_slice | dslice | jnp.ndarray | int | list[int] | NamedArray] = [
+        py_slice(None, None, None)
+    ] * len(array.axes)
+    # True if the dimension at this position is being indexed by an advanced index (NamedArray or int)
+    is_advanced_indexed_dim = [False] * len(array.axes)
+    # list of axes from NamedArray indexers, in the order they appeared in `slices`
+    final_indexer_axes_list: list[Axis] = []
+    # For advanced indexing: maps array's original axis index to the NamedArray indexer for that dimension
+    advanced_indexers_map: Dict[int, NamedArray] = {}
+
+    # First pass: handle explicit indexers, identify advanced indexing dimensions
+    for axis_selector, index_val in slices.items():
+        axis_index = array._lookup_indices(axis_selector)
         if axis_index is None:
-            raise ValueError(f"axis {axis} not found in {array}")
-        if isinstance(slice_, py_slice) or isinstance(slice_, dslice) or is_pallas_dslice(slice_):
-            ordered_slices[axis_index] = slice_
-            kept_axes[axis_index] = True
-        elif isinstance(slice_, int):
-            ordered_slices[axis_index] = slice_
-            kept_axes[axis_index] = False
-        elif isinstance(slice_, NamedArray):
-            ordered_slices[axis_index] = slice_
-            array_slice_indices.append(axis_index)
-            kept_axes[axis_index] = False
-        elif isinstance(slice_, list):
-            # we'll let JAX complain if this is wrong
-            ordered_slices[axis_index] = slice_
-        elif isinstance(slice_, jnp.ndarray):
-            # we allow this if it's a 0-d or 1-d array
-            if slice_.ndim == 0:
-                ordered_slices[axis_index] = slice_
-                kept_axes[axis_index] = False
-            elif slice_.ndim == 1:
-                # we allow this if it's a 1-d array, in which case we treat it as sugar for NamedArray(slice_, sliced-axis)
-                ordered_slices[axis_index] = haliax.named(slice_, axis_name(axis))
-                kept_axes[axis_index] = False
-                array_slice_indices.append(axis_index)
+            raise ValueError(f"Axis {axis_selector} not found in {array}")
+
+        if isinstance(index_val, (py_slice, dslice)) or is_pallas_dslice(index_val):
+            ordered_slices[axis_index] = index_val
+            is_advanced_indexed_dim[axis_index] = False
+        elif isinstance(index_val, int):
+            ordered_slices[axis_index] = index_val
+            is_advanced_indexed_dim[axis_index] = True
+            # For int indexers, we'll create a 0-dim NamedArray later for broadcasting
+        elif isinstance(index_val, NamedArray):
+            ordered_slices[axis_index] = index_val
+            is_advanced_indexed_dim[axis_index] = True
+            final_indexer_axes_list.extend(list(index_val.axes))
+            advanced_indexers_map[axis_index] = index_val
+        elif isinstance(index_val, list): # e.g. list of ints for gather
+            ordered_slices[axis_index] = jnp.array(index_val) # promote to jnp array for JAX
+            is_advanced_indexed_dim[axis_index] = True
+            # This will become a 1D NamedArray with the dimension name from original array
+            # We'll handle its axis for broadcasting in the second pass.
+        elif isinstance(index_val, jnp.ndarray):
+            if index_val.ndim == 0: # int-like
+                ordered_slices[axis_index] = index_val # Keep as 0-d JAX array
+                is_advanced_indexed_dim[axis_index] = True
+            elif index_val.ndim == 1: # list-like
+                # Treat as sugar for NamedArray(index_val, axis_name(axis_selector))
+                # The axis_name ensures it can be identified for broadcasting if needed.
+                na_idx = haliax.named(index_val, axis_name(axis_selector))
+                ordered_slices[axis_index] = na_idx
+                is_advanced_indexed_dim[axis_index] = True
+                final_indexer_axes_list.extend(list(na_idx.axes))
+                advanced_indexers_map[axis_index] = na_idx
             else:
                 raise ValueError(
-                    f"Only 0-d or 1-d unnamed arrays can be used for indexing. Got {slice_} for axis {axis}"
+                    f"Only 0-d or 1-d unnamed jnp.ndarrays can be used for indexing. Got {index_val.ndim}-d array for axis {axis_selector}"
                 )
         else:
-            raise ValueError(f"Only NamedArrays can be used for advanced indexing. Got {slice_} for axis {axis}")
+            raise TypeError(f"Unsupported index type {type(index_val)} for axis {axis_selector}")
 
-    # advanced indexing
-    if len(array_slice_indices) > 0:
-        # this requires broadcasting
-        broadcasted_arrays, broadcasted_axes = broadcast_arrays_and_return_axes(
-            *[ordered_slices[i] for i in array_slice_indices], require_subset=False, ensure_order=True
+    # Get unique axes from all NamedArray indexers, preserving order of first appearance
+    # These are the axes that will define the shape of the advanced indexing part of the output
+    broadcasted_axes: Tuple[Axis, ...] = unique_axes_preserve_order(final_indexer_axes_list)
+
+    advanced_index_input_arrays: list[NamedArray] = []
+    original_indices_of_advanced_arrays: list[int] = []
+
+    # Second pass:
+    # 1. For any original array dimension that IS advanced-indexed (is_advanced_indexed_dim[i] is True):
+    #    - If it was an int, convert to a 0-dim NamedArray (for broadcasting with other advanced indexers).
+    #    - If it was a list promoted to jnp.array, convert to NamedArray(arr, Axis(original_axis_name, len(arr))).
+    #    - Add to advanced_index_input_arrays.
+    # 2. For any original array dimension that IS NOT advanced-indexed (is_advanced_indexed_dim[i] is False)
+    #    BUT an axis from `broadcasted_axes` (i.e. an axis from an advanced indexer) shares its name:
+    #    - This dimension needs to be implicitly part of the advanced indexing block.
+    #    - Create an `arange` NamedArray for this dimension.
+    #    - Mark is_advanced_indexed_dim[i] = True.
+    #    - Add to advanced_index_input_arrays.
+    for i, original_axis in enumerate(array.axes):
+        if is_advanced_indexed_dim[i]:
+            if isinstance(ordered_slices[i], int):
+                # Convert int indexer to 0-dim NamedArray for broadcasting
+                na_idx = haliax.named(jnp.array(ordered_slices[i]), ())
+                advanced_indexers_map[i] = na_idx
+                advanced_index_input_arrays.append(na_idx)
+                original_indices_of_advanced_arrays.append(i)
+            elif isinstance(ordered_slices[i], jnp.ndarray) and ordered_slices[i].ndim == 1:
+                # list of ints promoted to jnp.array, now make it a NamedArray
+                # use original axis name for this new 1D indexer array
+                na_idx = haliax.named(ordered_slices[i], original_axis.resize(len(ordered_slices[i])))
+                advanced_indexers_map[i] = na_idx
+                advanced_index_input_arrays.append(na_idx)
+                original_indices_of_advanced_arrays.append(i)
+                # Add its axis to broadcasted_axes if not already there (it should be due to unique_axes_preserve_order)
+                if na_idx.axes[0] not in broadcasted_axes:
+                     # This case should ideally be caught by unique_axes_preserve_order if name was unique
+                     # or handled if name clashed but size was different (error from unique_axes)
+                     # If it's a new name, it extends broadcasted_axes.
+                     broadcasted_axes = unique_axes_preserve_order(list(broadcasted_axes) + list(na_idx.axes))
+            elif isinstance(ordered_slices[i], NamedArray):
+                # Already a NamedArray, just add it to the list for broadcasting
+                advanced_index_input_arrays.append(ordered_slices[i])
+                original_indices_of_advanced_arrays.append(i)
+            # else: it's a 0-dim jnp.ndarray that was converted to int, handled by first case.
+        else:  # Not an advanced index yet, check if it needs to become one for broadcasting
+            for b_ax in broadcasted_axes:
+                if original_axis.name == b_ax.name:
+                    # This dimension needs to be part of the advanced indexing block via arange
+                    if original_axis.size != b_ax.size:
+                        # This should be caught by unique_axes_preserve_order if an explicit indexer
+                        # for this axis name existed with a different size.
+                        # If it's an implicit arange, the size must match the broadcasted_axis.
+                        raise ValueError(
+                            f"Implicit arange for axis {original_axis.name} conflicts with broadcasted size."
+                            f" Original size: {original_axis.size}, broadcasted size: {b_ax.size}"
+                        )
+
+                    arange_idx = haliax.arange(original_axis)
+                    ordered_slices[i] = arange_idx # Will be broadcasted
+                    is_advanced_indexed_dim[i] = True # Now it's an advanced dim
+                    advanced_indexers_map[i] = arange_idx
+                    advanced_index_input_arrays.append(arange_idx)
+                    original_indices_of_advanced_arrays.append(i)
+                    break # Found its broadcast partner
+
+    if advanced_index_input_arrays:
+        # Perform broadcasting of all advanced indexer arrays
+        # require_subset=False because indexers might have disjoint axes that combine
+        # ensure_order=True to align with `broadcasted_axes`
+        broadcasted_indexers_list = broadcast_arrays(
+            *advanced_index_input_arrays, require_subset=False, ensure_order=True
         )
-        # this is tricky. NumPy distinguishes two cases when mixing advanced and basic indexing:
-        # https://numpy.org/doc/stable/user/basics.indexing.html#combining-advanced-and-basic-indexing
-        # The first is when the advanced indices are all contiguous, and the second is when they are not.
-        # (NB that integers count as advanced indices, so this is a bit more complicated than it seems.)
-        # When contiguous, the new axes go in the same place as the advanced indices, and the old axes surround them.
-        # When not contiguous, the new axes go to the *front* of the array, and the (other) old axes go after them.
-        # To tell what case we're in, we check if the advanced indices are contiguous. We can figure out by looking
-        # at the "kept_axes": the Falses are the advanced indices.
 
-        # check to make sure we're not accidentally duplicating axes
-        for axis_index in range(len(array.axes)):
-            if kept_axes[axis_index]:
-                if selects_axis(broadcasted_axes, array.axes[axis_index].name):
-                    raise ValueError(f"Array Axis {array.axes[axis_index]} is present in slice {slices}")
+        # Update ordered_slices with the .array attribute of broadcasted NamedArrays
+        for original_idx, broadcasted_indexer_na in zip(original_indices_of_advanced_arrays, broadcasted_indexers_list):
+            if not isinstance(broadcasted_indexer_na, NamedArray): # Should not happen
+                raise TypeError("Broadcasting did not return NamedArray")
+            ordered_slices[original_idx] = broadcasted_indexer_na.array
+            # Verify broadcasted axes match (or are a superset if we didn't ensure_order strictly to broadcasted_axes)
+            # For now, assume broadcast_arrays aligns them to the union, and broadcasted_axes was that target.
+            final_broadcasted_axes_from_call = broadcast_arrays_and_return_axes(
+                *advanced_index_input_arrays, require_subset=False, ensure_order=True)[1]
+            if final_broadcasted_axes_from_call != broadcasted_axes:
+                # This might happen if an arange introduced an axis not in the initial final_indexer_axes_list
+                # and unique_axes_preserve_order wasn't re-run or updated.
+                # For now, trust broadcast_arrays result.
+                broadcasted_axes = final_broadcasted_axes_from_call
 
-        for axis_index, selector_array in zip(array_slice_indices, broadcasted_arrays):
-            ordered_slices[axis_index] = selector_array.array
 
-        is_advanced_contiguous = True
-        first_advanced_index = index_where(lambda x: not x, kept_axes)
-        last_advanced_index = first_advanced_index
-        true_found = False
-        for i in range(first_advanced_index, len(kept_axes)):
-            # now find the first True. If any False comes after it, we're not contiguous
-            if true_found:
-                if not kept_axes[i]:
-                    is_advanced_contiguous = False
-                    break
-            elif kept_axes[i]:
-                true_found = True
-                last_advanced_index = i - 1
-
-        if not true_found:
-            last_advanced_index = len(kept_axes) - 1
-
-        if is_advanced_contiguous:
-            # the advanced indices are contiguous, so we can just insert the new axes in the same place
-            # as the advanced indices
-            new_axes = array.axes[:first_advanced_index] + broadcasted_axes + array.axes[last_advanced_index + 1 :]
-        else:
-            # the advanced indices are not contiguous, so we need to insert the new axes at the front
-            new_axes = broadcasted_axes + tuple(ax for i, ax in enumerate(array.axes) if kept_axes[i])
+    # Determine new_axes based on NumPy's advanced indexing rules
+    # https://numpy.org/doc/stable/user/basics.indexing.html#combining-advanced-and-basic-indexing
+    if not advanced_index_input_arrays: # No advanced indexing happened (all slices, dslices)
+        new_axes = tuple(ax for i, ax in enumerate(array.axes) if not is_advanced_indexed_dim[i])
     else:
-        new_axes = tuple(axis for axis, keep in zip(array.axes, kept_axes) if keep)
+        indices_of_advanced_dims = [i for i, is_adv in enumerate(is_advanced_indexed_dim) if is_adv]
 
-    new_axes = tuple(axis_name(ax) for ax in new_axes)
-    return new_axes, ordered_slices
+        is_contiguous_block = False
+        if indices_of_advanced_dims: # If there are any advanced_dims
+            is_contiguous_block = all(
+                indices_of_advanced_dims[i] + 1 == indices_of_advanced_dims[i+1]
+                for i in range(len(indices_of_advanced_dims) - 1)
+            )
+
+        non_advanced_kept_axes = [array.axes[i] for i, is_adv in enumerate(is_advanced_indexed_dim) if not is_adv]
+
+        if is_contiguous_block:
+            first_advanced_original_idx = indices_of_advanced_dims[0]
+            last_advanced_original_idx = indices_of_advanced_dims[-1]
+
+            axes_before_block = array.axes[:first_advanced_original_idx]
+            axes_after_block = array.axes[last_advanced_original_idx + 1:]
+
+            new_axes = tuple(axes_before_block) + broadcasted_axes + tuple(axes_after_block)
+        else:
+            # Advanced indices were not contiguous or were mixed with non-advanced slices.
+            # Numpy behavior: advanced axes are first, then remaining slice axes.
+            new_axes = broadcasted_axes + tuple(non_advanced_kept_axes)
+
+    return tuple(axis_name(ax) for ax in new_axes), ordered_slices
 
 
 def _handle_dynamic_slices(array: jnp.ndarray, slices):
