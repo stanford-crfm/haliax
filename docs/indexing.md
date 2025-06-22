@@ -171,10 +171,12 @@ f(q, 2)
 It's not a huge improvement, but it's a bit more convenient.
 
 
-## Advanced Indexing
+## Advanced Indexing (Gather)
 
 NumPy's [Advanced Indexing](https://numpy.org/doc/stable/user/basics.indexing.html#advanced-indexing) is supported, though we use named arrays for the indices instead of normal arrays.
 (Though, as noted above, you can use 1-D JAX arrays of integers as well.)
+This is Haliax's primary mechanism for performing **gather** operations, where elements are selected from an array based on an array of indices.
+
 In NumPy, the indexed arrays must be broadcastable to the same shape. Advanced indexing in Haliax is similar,
 except that it follows Haliax's broadcasting rules, meaning that shared names are broadcasted together,
 while non-shared names are treated as separate axes and are cross-producted.
@@ -231,12 +233,14 @@ a[{"Y": ind1}]  # error, "X" is not eliminated by the indexing operation
 a[{"X": ind2, "Y": ind1}]  # ok, because X and Y are eliminated by the indexing operation
 ```
 
-## Index Update
+## Index Update (Scatter)
 
 JAX is a functional version of NumPy, so it doesn't directly support in-place updates. It does
 however [provide an `at` syntax](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.ndarray.at.html#jax.numpy.ndarray.at)
 to express the same logic (and that will typically be optimized to be as efficient as an in-place update). Haliax
-provides a similar syntax for updating arrays.
+provides a similar syntax for updating arrays. This `.at[]` interface is a primary method for performing **scatter**
+operations, where an array is updated at specified indices with new values (e.g., using `.set()` for direct replacement
+or `.add()` for scatter-add).
 
 ```python
 import haliax as hax
@@ -287,3 +291,68 @@ operation more effectively.)
 
     It's worth emphasizing that these functions are typically compiled to scatter-add and friends (as appropriate).
     This is the preferred way to do scatter/gather operations in JAX, as well as in Haliax.
+
+## Dynamic Slice Updates with `haliax.updated_slice`
+
+While the `.at[]` syntax is powerful for element-wise or regular slice updates, Haliax provides another function, `haliax.updated_slice`, which is particularly useful for updating a slice of an array where the slice's starting position itself can be dynamic or vary per batch. This offers a flexible way to perform scatter-like operations, especially for block updates or when dealing with ragged data structures.
+
+The basic signature is `haliax.updated_slice(array: NamedArray, start: Mapping[AxisSelector, Union[int, NamedArray]], update: NamedArray)`.
+
+*   `array`: The `NamedArray` to be updated.
+*   `start`: A mapping from axis selectors to their starting indices for the slice.
+    *   If an index is an `int` or a scalar JAX array, it's a fixed start for that axis.
+    *   If an index is a `NamedArray` (which must be scalar, i.e., 0-dimensional, after any internal vmapping), the starting position for the slice along that dimension can vary. This is key to its dynamic behavior.
+*   `update`: A `NamedArray` containing the values to place into the slice. Its axes must correspond to the portion of `array` being updated.
+
+When a `NamedArray` is used as a starting index for an axis in the `start` map, `haliax.updated_slice` effectively uses `haliax.vmap` to iterate over the axes of that index `NamedArray`. This enables powerful patterns like updating different sections of an array for different batch elements, or implementing operations on ragged arrays.
+
+### Example: Ragged Updates
+
+Consider updating a cache with new key-value pairs, where each element in a batch updates a different segment of the sequence axis.
+
+```python
+import haliax as hax
+import jax.numpy as jnp
+import numpy as np # for the assertion
+
+# Define Axes
+Batch = hax.Axis("batch", 2)
+Seq = hax.Axis("seq", 5)    # The sequence axis of the cache
+NewSeq = hax.Axis("seq", 2) # The sequence axis of the update values
+
+# Initialize a cache
+cache = hax.zeros((Batch, Seq), dtype=jnp.int32)
+
+# Define dynamic start positions for each batch element
+# For batch 0, update starts at index 1 of Seq
+# For batch 1, update starts at index 3 of Seq
+start_positions = hax.named(jnp.array([1, 3]), Batch)
+
+# Define the values to update with
+# Batch 0 gets [1, 2], Batch 1 gets [3, 4]
+update_values = hax.named(jnp.array([[1, 2], [3, 4]]), (Batch, NewSeq))
+
+# Perform the updated_slice operation
+# For the 'seq' axis, we use 'start_positions'.
+# 'updated_slice' will vmap over 'Batch' from 'start_positions' and 'update_values'.
+result = hax.updated_slice(cache, {"seq": start_positions}, update_values)
+
+# Expected output:
+# Batch 0: [0, 1, 2, 0, 0] (updated [1,2] at index 1)
+# Batch 1: [0, 0, 0, 3, 4] (updated [3,4] at index 3)
+expected_array = np.array([
+    [0, 1, 2, 0, 0],
+    [0, 0, 0, 3, 4]
+], dtype=jnp.int32)
+
+assert np.array_equal(result.array, expected_array)
+assert result.axes == (Batch, Seq)
+
+print("Original cache:\n", cache.array)
+print("Start positions:\n", start_positions.array)
+print("Update values:\n", update_values.array)
+print("Result:\n", result.array)
+print("Expected:\n", expected_array)
+```
+
+In this example, `updated_slice` takes the `cache`, the `start_positions` for the `Seq` axis (which varies per `Batch`), and the `update_values`. It updates a 2-element slice (defined by `NewSeq`) in each batch element of the `cache` at the specified dynamic starting positions. This demonstrates how `updated_slice` can handle ragged updates in a clean and expressive way.
