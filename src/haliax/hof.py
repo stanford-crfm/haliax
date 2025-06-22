@@ -19,16 +19,16 @@ from ._src.scan import (
     map,
     scan,
 )
-from .axis import Axis, AxisSelector, selects_axis
+from .axis import Axis, AxisSelection, AxisSelector, selects_axis
 from .core import NamedArray
 from .jax_utils import Static, broadcast_prefix, is_jax_array_like
 from .partitioning import physical_axis_name
-from .util import is_named_array
+from .util import ensure_tuple, is_named_array
 
 
 def vmap(
     fn,
-    axis: AxisSelector,
+    axis: AxisSelection,
     *,
     default: PyTree[UnnamedAxisSpec] = _zero_if_array_else_none,
     args: PyTree[UnnamedAxisSpec] = (),
@@ -43,7 +43,9 @@ def vmap(
 
     Args:
         fn (Callable): function to vmap over
-        axis (Axis): axis to vmap over
+        axis (Axis or Sequence[Axis]): axis or axes to vmap over. If a sequence is
+            provided, the function will be vmapped over each axis in turn,
+            from innermost to outermost.
         default: how to handle (unnamed) arrays by default. Should be either an integer or None, or a callable that takes a PyTree leaf
             and returns an integer or None, or a PyTree prefix of the same. If an integer, the array will be mapped over that axis. If None, the array will not be mapped over.
         args: optional per-argument overrides for how to handle arrays. Should be a PyTree prefix of the same type as default.
@@ -52,6 +54,15 @@ def vmap(
 
     if kwargs is None:
         kwargs = {}
+
+    axes = ensure_tuple(axis)  # type: ignore
+    if len(axes) > 1:
+        mapped = fn
+        for ax in reversed(axes):
+            mapped = vmap(mapped, ax, default=default, args=args, kwargs=kwargs)
+        return mapped
+    else:
+        axis = axes[0]
 
     signature = inspect.signature(fn)
 
