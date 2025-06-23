@@ -18,6 +18,7 @@ from haliax._src.util import index_where
 from haliax.axis import Axis
 from haliax.core import NamedArray, flatten_axes, named
 from haliax.jax_utils import is_jax_array_like, is_scalarish
+from haliax.tree_util import scan_aware_tree_map
 
 
 try:
@@ -32,19 +33,60 @@ T = TypeVar("T")
 
 
 def from_torch_compatible_state_dict(
-    t: T, state_dict: StateDict, *, unflatten_linear: bool = True, prefix: Optional[str] = None
+    t: T, state_dict: StateDict, *, unflatten: bool = True, prefix: Optional[str] = None
 ) -> T:
     """
     Convert a state dict to a tree that is compatible with the structure of `t`.
 
-    This applies [haliax.state_dict.from_state_dict][] followed by [haliax.state_dict.unflatten_linear_layers][].
+    If unflatten is true, then the weights in the state dict are assumed to have been flattened (as by flatten_modules_for_export).
+
+    This applies [haliax.state_dict.from_state_dict][]
     """
-    if unflatten_linear:
+    if unflatten:
         t = _flatten_to_unflatten(t, state_dict, prefix)
     else:
         t = from_state_dict(t, state_dict, prefix=prefix)
 
     return t
+
+
+def flatten_modules_for_export(t: T) -> T:
+    """
+    Flatten all modules in a tree for export to torch.
+    """
+
+    def _flatten_module(module):
+        if isinstance(module, ModuleWithStateDictSerialization):
+            module = module.flatten_for_export()
+            module = scan_aware_tree_map(
+                _flatten_module,
+                module,
+                is_leaf=lambda x: x is not module and isinstance(x, ModuleWithStateDictSerialization),
+            )
+        return module
+
+    return scan_aware_tree_map(_flatten_module, t, is_leaf=lambda x: isinstance(x, ModuleWithStateDictSerialization))
+
+
+def unflatten_modules_from_export(t: T, template: T) -> T:
+    """
+    Unflatten all modules in a tree after import from torch.
+    """
+
+    def _unflatten_module(module, template):
+        if isinstance(module, ModuleWithStateDictSerialization):
+            module = module.unflatten_from_export(template)
+            module = scan_aware_tree_map(
+                _unflatten_module,
+                module,
+                template,
+                is_leaf=lambda x: x is not module and isinstance(x, ModuleWithStateDictSerialization),
+            )
+        return module
+
+    return scan_aware_tree_map(
+        _unflatten_module, t, template, is_leaf=lambda x: isinstance(x, ModuleWithStateDictSerialization)
+    )
 
 
 def _flatten_to_unflatten(t, state_dict, prefix):
@@ -59,9 +101,9 @@ def _flatten_to_unflatten(t, state_dict, prefix):
         return jnp.zeros(struct.shape, struct.dtype)
 
     t = jax.tree.map(_dt_struct_to_array, t)
-    flat_t = flatten_linear_layers(t)
+    flat_t = flatten_modules_for_export(t)
     flat_t = from_state_dict(flat_t, state_dict, prefix=prefix)
-    t = unflatten_linear_layers(t, flat_t)
+    t = unflatten_modules_from_export(flat_t, t)
     return t
 
 
@@ -102,6 +144,25 @@ class ModuleWithStateDictSerialization(eqx.Module):
     def _state_dict_key_map(self) -> dict[str, Optional[str]]:
         """Returns a dict mapping eqx.Module keys to torch keys that need to be renamed for serialization"""
         return {}
+
+    def flatten_for_export(self: Mod) -> Mod:
+        """
+        Flatten articulated named arrays for export to torch. In general this method should, for a linear layer, flatten
+        all input axes into a single axis, and all output axes into a single axis. You can do whatever else
+        you want to support pytorch-compatible serialization if you want.
+
+        This method is less general than to_state_dict and is only called when using to_torch_compatible_state_dict.
+        """
+        return self
+
+    def unflatten_from_export(self: Mod, template: Mod) -> Mod:
+        """
+        Unflatten the module after import from torch.
+
+        Template has the proper structure (e.g. articulated named axes) but the values are meaningless.
+        """
+        del template
+        return self
 
 
 def from_state_dict(tree: T, state_dict: StateDict, prefix: Optional[str] = None) -> T:
@@ -154,6 +215,8 @@ def from_state_dict(tree: T, state_dict: StateDict, prefix: Optional[str] = None
             raise ValueError("Cannot extract a leaf value from a state dict without a prefix")
         # TODO: add "strict" flag so we can return None in cases where it's just missing
         return jnp.array(state_dict[prefix])
+    elif tree is None:
+        return None
     else:
         if prefix is None:
             return tree
@@ -372,78 +435,3 @@ def load_state_dict(path):
     """
     state_dict = safetensors.numpy.load_file(path)
     return state_dict
-
-
-def flatten_linear_layers(tree: T) -> T:
-    """
-    In PyTorch, linear layers are stored as a 2d weight matrix and a 1d bias vector. In Haliax,
-    linear layers can have arbitrary dimensions, grouped into input and output axes. This function
-    flattens the linear layers in a tree to be compatible with PyTorch-style state dicts.
-
-    :param tree:
-    """
-    from haliax.nn import Linear
-
-    def _flatten_linear(layer):
-        if not isinstance(layer, Linear):
-            return layer
-
-        weight = layer.weight
-        bias = layer.bias
-
-        new_Out: Axis = flatten_axes(layer.Out, "__OUT__")
-        new_In: Axis = flatten_axes(layer.In, "__IN__")
-
-        if weight.array is not None:
-            out_first = layer.out_first
-            weight = weight.flatten_axes(layer.Out, new_Out).flatten_axes(layer.In, new_In)
-
-            if out_first:
-                weight = weight.rearrange((..., "__OUT__", "__IN__"))
-            else:
-                weight = weight.rearrange((..., "__IN__", "__OUT__"))
-
-        if isinstance(bias, NamedArray):
-            bias = bias.flatten_axes(layer.Out, new_Out)
-
-        return dataclasses.replace(layer, weight=weight, bias=bias, In=new_In, Out=new_Out)  # type: ignore
-
-    return jax.tree.map(_flatten_linear, tree, is_leaf=lambda x: isinstance(x, Linear))
-
-
-def unflatten_linear_layers(template: T, tree_with_flattened_linears: T) -> T:
-    """
-    Unflattens linear layers in a tree that was flattened with [haliax.state_dict.flatten_linear_layers][].
-    Template has the same structure as the tree that was flattened, but with the original (unflattened)
-    linear layers.
-
-    Returns:
-        The same tree as `tree_with_flattened_linears`, but with the linear layers unflattened to match
-        the structure of `template`.
-    """
-
-    from haliax.nn import Linear
-
-    def _unflatten_linear(template, flattened):
-        assert isinstance(template, Linear) == isinstance(flattened, Linear)
-
-        if not isinstance(template, Linear):
-            return flattened
-
-        weight = flattened.weight
-        bias = flattened.bias
-
-        if weight.array is not None:
-            weight = weight.unflatten_axis("__OUT__", template.Out).unflatten_axis("__IN__", template.In)
-            weight = weight.rearrange(template.weight.axes)
-
-        if isinstance(bias, NamedArray):
-            bias = bias.unflatten_axis("__OUT__", template.Out)
-            assert template.bias is not None, "Flattened bias but template has no bias"
-            bias = bias.rearrange(template.bias.axes)
-
-        return dataclasses.replace(template, weight=weight, bias=bias)  # type: ignore
-
-    return jax.tree.map(
-        _unflatten_linear, template, tree_with_flattened_linears, is_leaf=lambda x: isinstance(x, Linear)
-    )

@@ -43,8 +43,15 @@ def test_uniform_with_bounds_broadcast():
     assert hax.all(u >= lb)
     assert hax.all(u <= 0.5)
 
+    # for lb and ub, broadcast the raw arrays for jax
+    lb_raw = lb.array.reshape(-1, 1)
+    ub_raw = ub.array.reshape(1, -1)
+
+    lb_raw = jnp.broadcast_to(lb_raw, (Height.size, Width.size))
+    ub_raw = jnp.broadcast_to(ub_raw, (Height.size, Width.size))
+
     check_gen_is_equal(
-        lambda k, s: jax.random.uniform(k, shape=s, minval=lb.array.reshape(-1, 1), maxval=ub.array.reshape(1, -1)),
+        lambda k, s: jax.random.uniform(k, shape=s, minval=lb_raw, maxval=ub_raw),
         lambda k, s: hax.random.uniform(k, s, minval=lb, maxval=ub),
     )
 

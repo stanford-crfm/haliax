@@ -119,7 +119,24 @@ def test_scan_doesnt_scan_init():
     assert jnp.all(jnp.isclose(total.array, init + jnp.sum(named1.array * 4.0)))
 
 
-def test_reduce():
+def test_scan_hierarchical():
+    Height = Axis("Height", 10)
+    Width = Axis("Width", 3)
+    Depth = Axis("Depth", 4)
+    named1 = hax.random.uniform(PRNGKey(0), (Height, Width, Depth))
+
+    def scan_fun(acc, x):
+        return acc + jnp.sum(x.array), x.take("Width", 2)
+
+    total, selected = hax.scan(scan_fun, "Height")(0.0, named1)
+    ckpt = hax.ScanCheckpointPolicy(nested=True)
+    total_blocked, selected_blocked = hax.scan(scan_fun, "Height", remat=ckpt)(0.0, named1)
+
+    assert jnp.all(jnp.isclose(total, total_blocked))
+    assert jnp.all(jnp.equal(selected.array, selected_blocked.array))
+
+
+def test_fold():
     Height = Axis("Height", 10)
     Width = Axis("Width", 3)
     Depth = Axis("Depth", 4)
@@ -132,7 +149,7 @@ def test_reduce():
     assert jnp.all(jnp.isclose(total.rearrange(acc.axes).array, jnp.sum(named1.array, axis=2)))
 
 
-def test_reduce_str_args():
+def test_fold_str_args():
     Height = Axis("Height", 10)
     Width = Axis("Width", 3)
     Depth = Axis("Depth", 4)
@@ -145,7 +162,7 @@ def test_reduce_str_args():
     assert jnp.all(jnp.isclose(total.rearrange(acc.axes).array, jnp.sum(named1.array, axis=2)))
 
 
-def test_reduce_static_args():
+def test_fold_static_args():
     Height = Axis("Height", 10)
     Width = Axis("Width", 3)
     Depth = Axis("Depth", 4)
@@ -163,7 +180,7 @@ def test_reduce_static_args():
     assert jnp.all(jnp.isclose(total.rearrange(acc.axes).array, jnp.sum(named1.array, axis=2)))
 
 
-def test_reduce_doesnt_reduce_scalars():
+def test_fold_doesnt_reduce_scalars():
     Height = Axis("Height", 10)
     named1 = hax.random.uniform(PRNGKey(0), (Height,))
 
@@ -304,3 +321,22 @@ def test_vmap_error_for_incorrectly_specified_args():
     Width = Axis("Width", 3)
 
     hax.vmap(lambda a: Module(a), Batch)(Width)
+
+
+def test_vmap_multiple_axes():
+    Batch1 = Axis("Batch1", 4)
+    Batch2 = Axis("Batch2", 3)
+    Width = Axis("Width", 2)
+    Depth = Axis("Depth", 5)
+
+    named = hax.random.uniform(PRNGKey(0), (Batch1, Batch2, Width, Depth))
+
+    def vmap_fun(x):
+        return x.sum(Width)
+
+    selected = hax.vmap(vmap_fun, (Batch1, Batch2))(named)
+
+    expected = jnp.sum(named.array, axis=2)
+
+    assert jnp.allclose(selected.array, expected)
+    assert selected.axes == (Batch1, Batch2, Depth)

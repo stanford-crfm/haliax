@@ -33,15 +33,12 @@ from .activations import (
 from .conv import Conv, ConvTranspose
 from .dropout import Dropout, dropout
 from .embedding import Embedding
-from .linear import Linear
+from .linear import Linear, MoELinear
 from .loss import binary_cross_entropy_loss, cross_entropy_loss, cross_entropy_loss_and_log_normalizers, reduce_loss
 from .mlp import MLP
-from .normalization import LayerNorm, log_softmax, logsumexp, softmax, standardize
+from .normalization import LayerNorm, RmsNorm, log_softmax, logsumexp, softmax, standardize
 from .pool import max_pool, mean_pool, min_pool
-from .scan import BlockSeq, Stacked
-
-
-# TODO: support where in softmax, etc
+from .scan import BlockSeq, ScanCheckpointPolicy, Stacked
 
 
 def one_hot(x: NamedArray | int, class_axis: Axis, *, dtype=None) -> NamedArray:
@@ -86,7 +83,9 @@ __all__ = [
     "dropout",
     "LayerNorm",
     "Linear",
+    "MoELinear",
     "Embedding",
+    "RmsNorm",
     "Stacked",
     "BlockSeq",
     "MLP",
@@ -116,4 +115,5 @@ __all__ = [
     "max_pool",
     "mean_pool",
     "min_pool",
+    "ScanCheckpointPolicy",
 ]

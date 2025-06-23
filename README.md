@@ -25,8 +25,8 @@ Despite the focus on legibility, Haliax
 is also **fast**, typically about as fast as "pure" JAX code.
 Haliax is also built to be **scalable**: it
 can support [Fully-Sharded Data Parallelism (FSDP)](https://engineering.fb.com/2021/07/15/open-source/fsdp/) and Tensor Parallelism with [just a few lines of code](https://colab.research.google.com/drive/1QX4yH3zRFF3Xiibf1aahETcSQ5nbcUMz). Haliax powers [Levanter](https://github.com/stanford-crfm/levanter),
-our companion library for training large language models and other foundation models, with scale proven up to 20B parameters
-and up to a TPU v3-256 pod slice.
+our companion library for training large language models and other foundation models, with scale proven up to 70B parameters
+and up to TPU v4-2048.
 
 ## Example: Attention
 

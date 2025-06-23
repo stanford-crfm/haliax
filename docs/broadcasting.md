@@ -62,8 +62,8 @@ This method takes one or more axes and adds them to the array.
 
 ## Explicit Broadcasting Functions
 
-::: haliax.broadcast_axis
-::: haliax.broadcast_to
+* [haliax.broadcast_axis][]
+* [haliax.broadcast_to][]
 
 
 <!--

@@ -1,5 +1,6 @@
 import functools as ft
 import typing
+import warnings
 from typing import Any, Callable, Optional, Sequence, Union
 
 import equinox as eqx
@@ -8,15 +9,26 @@ import numpy as np
 from jax import Array
 from jax import numpy as jnp
 from jax import random as jrandom
-from jax._src.numpy import lax_numpy
-from jax._src.typing import DTypeLike
+from jax.ad_checkpoint import checkpoint_name
+from jax.typing import DTypeLike
 from jaxtyping import PRNGKeyArray
 
 import haliax
 from haliax.types import PrecisionLike
 
 
+try:
+    # jax v0.5.1 or newer
+    from jax._src.numpy import (
+        einsum as jax_einsum,  # pylint: disable=g-import-not-at-top  # pytype: disable=import-error
+    )
+except ImportError:
+    # jax v0.5.0 or older
+    from jax._src.numpy import lax_numpy as jax_einsum  # pylint: disable=g-import-not-at-top
+
+
 F = typing.TypeVar("F", bound=Callable[..., Any])
+T = typing.TypeVar("T")
 
 
 class Static(eqx.Module):
@@ -60,23 +72,9 @@ def filter_eval_shape(*args, **kwargs):
 def filter_checkpoint(fun: Callable, *, prevent_cse: bool = True, policy: Optional[Callable[..., bool]] = None):
     """As `jax.checkpoint`, but allows any Python object as inputs and outputs"""
 
-    @ft.wraps(fun)
-    def _fn(_static, _dynamic):
-        _args, _kwargs = eqx.combine(_static, _dynamic)
-        _out = fun(*_args, **_kwargs)
-        _dynamic_out, _static_out = eqx.partition(_out, is_jax_array_like)
-        return _dynamic_out, Static(_static_out)
+    warnings.warn("filter_checkpoint is deprecated, use eqx.filter_checkpoint instead", DeprecationWarning)
 
-    checkpointed_fun = jax.checkpoint(_fn, prevent_cse=prevent_cse, policy=policy, static_argnums=(0,))
-
-    @ft.wraps(fun)
-    def wrapper(*args, **kwargs):
-        dynamic, static = eqx.partition((args, kwargs), is_jax_array_like)
-        dynamic_out, static_out = checkpointed_fun(static, dynamic)
-
-        return eqx.combine(dynamic_out, static_out.value)
-
-    return wrapper
+    return eqx.filter_checkpoint(fun, prevent_cse=prevent_cse, policy=policy)
 
 
 def is_jax_array_like(x):
@@ -169,6 +167,13 @@ def _jittable_dg_einsum(
     preferred_element_type: DTypeLike | None = None,
     _dot_general: Callable[..., Array] = jax.lax.dot_general,
 ) -> Array:
+    """
+    So we want to pass around a jittable dot_general module, but JAX's builtin version doesn't support this.
+    So we copy over the implementation of jax.numpy.einsum and modify thing so that it is jittable (via
+    eqx.filter_jit)
+
+    More or less copied from AQT
+    """
     operands = (subscripts, *operands)
     if out is not None:
         raise NotImplementedError("The 'out' argument to jnp.einsum is not supported.")
@@ -185,13 +190,83 @@ def _jittable_dg_einsum(
         contract_path = opt_einsum.contract_path
     else:
         ty = next(iter(non_constant_dim_types))
-        contract_path = lax_numpy._poly_einsum_handlers.get(ty, lax_numpy._default_poly_einsum_handler)
+        contract_path = jax_einsum._poly_einsum_handlers.get(ty, jax_einsum._default_poly_einsum_handler)
     # using einsum_call=True here is an internal api for opt_einsum... sorry
     operands, contractions = contract_path(*operands, einsum_call=True, use_blas=True, optimize=optimize)
 
     contractions = tuple((a, frozenset(b), c) for a, b, c, *_ in contractions)
 
-    einsum = eqx.filter_jit(lax_numpy._einsum, inline=True)
+    einsum = eqx.filter_jit(jax_einsum._einsum, inline=True)
     if spec is not None:
         einsum = jax.named_call(einsum, name=spec)
     return einsum(operands, contractions, precision, preferred_element_type, _dot_general)  # type: ignore[operator]
+
+
+def tree_checkpoint_name(x: T, name: str) -> T:
+    """
+    Checkpoint a tree of arrays with a given name. This is useful for gradient checkpointing.
+    This is equivalent to calling [jax.ad_checkpoint.checkpoint_name][]
+    except that it works for any PyTree, not just arrays.
+
+    See Also:
+        * [jax.ad_checkpoint.checkpoint_name][]
+        * [haliax.nn.ScanCheckpointPolicy][]
+    """
+
+    def _checkpoint_leaf(x):
+        if is_jax_array_like(x):
+            return checkpoint_name(x, name)
+        else:
+            return x
+
+    return jax.tree.map(_checkpoint_leaf, x)
+
+
+def multilevel_scan(f, carry, xs, outer_size, length, reverse=False, unroll=1):
+    """
+
+    Similar to jax.lax.scan, but "nested". You take your scanned axis and break it up into outer_size chunks, then
+    scan each chunk with a scan.
+
+    You use this if you want to save memory by, e.g., implementing the sqrt(N) memory trick for checkpointing.
+
+    This is typically ~20% slower than the O(n) memory thing, but it's often worthwhile.
+
+    Credit to Roy and Matt.
+    """
+
+    inner_size = length // outer_size
+
+    if inner_size * outer_size != length:
+        raise ValueError(f"Length {length} must be divisible by outer_size {outer_size}")
+
+    def _reshape(x):
+        if is_jax_array_like(x) and x.shape != ():
+            return x.reshape([outer_size, inner_size, *x.shape[1:]])
+        else:
+            return x
+
+    xs_shaped = jax.tree.map(_reshape, xs)
+
+    carry, scanned = jax.lax.scan(
+        jax.remat(ft.partial(jax.lax.scan, f, reverse=reverse, unroll=unroll)),
+        carry,
+        xs_shaped,
+        reverse=reverse,
+        unroll=True,
+    )
+
+    def _deshape(x):
+        if is_jax_array_like(x) and x.shape != ():
+            return x.reshape([length, *x.shape[2:]])
+        else:
+            return x
+
+    return carry, jax.tree.map(_deshape, scanned)
+
+
+def to_jax_shape(shape):
+    from haliax.core import Axis, ensure_tuple
+
+    shape = ensure_tuple(shape)
+    return tuple(axis.size if isinstance(axis, Axis) else axis for axis in shape)

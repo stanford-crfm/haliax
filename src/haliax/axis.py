@@ -35,6 +35,8 @@ def make_axes(**kwargs: int) -> tuple[Axis, ...]:
     Example:
     ```
     X, Y = axes(X=10, Y=20)
+    ```
+
     """
     return tuple(Axis(name, size) for name, size in kwargs.items())
 
@@ -315,36 +317,36 @@ def eliminate_axes(axis_spec: AxisSelection, to_remove: AxisSelection) -> AxisSe
 
 
 @typing.overload
-def without_axes(axis_spec: ShapeDict, to_remove: AxisSelection) -> ShapeDict:  # type: ignore
+def without_axes(axis_spec: ShapeDict, to_remove: AxisSelection, allow_mismatched_sizes=False) -> ShapeDict:  # type: ignore
     ...
 
 
 @typing.overload
-def without_axes(axis_spec: Sequence[Axis], to_remove: AxisSelection) -> tuple[Axis, ...]:  # type: ignore
+def without_axes(axis_spec: Sequence[Axis], to_remove: AxisSelection, allow_mismatched_sizes=False) -> tuple[Axis, ...]:  # type: ignore
     ...
 
 
 @typing.overload
-def without_axes(axis_spec: AxisSpec, to_remove: AxisSelection) -> AxisSpec:  # type: ignore
+def without_axes(axis_spec: AxisSpec, to_remove: AxisSelection, allow_mismatched_sizes=False) -> AxisSpec:  # type: ignore
     ...
 
 
 @typing.overload
-def without_axes(axis_spec: AxisSelection, to_remove: AxisSelection) -> AxisSelection:  # type: ignore
+def without_axes(axis_spec: AxisSelection, to_remove: AxisSelection, allow_mismatched_sizes=False) -> AxisSelection:  # type: ignore
     """As eliminate_axes, but does not raise if any axis in to_remove is not present in axis_spec"""
 
 
 @typing.overload
-def without_axes(axis_spec: Sequence[AxisSelector], to_remove: AxisSelection) -> tuple[AxisSpec, ...]:  # type: ignore
+def without_axes(axis_spec: Sequence[AxisSelector], to_remove: AxisSelection, allow_mismatched_sizes=False) -> tuple[AxisSpec, ...]:  # type: ignore
     ...
 
 
 @typing.overload
-def without_axes(axis_spec: PartialShapeDict, to_remove: AxisSelection) -> PartialShapeDict:  # type: ignore
+def without_axes(axis_spec: PartialShapeDict, to_remove: AxisSelection, allow_mismatched_sizes=False) -> PartialShapeDict:  # type: ignore
     ...
 
 
-def without_axes(axis_spec: AxisSelection, to_remove: AxisSelection) -> AxisSelection:  # type: ignore
+def without_axes(axis_spec: AxisSelection, to_remove: AxisSelection, allow_mismatched_sizes=False) -> AxisSelection:  # type: ignore
     """
     As eliminate_axes, but does not raise if any axis in to_remove is not present in axis_spec.
 
@@ -358,7 +360,9 @@ def without_axes(axis_spec: AxisSelection, to_remove: AxisSelection) -> AxisSele
 
     for ax, size in to_remove_dict.items():
         if ax in axis_spec_dict:
-            if size is not None and axis_spec_dict[ax] is not None and size != axis_spec_dict[ax]:
+            if not allow_mismatched_sizes and (
+                size is not None and axis_spec_dict[ax] is not None and size != axis_spec_dict[ax]
+            ):
                 raise ValueError(f"Axis {ax} present in both specs with different sizes: {axis_spec} - {to_remove}")
             del axis_spec_dict[ax]
 

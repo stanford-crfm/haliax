@@ -33,6 +33,7 @@ def dot_product_attention_weights(
     bias: Optional[NamedArray] = None,
     attention_dtype: Optional[jnp.dtype] = None,
     precision: PrecisionLike = None,
+    scaling_factor: Optional[float] = None,
 ) -> NamedArray:
     """
     NamedArray version of dot product attention. Computes the logits for the attention weights. Note that the
@@ -46,12 +47,16 @@ def dot_product_attention_weights(
     :param bias: Optional[NamedArray] broadcast compatible with (KeySize, QPos, KPos). Should be float
     :param attention_dtype: Optional dtype to use for attention
     :param precision: PrecisionLike for dot product. See precision argument to jax.lax.dot_general
+    :param scaling_factor: Optional float as scaling factor for attention score. Default to 1/sqrt(D)
     :return: NamedArray of shape (QPos, KPos)
     """
     # cf https://github.com/google/flax/blob/509bf97ea272e130d932920f45307ac98947d994/flax/linen/attention.py#L40
 
     orig_dtype = query.dtype
-    query = query / jnp.sqrt(query.axis_size(Key))
+    if scaling_factor is None:
+        scaling_factor = 1.0 / jnp.sqrt(query.axis_size(Key))
+
+    query = query * scaling_factor
 
     if attention_dtype is not None:
         query = query.astype(attention_dtype)

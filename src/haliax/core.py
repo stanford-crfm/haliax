@@ -348,7 +348,7 @@ class NamedArray:
         return haliax.slice(self, *args, **kwargs)
 
     def updated_slice(
-        self, start: Mapping[AxisSelector, int], update: "NamedArray"
+        self, start: Mapping[AxisSelector, Union[int, "NamedArray"]], update: "NamedArray"
     ) -> "NamedArray":  # pragma: no cover
         return haliax.updated_slice(self, start=start, update=update)
 
@@ -891,7 +891,7 @@ def _slice_new(
 
 
 def updated_slice(
-    array: NamedArray, start: Mapping[AxisSelector, Union[int, jnp.ndarray]], update: NamedArray
+    array: NamedArray, start: Mapping[AxisSelector, Union[int, jnp.ndarray, NamedArray]], update: NamedArray
 ) -> NamedArray:
     """
     Updates a slice of an array with another array.
@@ -905,18 +905,42 @@ def updated_slice(
         NamedArray: The updated array.
     """
 
+    # figure out which axis‐names to map over
+    map_axes: list[str] = []
+    for axis_sel, s in start.items():
+        if isinstance(s, NamedArray):
+            for ax in s.axes:
+                if ax.name not in map_axes:
+                    map_axes.append(ax.name)
+
+    # need to vmap
+    if len(map_axes) > 0:
+        # scalar version: all starts are ints / tracers
+        f = updated_slice
+        for axis_name in map_axes:
+            # make sure that axis_name is in `array`. otherwise it doesn't make sense to vmap over it
+            if array._lookup_indices(axis_name) is None:
+                raise ValueError(f"axis {axis_name} not found in original array's axes: {array.shape}")
+            f = haliax.vmap(f, axis=axis_name)
+        return f(array, start, update)
+
     array_slice_indices = [0] * len(array.axes)
     for axis, s in start.items():
-        axis_index = array._lookup_indices(axis_name(axis))
+        axis_index = array._lookup_indices(haliax.axis_name(axis))
         if axis_index is None:
             raise ValueError(f"axis {axis} not found in {array}")
+        if isinstance(s, NamedArray):  # this can happen in the vmap case
+            if s.ndim != 0:
+                raise ValueError(f"NamedArray {s} must be a scalar for axis {axis} in updated_slice")
+            s = s.scalar()
+
         array_slice_indices[axis_index] = s
         total_length = array.axes[axis_index].size
-        update_axis = update._lookup_indices(axis_name(axis))
+        update_axis = update._lookup_indices(haliax.axis_name(axis))
 
-        if update_axis is None:
-            raise ValueError(f"axis {axis} not found in {update}")
         # if s is a tracer we can't check the size
+        if update_axis is None:
+            continue
         if isinstance(s, int) and update.axes[update_axis].size + s > total_length:
             raise ValueError(
                 f"update axis {axis} is too large to start at {s}. Array size is {total_length}, update size is"
@@ -925,17 +949,25 @@ def updated_slice(
 
     # broadcasting here is a bit delicate because the sizes aren't necessarily the same
     # we need to broadcast the update array to the same axis names as the array we're updating, adding them as necessary
-    broadcasted_axes = []
-    for axis in array.axes:
-        update_axis = update._lookup_indices(axis.name)
-        if update_axis is None:
-            broadcasted_axes.append(axis)
-        else:
-            broadcasted_axes.append(update.axes[update_axis])
+    if update.ndim > 0:
+        # if there are any axes in update that are not in array, it is an error:
+        axes_in_update = haliax.axis.without_axes(update.axes, array.axes, allow_mismatched_sizes=True)
+        if axes_in_update:
+            raise ValueError(
+                f"Update array with shape {update.shape} has axes {axes_in_update} that are not in the original array"
+                f" with shape {array.shape}. This is not allowed in updated_slice."
+            )
+        broadcasted_axes = []
+        for ax in array.axes:
+            upd_ax = update._lookup_indices(ax.name)
+            broadcasted_axes.append(ax if upd_ax is None else update.axes[upd_ax])
+        update = haliax.broadcast_to(update, broadcasted_axes, enforce_no_extra_axes=True)
+        upd_arr = update.array
+    else:
+        # scalar case: just add one axis so it doesn't get too mad
+        upd_arr = update.array.reshape((1,))
 
-    update = haliax.broadcast_to(update, broadcasted_axes, enforce_no_extra_axes=True)
-
-    updated = jax.lax.dynamic_update_slice(array.array, update.array, array_slice_indices)
+    updated = jax.lax.dynamic_update_slice(array.array, upd_arr, array_slice_indices)
     return NamedArray(updated, array.axes)
 
 
@@ -968,6 +1000,7 @@ def _compute_new_axes_and_slices_for_index(
     ordered_slices: list = [py_slice(None, None, None)] * len(array.axes)  # type: ignore
     kept_axes = [True] * len(array.axes)
     array_slice_indices = []
+    index_axis_names = set()
 
     for axis, slice_ in slices.items():
         axis_index = array._lookup_indices(axis)
@@ -983,6 +1016,8 @@ def _compute_new_axes_and_slices_for_index(
             ordered_slices[axis_index] = slice_
             array_slice_indices.append(axis_index)
             kept_axes[axis_index] = False
+            for ax in slice_.axes:
+                index_axis_names.add(ax.name)
         elif isinstance(slice_, list):
             # we'll let JAX complain if this is wrong
             ordered_slices[axis_index] = slice_
@@ -992,16 +1027,31 @@ def _compute_new_axes_and_slices_for_index(
                 ordered_slices[axis_index] = slice_
                 kept_axes[axis_index] = False
             elif slice_.ndim == 1:
-                # we allow this if it's a 1-d array, in which case we treat it as sugar for NamedArray(slice_, sliced-axis)
-                ordered_slices[axis_index] = haliax.named(slice_, axis_name(axis))
+                target_axis = None
+                for i2, ax2 in enumerate(array.axes):
+                    if i2 != axis_index and kept_axes[i2] and ax2.size == slice_.shape[0]:
+                        target_axis = ax2
+                        break
+                if target_axis is None:
+                    target_axis = axis
+                ordered_slices[axis_index] = haliax.named(slice_, axis_name(target_axis))
                 kept_axes[axis_index] = False
                 array_slice_indices.append(axis_index)
+                index_axis_names.add(axis_name(target_axis))
             else:
                 raise ValueError(
                     f"Only 0-d or 1-d unnamed arrays can be used for indexing. Got {slice_} for axis {axis}"
                 )
         else:
             raise ValueError(f"Only NamedArrays can be used for advanced indexing. Got {slice_} for axis {axis}")
+
+    # If any index array uses axes that are already present in the array and not removed,
+    # we need to explicitly advance-index those axes so numpy broadcasting works.
+    for i, ax in enumerate(array.axes):
+        if kept_axes[i] and ax.name in index_axis_names:
+            ordered_slices[i] = haliax.arange(ax)
+            array_slice_indices.append(i)
+            kept_axes[i] = False
 
     # advanced indexing
     if len(array_slice_indices) > 0:
