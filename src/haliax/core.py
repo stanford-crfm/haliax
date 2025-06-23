@@ -1394,7 +1394,7 @@ def _broadcast_order(a: NamedArray, b: NamedArray, require_subset: bool = True) 
         # TODO: decide under which conditions we want to allow broadcasting both arrays
         # maybe just add a context manager to allow it?
         raise ValueError(
-            f"Cannot broadcast {a} and {b}: no subset relationship. "
+            f"Cannot broadcast {a.shape} and {b.shape}: no subset relationship. "
             "If you want to broadcast anyway, use the broadcast_axis function to explicitly add axes"
         )
     return broadcasted
@@ -1455,18 +1455,28 @@ def broadcast_to(
     if a.axes == axes:
         return a
 
-    to_add = tuple(ax for ax in axes if ax not in a.axes)
+    a_shape = a.shape
+    to_add = []
+    for ax in axes:
+        size_in_a = a_shape.get(ax.name, None)
+        if size_in_a is None:
+            # this axis is not in a, so we need to add it
+            to_add.append(ax)
+        elif size_in_a != ax.size:
+            raise ValueError(
+                f"Cannot broadcast {a_shape} to {axes}: axis '{ax.name}' has size {size_in_a}, expected {ax.size}"
+            )
 
-    all_axes = to_add + a.axes
+    all_axes = to_add + list(a.axes)
 
     if enforce_no_extra_axes and len(all_axes) != len(axes):
-        raise ValueError(f"Cannot broadcast {a} to {axes}: extra axes present")
+        raise ValueError(f"Cannot broadcast {a.shape} to {axes}: extra axes present")
 
     extra_axes = tuple(ax for ax in a.axes if ax not in axes)
 
     # broadcast whatever we need to the front and reorder
     a_array = jnp.broadcast_to(a.array, [ax.size for ax in all_axes])
-    a = NamedArray(a_array, all_axes)
+    a = NamedArray(a_array, tuple(all_axes))
 
     # if the new axes are already in the right order, then we're done
     if ensure_order and not _is_subsequence(axes, all_axes):
