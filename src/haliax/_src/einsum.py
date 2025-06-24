@@ -191,7 +191,7 @@ def _positional_einsum_spec(equation, arrays, lhses, rhs, axis_aliases):
 
     # For this function, axis_aliases exists entirely for checking axis sizes against what's in the arrays
     table = AliasTable(axis_aliases)
-    # ok, we're going to lead pretty heavily on einsum here. We just need to figure out the names of the axes
+    # ok, we're going to lean pretty heavily on einsum here. We just need to figure out the names of the axes
     # and do any error checking (that there are no mismatched names)
     # once we do that, we can pass a slightly modified spec to einsum (namely that we shorten the names of the axes)
     # and we're good to go
