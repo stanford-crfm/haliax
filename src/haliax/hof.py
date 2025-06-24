@@ -61,8 +61,10 @@ def vmap(
         for ax in reversed(axes):
             mapped = vmap(mapped, ax, default=default, args=args, kwargs=kwargs)
         return mapped
-    else:
+    elif len(axis) == 1:  # type: ignore
         axis = axes[0]
+    else:
+        return fn
 
     signature = inspect.signature(fn)
 
