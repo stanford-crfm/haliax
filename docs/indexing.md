@@ -287,3 +287,42 @@ operation more effectively.)
 
     It's worth emphasizing that these functions are typically compiled to scatter-add and friends (as appropriate).
     This is the preferred way to do scatter/gather operations in JAX, as well as in Haliax.
+
+## Scatter/Gather
+
+Haliax supports scatter/gather semantics in its indexing operations. When an axis
+is indexed by another NamedArray (or a 1-D JAX array), the values of that axis
+are gathered according to the index array and the axes of the indexer are
+inserted into the result.
+
+```python
+import haliax as hax
+import jax.numpy as jnp
+
+B, S, V = Axis("batch", 4), Axis("seq", 3), Axis("vocab", 7)
+x = hax.arange((B, S, V))
+idx = hax.arange((B, S), dtype=jnp.int32) % V.size
+
+out = x["vocab", idx]
+```
+
+Here `out` has axes `(B, S)` and its values match `jax.numpy.take_along_axis`
+on the underlying ndarray.
+
+For scatter-style updates where each batch writes to a different position, use
+[`updated_slice`][haliax.updated_slice]:
+
+```python
+Batch = hax.Axis("batch", 2)
+Seq = hax.Axis("seq", 5)
+New = hax.Axis("seq", 2)
+
+cache = hax.zeros((Batch, Seq), dtype=int)
+lengths = hax.named([1, 3], axis=Batch)
+kv = hax.named([[1, 2], [3, 4]], axis=(Batch, New))
+
+result = updated_slice(cache, {"seq": lengths}, kv)
+```
+
+This inserts `[1, 2]` starting at position `1` in batch `0` and `[3, 4]` starting
+at position `3` in batch `1`.
