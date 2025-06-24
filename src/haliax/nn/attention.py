@@ -111,7 +111,7 @@ def dot_product_attention(
     KPos = ensure_tuple(key.resolve_axis(KPos))
     # any axis in KPos that's in query is a problem
     for axis in KPos:
-        if axis in query.axes:
+        if query.has_axis(axis):
             raise ValueError(
                 f"Axis {axis} in KPos is also in query. Attended-to axes must be distinct from query axis"
             )
