@@ -18,6 +18,7 @@ from ..core import NamedArray
 from ..jax_utils import named_call
 from ..partitioning import ResourceAxis
 from ..quantization import DotGeneralOp
+from ..util import ensure_tuple
 
 
 class Linear(ModuleWithStateDictSerialization):
@@ -142,7 +143,10 @@ class MoELinear(eqx.Module):
     Experts: AxisSpec = eqx.static_field()
     In: Axis = eqx.static_field()
     Out: Axis = eqx.static_field()
-    dot_general: DotGeneralOp = eqx.field(default_factory=DotGeneralOp.default)
+    # TODO: support quanitization for ragged_dot?
+    # dot_general: DotGeneralOp = eqx.field(default_factory=DotGeneralOp.default)
+
+    use_gmm: bool = eqx.field(static=True)
 
     @staticmethod
     def init(
@@ -154,6 +158,7 @@ class MoELinear(eqx.Module):
         use_bias: bool = True,
         out_first: bool = False,
         init_scale: float = 1.0,
+        use_gmm: bool = False,
     ) -> "MoELinear":
         """
         Args:
@@ -172,7 +177,7 @@ class MoELinear(eqx.Module):
         weight = hax.random.truncated_normal(key, joint_spec, -3, 3) * (init_scale / math.sqrt(input_size))
         bias = hax.zeros(Out) if use_bias else None
 
-        return MoELinear(weight, bias, Experts, In, Out)
+        return MoELinear(weight, bias, Experts, In, Out, use_gmm=use_gmm)
 
     @named_call
     def __call__(self, inputs, group_sizes, *, key: Optional[PRNGKey] = None):
@@ -184,21 +189,42 @@ class MoELinear(eqx.Module):
         """
         del key
 
-        inputs = inputs.rearrange((..., self.In))
-        out_axes = hax.replace_axis(inputs.axes, self.In, self.Out)
+        dim_numbers = jax.lax.RaggedDotDimensionNumbers(
+            dot_dimension_numbers=(
+                # contracting
+                (ensure_tuple(inputs.axis_indices(self.In)), ensure_tuple(self.weight.axis_indices(self.In))),
+                # batch
+                ((), ()),
+            ),
+            # Everything other than contracting dim is ragged
+            lhs_ragged_dimensions=(inputs.axis_indices(hax.axis.without_axes(inputs.axes, self.In))),
+            rhs_group_dimensions=(self.weight.axis_indices(self.Experts),),
+        )
 
-        q = _gmm(
-            inputs,
-            self.weight,
-            group_sizes,
-            out_axes,
-            ar=hax.partitioning.physical_axis_name(self.In) == ResourceAxis.MODEL,
-        )  # gmm((B, D), (E, D, d)) -> (B, d)
-        q = hax.auto_sharded(q)
+        if self.use_gmm:
+            inputs = inputs.rearrange((..., self.In))
+            out_axes = hax.replace_axis(inputs.axes, self.In, self.Out)
+            q = _gmm(
+                inputs,
+                self.weight,
+                group_sizes,
+                out_axes,
+                ar=hax.partitioning.physical_axis_name(self.In) == ResourceAxis.MODEL,
+            )  # gmm((B, D), (E, D, d)) -> (B, d)
+        else:
+            q_raw = jax.lax.ragged_dot_general(
+                lhs=inputs.array,
+                rhs=self.weight.array,
+                group_sizes=group_sizes.rearrange((..., self.Experts)).array,
+                ragged_dot_dimension_numbers=dim_numbers,
+            )
+            out_axes = hax.replace_axis(inputs.axes, self.In, self.Out)
+            q = hax.named(q_raw, out_axes)
 
         if self.bias is not None:
             q = q + self.bias
-            q = hax.auto_sharded(q)
+
+        q = hax.auto_sharded(q)
 
         return q
 
@@ -249,7 +275,7 @@ def gmm_sharded(lhs_: jnp.ndarray, rhs_: jnp.ndarray, group_sizes_: jnp.ndarray,
         group_sizes_,
         preferred_element_type=lhs_.dtype,
         tiling=(min(m, tile_size[0]), min(k, tile_size[1]), min(n, tile_size[2])),
-        # interpret=True,
+        interpret=jax.default_backend() == "cpu",
     )
 
     if ar:
