@@ -147,3 +147,78 @@ def test_linear_has_no_function_leaves_by_default():
 
     hax_linear = hax.nn.Linear.init((H, C, W), E, key=jrandom.PRNGKey(0))
     assert all(not isinstance(v, Callable) for v in jax.tree_util.tree_leaves(hax_linear))  # type: ignore
+
+
+@pytest.mark.parametrize(
+    "input_data, axes",
+    [
+        (jnp.array([-2.0, -1.0, 0.0, 1.0, 2.0]), (hax.Axis("X", 5),)),
+        (jnp.array([[1.0, -1.0], [0.0, 2.0]]), (hax.Axis("Y", 2), hax.Axis("Z", 2))),
+        (jnp.array([jnp.nan, 1.0, -1.0]), (hax.Axis("A", 3),)),
+        (jnp.array([jnp.inf, -jnp.inf, 0.0]), (hax.Axis("B", 3),)),
+    ],
+)
+@pytest.mark.parametrize("dtype", [jnp.float16, jnp.float32, jnp.bfloat16])
+@pytest.mark.parametrize("use_jit", [False, True])
+def test_relu_squared_robust(input_data, axes, dtype, use_jit):
+    input_data = input_data.astype(dtype)
+    x = hax.named(input_data, axes)
+
+    # Manually compute the expected output using the base JAX functions
+    expected_raw = jnp.square(jax.nn.relu(input_data))
+    expected = hax.named(expected_raw, axes)
+
+    f = hax.nn.relu_squared
+    if use_jit:
+        f = hax.named_jit(f)
+
+    # Apply the relu_squared function
+    actual = f(x)
+
+    # Check that the output is a NamedArray with the correct axes and dtype
+    assert isinstance(actual, hax.NamedArray)
+    assert actual.axes == expected.axes
+    assert actual.dtype == expected.dtype
+
+    # Check that the values are correct, handling NaNs correctly
+    assert jnp.allclose(actual.array, expected.array, equal_nan=True)
+
+
+@pytest.mark.parametrize("use_jit", [False, True])
+def test_relu_squared_scalar(use_jit):
+    f = hax.nn.relu_squared
+    if use_jit:
+        f = jax.jit(f)
+
+    x = 5.0
+    expected = 25.0
+    actual = f(x)
+    assert jnp.allclose(actual, expected)
+
+    x_neg = -5.0
+    expected_neg = 0.0
+    actual_neg = f(x_neg)
+    assert jnp.allclose(actual_neg, expected_neg)
+
+
+def test_relu_squared_grad():
+    X = hax.Axis("X", 10)
+    x = hax.random.uniform(jrandom.PRNGKey(0), (X,), minval=-5.0, maxval=5.0)
+
+    # Define the function for which we want to compute the gradient
+    def f(raw_x):
+        x_named = hax.named(raw_x, x.axes)
+        return hax.sum(hax.nn.relu_squared(x_named)).scalar()
+
+    # Get gradient of haliax function
+    grad_fn = jax.grad(f)
+    hax_grad_raw = grad_fn(x.array)
+    hax_grad = hax.named(hax_grad_raw, x.axes)
+
+    # Manually compute the expected gradient: d/dx (relu(x)^2) = 2 * relu(x) * relu'(x) = 2 * relu(x)
+    expected_grad_raw = 2 * jax.nn.relu(x.array)
+    expected_grad = hax.named(expected_grad_raw, x.axes)
+
+    assert isinstance(hax_grad, hax.NamedArray)
+    assert hax_grad.axes == expected_grad.axes
+    assert jnp.allclose(hax_grad.array, expected_grad.array)

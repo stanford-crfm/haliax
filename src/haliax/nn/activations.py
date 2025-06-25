@@ -87,3 +87,13 @@ def glu(x: NamedArray, axis: Axis) -> NamedArray:
 
 def quick_gelu(x):
     return x * sigmoid(1.702 * x)
+
+
+
+def relu_squared(x: A) -> A:
+    """ReLU squared activation function. jnp.square(jnp.maximum(0, x))"""
+
+    def _fn(a):
+        return jnp.square(jnn.relu(a))
+
+    return typing.cast(A, wrap_elemwise_unary(_fn, x))
