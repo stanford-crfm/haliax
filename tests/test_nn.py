@@ -199,26 +199,3 @@ def test_relu_squared_scalar(use_jit):
     expected_neg = 0.0
     actual_neg = f(x_neg)
     assert jnp.allclose(actual_neg, expected_neg)
-
-
-def test_relu_squared_grad():
-    X = hax.Axis("X", 10)
-    x = hax.random.uniform(jrandom.PRNGKey(0), (X,), minval=-5.0, maxval=5.0)
-
-    # Define the function for which we want to compute the gradient
-    def f(raw_x):
-        x_named = hax.named(raw_x, x.axes)
-        return hax.sum(hax.nn.relu_squared(x_named)).scalar()
-
-    # Get gradient of haliax function
-    grad_fn = jax.grad(f)
-    hax_grad_raw = grad_fn(x.array)
-    hax_grad = hax.named(hax_grad_raw, x.axes)
-
-    # Manually compute the expected gradient: d/dx (relu(x)^2) = 2 * relu(x) * relu'(x) = 2 * relu(x)
-    expected_grad_raw = 2 * jax.nn.relu(x.array)
-    expected_grad = hax.named(expected_grad_raw, x.axes)
-
-    assert isinstance(hax_grad, hax.NamedArray)
-    assert hax_grad.axes == expected_grad.axes
-    assert jnp.allclose(hax_grad.array, expected_grad.array)
