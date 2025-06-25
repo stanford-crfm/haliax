@@ -1,6 +1,7 @@
 import contextlib
 import functools as ft
 import typing
+import warnings
 from dataclasses import dataclass
 from math import prod
 from types import EllipsisType
@@ -142,7 +143,7 @@ class NamedArray:
 
     def has_axis(self, axis: AxisSelection) -> bool:
         """Returns true if the given axis is present in this NamedArray."""
-        return self._lookup_indices(axis) is not None
+        return self.axis_indices(axis) is not None
 
     @overload
     def axis_size(self, axis: AxisSelector) -> int:  # type: ignore
@@ -156,7 +157,7 @@ class NamedArray:
         """
         Returns the size of the given axis, or a tuple of sizes if given multiple axes.
         """
-        indices = self._lookup_indices(axis)
+        indices = self.axis_indices(axis)
         if isinstance(indices, int):
             return self.axes[indices].size
         elif indices is None:
@@ -184,7 +185,7 @@ class NamedArray:
 
         Raises a ValueError if any of the axes are not found.
         """
-        indices = self._lookup_indices(axes)
+        indices = self.axis_indices(axes)
         if isinstance(indices, int):
             return self.axes[indices]
         elif indices is None:
@@ -237,6 +238,27 @@ class NamedArray:
 
         If the axis is not present, returns None for that position
         """
+        warnings.warn(
+            "_lookup_indices() is deprecated, use axis_indices() instead",
+            DeprecationWarning,
+        )
+        return self.axis_indices(axis)
+
+    @overload
+    def axis_indices(self, axis: AxisSelector) -> Optional[int]:  # type: ignore
+        ...
+
+    @overload
+    def axis_indices(self, axis: Sequence[AxisSelector]) -> Tuple[Optional[int], ...]:
+        ...
+
+    def axis_indices(self, axis: AxisSelection) -> Union[Optional[int], Tuple[Optional[int], ...]]:
+        """
+        For a single axis, returns an int corresponding to the index of the axis.
+        For multiple axes, returns a tuple of ints corresponding to the indices of the axes.
+
+        If the axis is not present, returns None for that position
+        """
         if isinstance(axis, Axis):
             ax_name = axis.name
             try:
@@ -262,7 +284,7 @@ class NamedArray:
             except ValueError:
                 return None
         else:
-            return tuple(self._lookup_indices(a) for a in axis)
+            return tuple(self.axis_indices(a) for a in axis)
 
     # Axis rearrangement
     @typing.overload
@@ -675,7 +697,7 @@ def take(array: NamedArray, axis: AxisSelector, index: Union[int, NamedArray]) -
 
     if index is a NamedArray, then those axes are added to the output array
     """
-    axis_index = array._lookup_indices(axis)
+    axis_index = array.axis_indices(axis)
     if axis_index is None:
         raise ValueError(f"axis {axis} not found in {array}")
 
@@ -696,14 +718,14 @@ def take(array: NamedArray, axis: AxisSelector, index: Union[int, NamedArray]) -
 
         if intersecting_axes:
             # if the eliminated axis is also in the index, we rename it to a dummy axis that we can broadcast over it
-            need_to_use_dummy_axis = index._lookup_indices(axis.name) is not None
+            need_to_use_dummy_axis = index.axis_indices(axis.name) is not None
             if need_to_use_dummy_axis:
                 index = index.rename({axis.name: "__DUMMY_" + axis.name})
             array = haliax.broadcast_to(array, index.axes, ensure_order=False, enforce_no_extra_axes=False)
             new_axes = eliminate_axes(array.axes, axis)
             index = haliax.broadcast_to(index, new_axes, ensure_order=True, enforce_no_extra_axes=True)
 
-            axis_index = array._lookup_indices(axis)  # if it moved
+            axis_index = array.axis_indices(axis)  # if it moved
             index_array = jnp.expand_dims(index.array, axis=axis_index)
             new_array = jnp.take_along_axis(array.array, index_array, axis=axis_index)
             new_array = jnp.squeeze(new_array, axis=axis_index)
@@ -792,7 +814,7 @@ def _slice_old(
     Note:
         This method is basically a wrapper around jax.lax.dynamic_slice_in_dim.
     """
-    axis_index = array._lookup_indices(axis)
+    axis_index = array.axis_indices(axis)
     if axis_index is None:
         raise ValueError(f"axis {axis} not found in {array}")
 
@@ -824,7 +846,7 @@ def _slice_new(
     new_lengths = [axis.size for axis in array.axes]
 
     for axis, s in start.items():
-        axis_index = array._lookup_indices(axis_name(axis))
+        axis_index = array.axis_indices(axis_name(axis))
         if axis_index is None:
             raise ValueError(f"axis {axis} not found in {array}")
 
@@ -883,14 +905,14 @@ def updated_slice(
         f = updated_slice
         for axis_name in map_axes:
             # make sure that axis_name is in `array`. otherwise it doesn't make sense to vmap over it
-            if array._lookup_indices(axis_name) is None:
+            if array.axis_indices(axis_name) is None:
                 raise ValueError(f"axis {axis_name} not found in original array's axes: {array.shape}")
             f = haliax.vmap(f, axis=axis_name)
         return f(array, start, update)
 
     array_slice_indices = [0] * len(array.axes)
     for axis, s in start.items():
-        axis_index = array._lookup_indices(haliax.axis_name(axis))
+        axis_index = array.axis_indices(haliax.axis_name(axis))
         if axis_index is None:
             raise ValueError(f"axis {axis} not found in {array}")
         if isinstance(s, NamedArray):  # this can happen in the vmap case
@@ -900,7 +922,7 @@ def updated_slice(
 
         array_slice_indices[axis_index] = s
         total_length = array.axes[axis_index].size
-        update_axis = update._lookup_indices(haliax.axis_name(axis))
+        update_axis = update.axis_indices(haliax.axis_name(axis))
 
         # if s is a tracer we can't check the size
         if update_axis is None:
@@ -923,7 +945,7 @@ def updated_slice(
             )
         broadcasted_axes = []
         for ax in array.axes:
-            upd_ax = update._lookup_indices(ax.name)
+            upd_ax = update.axis_indices(ax.name)
             broadcasted_axes.append(ax if upd_ax is None else update.axes[upd_ax])
         update = haliax.broadcast_to(update, broadcasted_axes, enforce_no_extra_axes=True)
         upd_arr = update.array
@@ -967,7 +989,7 @@ def _compute_new_axes_and_slices_for_index(
     index_axis_names = set()
 
     for axis, slice_ in slices.items():
-        axis_index = array._lookup_indices(axis)
+        axis_index = array.axis_indices(axis)
         if axis_index is None:
             raise ValueError(f"axis {axis} not found in {array}")
         if isinstance(slice_, py_slice) or isinstance(slice_, dslice) or is_pallas_dslice(slice_):
@@ -1111,7 +1133,7 @@ def split(a: NamedArray, axis: AxisSelector, new_axes: Sequence[Axis]) -> Sequen
         new_axes (Sequence[Axis]): the axes to split into. Must have the same total length as the axis being split.
     """
     # check the lengths of the new axes
-    index = a._lookup_indices(axis)
+    index = a.axis_indices(axis)
     if index is None:
         raise ValueError(f"Axis {axis} not found in {a.axes}")
 
@@ -1136,7 +1158,7 @@ def unbind(array: NamedArray, axis: AxisSelector) -> List[NamedArray]:
     Unbind an array along an axis, returning a list of NamedArrays, one for each position on that axis.
     Analogous to torch.unbind or np.rollaxis
     """
-    axis_index = array._lookup_indices(axis)
+    axis_index = array.axis_indices(axis)
     if axis_index is None:
         raise ValueError(f"axis {axis} not found in {array}")
     new_axes = array.axes[:axis_index] + array.axes[axis_index + 1 :]
@@ -1153,7 +1175,7 @@ def roll(array: NamedArray, shift: Union[int, Tuple[int, ...]], axis: AxisSelect
     """
     Roll an array along an axis or axes. Analogous to np.roll
     """
-    axis_indices = array._lookup_indices(axis)
+    axis_indices = array.axis_indices(axis)
     if axis_indices is None:
         raise ValueError(f"axis {axis} not found in {array}")
     return NamedArray(jnp.roll(array.array, shift, axis_indices), array.axes)
@@ -1331,7 +1353,7 @@ def unflatten_axis(array: NamedArray, axis: AxisSelector, new_axes: AxisSpec) ->
     """
     Split an axis into a sequence of axes. The old axis must have the same size as the product of the new axes.
     """
-    old_index = array._lookup_indices(axis)
+    old_index = array.axis_indices(axis)
     if old_index is None:
         raise ValueError(f"Axis {axis} not found in {array}")
 

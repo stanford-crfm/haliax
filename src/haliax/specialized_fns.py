@@ -22,7 +22,7 @@ def top_k(
         NamedArray: array with the top k elements along the given axis
         NamedArray: array with the top k elements' indices along the given axis
     """
-    pos = arr._lookup_indices(axis)
+    pos = arr.axis_indices(axis)
     if pos is None:
         raise ValueError(f"Axis {axis} not found in {arr}")
     new_array = jnp.moveaxis(arr.array, pos, -1)  # move axis to the last position

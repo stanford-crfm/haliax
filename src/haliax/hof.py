@@ -85,7 +85,7 @@ def vmap(
 
     def _index_of_batch_axis(array, default):
         if isinstance(array, NamedArray):
-            return array._lookup_indices(axis)
+            return array.axis_indices(axis)
         elif callable(default):
             return default(array)
         else:

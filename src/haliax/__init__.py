@@ -212,7 +212,7 @@ def repeat(
     a: NamedArray, repeats: int | jnp.ndarray, axis: AxisSelector, total_repeat_length: Optional[int] = None
 ) -> NamedArray:
     """Version of [jax.numpy.repeat][] that returns a NamedArray"""
-    index = a._lookup_indices(axis)
+    index = a.axis_indices(axis)
     if index is None:
         raise ValueError(f"Axis {axis} not found in array {a}")
 
@@ -235,7 +235,7 @@ def tile(a: NamedArray, reps: dict[AxisSelector, int]) -> NamedArray:
     new_dims = []
     dim_reps = [1] * len(a.axes)
     for ax, i in reps.items():
-        index = a._lookup_indices(ax)
+        index = a.axis_indices(ax)
         if index is None:
             new_dims.append(Axis(axis_name(ax), i))
         else:
@@ -265,7 +265,7 @@ def concatenate(axis: AxisSelector, arrays: Sequence[NamedArray]) -> NamedArray:
     if len(arrays) == 0:
         return zeros(axis)
 
-    axis_index = arrays[0]._lookup_indices(aname)
+    axis_index = arrays[0].axis_indices(aname)
     if axis_index is None:
         raise ValueError(f"Axis {aname} not found in 0th array {arrays[0]}")
 
