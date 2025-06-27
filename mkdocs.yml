@@ -90,6 +90,7 @@ nav:
     - Indexing and Slicing: 'indexing.md'
     - Rearrange: 'rearrange.md'
     - Matrix Multiplication: 'matmul.md'
+    - Type Annotations: 'typing.md'
   - Higher Order Functions:
     - Scan and Fold: 'scan.md'
     - Vectorization: 'vmap.md'

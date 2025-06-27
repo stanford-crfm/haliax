@@ -58,9 +58,112 @@ def are_shape_checks_enabled():
     return _ENABLE_SHAPE_CHECKS
 
 
+@dataclass(frozen=True)
+class NamedArrayAxes:
+    """Representation of a :class:`NamedArray`'s axes for type annotations."""
+
+    before: Tuple[str, ...]
+    """Names that must appear before any optional ellipsis."""
+
+    after: Tuple[str, ...] = ()
+    """Names that must appear after any optional ellipsis."""
+
+    ordered: bool = True
+    """Whether the axes must appear in this order."""
+
+    subset: bool = False
+    """If ``True``, other axes may appear where the ellipsis is located."""
+
+    def __repr__(self) -> str:
+        if self.ordered:
+            parts = list(self.before)
+            if self.subset:
+                parts.append("...")
+            parts.extend(self.after)
+            spec = " ".join(parts)
+            return f"NamedArray[{spec}]"
+        else:
+            part = ", ".join(self.before)
+            if self.subset:
+                if part:
+                    part += ", ..."
+                else:
+                    part = "..."
+            return f"NamedArray[{{{part}}}]"
+
+
+# a specification for NamedArray axes used in type annotations
+NamedArrayAxesSpec = Union[
+    NamedArrayAxes,
+    str,
+    Sequence[str | EllipsisType],
+    set[str | EllipsisType],
+]
+
+
+def _parse_namedarray_axes(item: NamedArrayAxesSpec | typing.Annotated["NamedArray", NamedArrayAxes]) -> NamedArrayAxes:
+    origin = typing.get_origin(item)
+    if origin is typing.Annotated:
+        args = typing.get_args(item)
+        if len(args) >= 2:
+            item = args[1]
+    if isinstance(item, NamedArrayAxes):
+        return item
+    if isinstance(item, str):
+        parts = item.split()
+        if parts.count("...") > 1:
+            raise TypeError("Only one ellipsis allowed in NamedArray typing spec")
+        if "..." in parts:
+            idx = parts.index("...")
+            before = tuple(parts[:idx])
+            after = tuple(parts[idx + 1 :])
+            return NamedArrayAxes(before, after, ordered=True, subset=True)
+        else:
+            return NamedArrayAxes(tuple(parts), (), ordered=True, subset=False)
+    if isinstance(item, set) or isinstance(item, frozenset):
+        subset = False
+        names: List[str] = []
+        for part in item:
+            if part is Ellipsis:
+                if subset:
+                    raise TypeError("Only one ellipsis allowed in NamedArray typing spec")
+                subset = True
+            else:
+                if not isinstance(part, str):
+                    raise TypeError(f"Invalid axis spec: {part}")
+                names.append(part)
+        return NamedArrayAxes(tuple(names), (), ordered=False, subset=subset)
+    if isinstance(item, (tuple, list)):
+        subset = False
+        before: List[str] = []
+        after: List[str] = []
+        cur = before
+        for part in item:
+            if part is Ellipsis:
+                if subset:
+                    raise TypeError("Only one ellipsis allowed in NamedArray typing spec")
+                subset = True
+                cur = after
+            else:
+                if not isinstance(part, str):
+                    raise TypeError(f"Invalid axis spec: {part}")
+                cur.append(part)
+        if subset:
+            return NamedArrayAxes(tuple(before), tuple(after), ordered=True, subset=True)
+        else:
+            return NamedArrayAxes(tuple(before), (), ordered=True, subset=False)
+    raise TypeError(f"Invalid NamedArray typing spec: {item}")
+
+
+class NamedArrayMeta(type):
+    def __getitem__(cls, item: NamedArrayAxesSpec) -> typing.Annotated["NamedArray", NamedArrayAxes]:
+        axes = _parse_namedarray_axes(item)
+        return typing.Annotated[NamedArray, axes]
+
+
 @jax.tree_util.register_pytree_node_class
 @dataclass(frozen=True)
-class NamedArray:
+class NamedArray(metaclass=NamedArrayMeta):
     array: jnp.ndarray
     axes: Tuple[Axis, ...]
 
@@ -144,6 +247,37 @@ class NamedArray:
     def has_axis(self, axis: AxisSelection) -> bool:
         """Returns true if the given axis is present in this NamedArray."""
         return self.axis_indices(axis) is not None
+
+    def matches_axes(self, spec: NamedArrayAxesSpec) -> bool:
+        """Check whether this NamedArray conforms to the given `NamedArray` type.
+
+        Parameters
+        ----------
+        spec : NamedArrayAxesSpec
+            The specification to check against. It can be produced via the
+            ``NamedArray[...]`` syntax or passed directly as a string or
+            sequence of axis names.
+        """
+
+        ann = _parse_namedarray_axes(spec)
+        names = tuple(ax.name for ax in self.axes)
+        if ann.ordered:
+            if not ann.subset:
+                return names == ann.before
+            if len(names) < len(ann.before) + len(ann.after):
+                return False
+            if names[: len(ann.before)] != ann.before:
+                return False
+            if ann.after and names[-len(ann.after) :] != ann.after:
+                return False
+            return True
+        else:
+            name_set = set(names)
+            spec_set = set(ann.before)
+            if ann.subset:
+                return spec_set.issubset(name_set)
+            else:
+                return name_set == spec_set
 
     @overload
     def axis_size(self, axis: AxisSelector) -> int:  # type: ignore
@@ -1885,6 +2019,8 @@ def _convert_index_expr_to_dict(idx) -> dict[AxisSelector, NamedIndex]:
 
 
 __all__ = [
+    "NamedArrayAxesSpec",
+    "NamedArrayAxes",
     "NamedArray",
     "named",
     "slice",
