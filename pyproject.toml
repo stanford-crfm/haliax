@@ -22,8 +22,8 @@ classifiers = [
 ]
 dependencies = [
     # we require that you install jax yourself, since the extras vary by system.
-    "jax>=0.6.2",
-    "jaxlib>=0.6.2",
+    "jax>=0.4.25",
+    "jaxlib>=0.4.25",
     "equinox>=0.10.6",
     "jaxtyping>=0.2.20",
     "jmp>=0.0.4",
