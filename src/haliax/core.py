@@ -101,7 +101,9 @@ NamedArrayAxesSpec = Union[
 ]
 
 
-def _parse_namedarray_axes(item: NamedArrayAxesSpec | typing.Annotated["NamedArray", NamedArrayAxes]) -> NamedArrayAxes:
+def _parse_namedarray_axes(
+    item: NamedArrayAxesSpec | typing.Annotated["NamedArray", NamedArrayAxes]
+) -> NamedArrayAxes:
     origin = typing.get_origin(item)
     if origin is typing.Annotated:
         args = typing.get_args(item)
@@ -115,14 +117,14 @@ def _parse_namedarray_axes(item: NamedArrayAxesSpec | typing.Annotated["NamedArr
             raise TypeError("Only one ellipsis allowed in NamedArray typing spec")
         if "..." in parts:
             idx = parts.index("...")
-            before = tuple(parts[:idx])
-            after = tuple(parts[idx + 1 :])
-            return NamedArrayAxes(before, after, ordered=True, subset=True)
+            before_parts = tuple(parts[:idx])
+            after_parts = tuple(parts[idx + 1 :])
+            return NamedArrayAxes(before_parts, after_parts, ordered=True, subset=True)
         else:
             return NamedArrayAxes(tuple(parts), (), ordered=True, subset=False)
     if isinstance(item, set) or isinstance(item, frozenset):
         subset = False
-        names: List[str] = []
+        names_list: List[str] = []
         for part in item:
             if part is Ellipsis:
                 if subset:
@@ -131,32 +133,45 @@ def _parse_namedarray_axes(item: NamedArrayAxesSpec | typing.Annotated["NamedArr
             else:
                 if not isinstance(part, str):
                     raise TypeError(f"Invalid axis spec: {part}")
-                names.append(part)
-        return NamedArrayAxes(tuple(names), (), ordered=False, subset=subset)
+                names_list.append(part)
+        return NamedArrayAxes(tuple(names_list), (), ordered=False, subset=subset)
     if isinstance(item, (tuple, list)):
         subset = False
-        before: List[str] = []
-        after: List[str] = []
-        cur = before
+        before_list: List[str] = []
+        after_list: List[str] = []
+        cur_list = before_list
         for part in item:
             if part is Ellipsis:
                 if subset:
                     raise TypeError("Only one ellipsis allowed in NamedArray typing spec")
                 subset = True
-                cur = after
+                cur_list = after_list
             else:
                 if not isinstance(part, str):
                     raise TypeError(f"Invalid axis spec: {part}")
-                cur.append(part)
+                cur_list.append(part)
         if subset:
-            return NamedArrayAxes(tuple(before), tuple(after), ordered=True, subset=True)
+            return NamedArrayAxes(tuple(before_list), tuple(after_list), ordered=True, subset=True)
         else:
-            return NamedArrayAxes(tuple(before), (), ordered=True, subset=False)
+            return NamedArrayAxes(tuple(before_list), (), ordered=True, subset=False)
     raise TypeError(f"Invalid NamedArray typing spec: {item}")
 
 
+class Named:
+    """Type annotation helper for :class:`NamedArray`.
+
+    ``Named["batch embed"]`` expands to ``Annotated[NamedArray, axes]`` so that
+    type checkers treat it as a ``NamedArray`` at static time while the axis
+    metadata is available at runtime via :func:`typing.get_args`.
+    """
+
+    def __class_getitem__(cls, item: NamedArrayAxesSpec) -> typing.Any:
+        axes = _parse_namedarray_axes(item)
+        return typing.Annotated[NamedArray, axes]
+
+
 class NamedArrayMeta(type):
-    def __getitem__(cls, item: NamedArrayAxesSpec) -> typing.Annotated["NamedArray", NamedArrayAxes]:
+    def __getitem__(cls, item: NamedArrayAxesSpec) -> typing.Any:
         axes = _parse_namedarray_axes(item)
         return typing.Annotated[NamedArray, axes]
 
@@ -2021,6 +2036,7 @@ def _convert_index_expr_to_dict(idx) -> dict[AxisSelector, NamedIndex]:
 __all__ = [
     "NamedArrayAxesSpec",
     "NamedArrayAxes",
+    "Named",
     "NamedArray",
     "named",
     "slice",
