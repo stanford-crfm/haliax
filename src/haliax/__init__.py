@@ -40,10 +40,10 @@ from .axis import (
     selects_axis,
 )
 from .core import (
-    NamedArrayAxesSpec,
-    NamedArrayAxes,
     Named,
     NamedArray,
+    NamedArrayAxes,
+    NamedArrayAxesSpec,
     NamedOrNumeric,
     are_shape_checks_enabled,
     broadcast_arrays,
