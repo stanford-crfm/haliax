@@ -89,7 +89,6 @@ def quick_gelu(x):
     return x * sigmoid(1.702 * x)
 
 
-
 def relu_squared(x: A) -> A:
     """ReLU squared activation function. jnp.square(jnp.maximum(0, x))"""
 
