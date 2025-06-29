@@ -56,6 +56,6 @@ At runtime ``matches_axes`` also checks the dtype when one is present:
 from haliax import Axis, zeros
 import haliax.typing as ht
 
-arr = zeros(Axis("batch", 4))
+arr = zeros({"batch": 4})
 assert arr.matches_axes(ht.f32["batch"])  # dtype and axes both match
 ```
