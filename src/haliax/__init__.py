@@ -40,7 +40,10 @@ from .axis import (
     selects_axis,
 )
 from .core import (
+    Named,
     NamedArray,
+    NamedArrayAxes,
+    NamedArrayAxesSpec,
     NamedOrNumeric,
     are_shape_checks_enabled,
     broadcast_arrays,
@@ -926,6 +929,9 @@ __all__ = [
     "make_axes",
     "axis_name",
     "axis_size",
+    "NamedArrayAxesSpec",
+    "NamedArrayAxes",
+    "Named",
     "NamedArray",
     "broadcast_to",
     "broadcast_axis",
