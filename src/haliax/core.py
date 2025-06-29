@@ -77,6 +77,9 @@ class NamedArrayAxes:
     dtype: typing.Any | None = None
     """Optional dtype that the array should have."""
 
+    generics: Tuple[str, ...] = ()
+    """Names that represent generic axes. A name is considered generic if it begins with a capital letter."""
+
     def __repr__(self) -> str:
         dtype_prefix = ""
         if self.dtype is not None:
@@ -131,9 +134,11 @@ def _parse_namedarray_axes(
             idx = parts.index("...")
             before_parts = tuple(parts[:idx])
             after_parts = tuple(parts[idx + 1 :])
-            return NamedArrayAxes(before_parts, after_parts, ordered=True, subset=True)
+            generics = tuple([p for p in before_parts + after_parts if p and p[0].isupper()])
+            return NamedArrayAxes(before_parts, after_parts, ordered=True, subset=True, generics=generics)
         else:
-            return NamedArrayAxes(tuple(parts), (), ordered=True, subset=False)
+            generics = tuple([p for p in parts if p and p[0].isupper()])
+            return NamedArrayAxes(tuple(parts), (), ordered=True, subset=False, generics=generics)
     if isinstance(item, set) or isinstance(item, frozenset):
         subset = False
         names_list: List[str] = []
@@ -146,7 +151,8 @@ def _parse_namedarray_axes(
                 if not isinstance(part, str):
                     raise TypeError(f"Invalid axis spec: {part}")
                 names_list.append(part)
-        return NamedArrayAxes(tuple(names_list), (), ordered=False, subset=subset)
+        generics = tuple([p for p in names_list if p and p[0].isupper()])
+        return NamedArrayAxes(tuple(names_list), (), ordered=False, subset=subset, generics=generics)
     if isinstance(item, (tuple, list)):
         subset = False
         before_list: List[str] = []
@@ -163,9 +169,11 @@ def _parse_namedarray_axes(
                     raise TypeError(f"Invalid axis spec: {part}")
                 cur_list.append(part)
         if subset:
-            return NamedArrayAxes(tuple(before_list), tuple(after_list), ordered=True, subset=True)
+            generics = tuple([p for p in before_list + after_list if p and p[0].isupper()])
+            return NamedArrayAxes(tuple(before_list), tuple(after_list), ordered=True, subset=True, generics=generics)
         else:
-            return NamedArrayAxes(tuple(before_list), (), ordered=True, subset=False)
+            generics = tuple([p for p in before_list if p and p[0].isupper()])
+            return NamedArrayAxes(tuple(before_list), (), ordered=True, subset=False, generics=generics)
     raise TypeError(f"Invalid NamedArray typing spec: {item}")
 
 
@@ -296,23 +304,41 @@ class NamedArray(metaclass=NamedArrayMeta):
                 return False
 
         names = tuple(ax.name for ax in self.axes)
+        generics = set(ann.generics)
         if ann.ordered:
             if not ann.subset:
-                return names == ann.before
+                if len(names) != len(ann.before):
+                    return False
+                for ax_name, my_name in zip(ann.before, names):
+                    if ax_name in generics:
+                        continue
+                    if ax_name != my_name:
+                        return False
+                return True
             if len(names) < len(ann.before) + len(ann.after):
                 return False
-            if names[: len(ann.before)] != ann.before:
-                return False
-            if ann.after and names[-len(ann.after) :] != ann.after:
-                return False
+            if ann.before:
+                for ax_name, my_name in zip(ann.before, names[: len(ann.before)]):
+                    if ax_name in generics:
+                        continue
+                    if ax_name != my_name:
+                        return False
+            if ann.after:
+                for ax_name, my_name in zip(ann.after, names[-len(ann.after) :]):
+                    if ax_name in generics:
+                        continue
+                    if ax_name != my_name:
+                        return False
             return True
         else:
             name_set = set(names)
-            spec_set = set(ann.before)
+            spec_set = {n for n in ann.before if n not in generics}
             if ann.subset:
                 return spec_set.issubset(name_set)
             else:
-                return name_set == spec_set
+                if len(name_set) != len(ann.before):
+                    return False
+                return spec_set.issubset(name_set)
 
     @overload
     def axis_size(self, axis: AxisSelector) -> int:  # type: ignore

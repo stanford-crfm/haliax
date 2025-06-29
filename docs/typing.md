@@ -59,3 +59,26 @@ import haliax.typing as ht
 arr = zeros({"batch": 4})
 assert arr.matches_axes(ht.f32["batch"])  # dtype and axes both match
 ```
+
+## Generic axes
+
+Axis descriptors may also contain *generic* axes.  A generic axis uses a
+capitalized name such as ``B`` or ``Batch`` and acts as a placeholder that can
+be resolved at runtime.  The function :func:`haliax.typing.check_axes` inspects the
+type annotations of the calling function and resolves these placeholders to
+concrete :class:`haliax.Axis` objects.
+
+```python
+import haliax as hax
+import haliax.typing as ht
+import jax.numpy as jnp
+
+def foo(a: ht.f32[{"B", "embed"}], x: ht.i32[{"pos", "B"}]):
+    axes = ht.check_axes(a, x)
+    assert axes["B"] == hax.Axis("batch", 12)
+
+foo(
+    a=hax.zeros({"batch": 12, "embed": 4}),
+    x=hax.zeros({"pos": 4, "batch": 12}, dtype=jnp.int32),
+)
+```
