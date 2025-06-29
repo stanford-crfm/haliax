@@ -64,8 +64,10 @@ def vmap(
                 ax = Axis(ax, size)  # type: ignore
             mapped = vmap(mapped, ax, default=default, args=args, kwargs=kwargs)
         return mapped
-    else:
+    elif len(axes) == 1:  # type: ignore
         axis = axis_spec_to_tuple(axis)[0]
+    else:
+        return fn
 
     signature = inspect.signature(fn)
 
@@ -86,7 +88,7 @@ def vmap(
 
     def _index_of_batch_axis(array, default):
         if isinstance(array, NamedArray):
-            return array._lookup_indices(axis)
+            return array.axis_indices(axis)
         elif callable(default):
             return default(array)
         else:

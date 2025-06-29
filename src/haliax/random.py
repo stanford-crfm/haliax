@@ -151,7 +151,7 @@ def choice(
     :return: Array with shape `shape` + (`a.axes` - `axis`)
     """
 
-    index = a._lookup_indices(axis)
+    index = a.axis_indices(axis)
     assert index is not None, f"axis {axis} not in a"
 
     shape = axis_spec_to_shape_dict(shape)
@@ -194,7 +194,7 @@ def categorical(key, logits: NamedArray, axis: AxisSelector, shape: Optional[Axi
 
     logits = logits.broadcast_axis(shape)
 
-    index = logits._lookup_indices(axis)
+    index = logits.axis_indices(axis)
     assert index is not None, f"axis {axis} not in logits"
 
     jax_shape = to_jax_shape(shape)
@@ -213,7 +213,7 @@ def gumbel(key, shape: AxisSpec, dtype=float):
 
 @named_call
 def permutation(key, x: NamedArray, axis: AxisSelector, independent: bool = False):
-    axis_index = x._lookup_indices(axis)
+    axis_index = x.axis_indices(axis)
     jax_array = jrandom.permutation(key, x.array, axis_index, independent=independent)
     return haliax.auto_sharded(NamedArray(jax_array, x.axes))
 

@@ -1,6 +1,7 @@
 import contextlib
 import functools as ft
 import typing
+import warnings
 from dataclasses import dataclass
 from math import prod
 from types import EllipsisType
@@ -69,9 +70,139 @@ def are_shape_checks_enabled():
     return _ENABLE_SHAPE_CHECKS
 
 
+@dataclass(frozen=True)
+class NamedArrayAxes:
+    """Representation of a :class:`NamedArray`'s axes for type annotations."""
+
+    before: Tuple[str, ...]
+    """Names that must appear before any optional ellipsis."""
+
+    after: Tuple[str, ...] = ()
+    """Names that must appear after any optional ellipsis."""
+
+    ordered: bool = True
+    """Whether the axes must appear in this order."""
+
+    subset: bool = False
+    """If ``True``, other axes may appear where the ellipsis is located."""
+
+    dtype: typing.Any | None = None
+    """Optional dtype that the array should have."""
+
+    def __repr__(self) -> str:
+        dtype_prefix = ""
+        if self.dtype is not None:
+            dtype_obj = self.dtype
+            if hasattr(dtype_obj, "category"):
+                dtype_name = dtype_obj.name
+            else:
+                dtype_name = getattr(dtype_obj, "name", str(dtype_obj))
+            dtype_prefix = f"{dtype_name} "
+
+        if self.ordered:
+            parts = list(self.before)
+            if self.subset:
+                parts.append("...")
+            parts.extend(self.after)
+            spec = " ".join(parts)
+            return f"NamedArray[{dtype_prefix}{spec}]"
+        else:
+            part = ", ".join(self.before)
+            if self.subset:
+                if part:
+                    part += ", ..."
+                else:
+                    part = "..."
+            return f"NamedArray[{dtype_prefix}{{{part}}}]"
+
+
+# a specification for NamedArray axes used in type annotations
+NamedArrayAxesSpec = Union[
+    NamedArrayAxes,
+    str,
+    Sequence[str | EllipsisType],
+    set[str | EllipsisType],
+]
+
+
+def _parse_namedarray_axes(
+    item: NamedArrayAxesSpec | typing.Annotated["NamedArray", NamedArrayAxes]
+) -> NamedArrayAxes:
+    origin = typing.get_origin(item)
+    if origin is typing.Annotated:
+        args = typing.get_args(item)
+        if len(args) >= 2:
+            item = args[1]
+    if isinstance(item, NamedArrayAxes):
+        return item
+    if isinstance(item, str):
+        parts = item.split()
+        if parts.count("...") > 1:
+            raise TypeError("Only one ellipsis allowed in NamedArray typing spec")
+        if "..." in parts:
+            idx = parts.index("...")
+            before_parts = tuple(parts[:idx])
+            after_parts = tuple(parts[idx + 1 :])
+            return NamedArrayAxes(before_parts, after_parts, ordered=True, subset=True)
+        else:
+            return NamedArrayAxes(tuple(parts), (), ordered=True, subset=False)
+    if isinstance(item, set) or isinstance(item, frozenset):
+        subset = False
+        names_list: List[str] = []
+        for part in item:
+            if part is Ellipsis:
+                if subset:
+                    raise TypeError("Only one ellipsis allowed in NamedArray typing spec")
+                subset = True
+            else:
+                if not isinstance(part, str):
+                    raise TypeError(f"Invalid axis spec: {part}")
+                names_list.append(part)
+        return NamedArrayAxes(tuple(names_list), (), ordered=False, subset=subset)
+    if isinstance(item, (tuple, list)):
+        subset = False
+        before_list: List[str] = []
+        after_list: List[str] = []
+        cur_list = before_list
+        for part in item:
+            if part is Ellipsis:
+                if subset:
+                    raise TypeError("Only one ellipsis allowed in NamedArray typing spec")
+                subset = True
+                cur_list = after_list
+            else:
+                if not isinstance(part, str):
+                    raise TypeError(f"Invalid axis spec: {part}")
+                cur_list.append(part)
+        if subset:
+            return NamedArrayAxes(tuple(before_list), tuple(after_list), ordered=True, subset=True)
+        else:
+            return NamedArrayAxes(tuple(before_list), (), ordered=True, subset=False)
+    raise TypeError(f"Invalid NamedArray typing spec: {item}")
+
+
+class Named:
+    """Type annotation helper for :class:`NamedArray`.
+
+    ``Named["batch embed"]`` expands to ``Annotated[NamedArray, axes]`` so that
+    type checkers treat it as a ``NamedArray`` at static time while the axis
+    metadata is available at runtime via :func:`typing.get_args`.
+    """
+
+    def __class_getitem__(cls, item: NamedArrayAxesSpec) -> typing.Any:
+        axes = _parse_namedarray_axes(item)
+        return typing.Annotated[NamedArray, axes]
+
+
+class NamedArrayMeta(type):
+    def __getitem__(cls, item: NamedArrayAxesSpec) -> typing.Any:
+        axes = _parse_namedarray_axes(item)
+        return typing.Annotated[NamedArray, axes]
+
+
 @jax.tree_util.register_pytree_node_class
 @dataclass(frozen=True)
-class NamedArray:
+class NamedArray(metaclass=NamedArrayMeta):
     array: jnp.ndarray
     axes: tuple[Axis, ...]
 
@@ -157,7 +288,46 @@ class NamedArray:
 
     def has_axis(self, axis: AxisSelection) -> bool:
         """Returns true if the given axis is present in this NamedArray."""
-        return self._lookup_indices(axis) is not None
+        return self.axis_indices(axis) is not None
+
+    def matches_axes(self, spec: NamedArrayAxesSpec) -> bool:
+        """Check whether this NamedArray conforms to the given `NamedArray` type.
+
+        Parameters
+        ----------
+        spec : NamedArrayAxesSpec
+            The specification to check against. It can be produced via the
+            ``NamedArray[...]`` syntax or passed directly as a string or
+            sequence of axis names.
+        """
+
+        ann = _parse_namedarray_axes(spec)
+        if ann.dtype is not None:
+            dtype_spec = ann.dtype
+            if hasattr(dtype_spec, "category"):
+                if not jnp.issubdtype(self.dtype, dtype_spec.category):
+                    return False
+            elif self.dtype != dtype_spec:
+                return False
+
+        names = tuple(ax.name for ax in self.axes)
+        if ann.ordered:
+            if not ann.subset:
+                return names == ann.before
+            if len(names) < len(ann.before) + len(ann.after):
+                return False
+            if names[: len(ann.before)] != ann.before:
+                return False
+            if ann.after and names[-len(ann.after) :] != ann.after:
+                return False
+            return True
+        else:
+            name_set = set(names)
+            spec_set = set(ann.before)
+            if ann.subset:
+                return spec_set.issubset(name_set)
+            else:
+                return name_set == spec_set
 
     @overload
     def axis_size(self, axis: AxisSelector) -> int:  # type: ignore
@@ -171,7 +341,7 @@ class NamedArray:
         """
         Returns the size of the given axis, or a tuple of sizes if given multiple axes.
         """
-        indices = self._lookup_indices(axis)
+        indices = self.axis_indices(axis)
         if isinstance(indices, int):
             return self.axes[indices].size
         elif indices is None:
@@ -207,7 +377,7 @@ class NamedArray:
 
         Raises a ValueError if any of the axes are not found.
         """
-        indices = self._lookup_indices(axes)
+        indices = self.axis_indices(axes)
         if isinstance(indices, int):
             return self.axes[indices]
         elif indices is None:
@@ -267,6 +437,31 @@ class NamedArray:
 
         If the axis is not present, returns None for that position
         """
+        warnings.warn(
+            "_lookup_indices() is deprecated, use axis_indices() instead",
+            DeprecationWarning,
+        )
+        return self.axis_indices(axis)
+
+    @overload
+    def axis_indices(self, axis: AxisSelector) -> Optional[int]:  # type: ignore
+        ...
+
+    @overload
+    def axis_indices(self, axis: Sequence[AxisSelector]) -> Tuple[Optional[int], ...]:
+        ...
+
+    @overload
+    def axis_indices(self, axis: AxisSelection) -> Tuple[Optional[int], ...]:
+        ...
+
+    def axis_indices(self, axis: AxisSelection) -> Union[Optional[int], Tuple[Optional[int], ...]]:
+        """
+        For a single axis, returns an int corresponding to the index of the axis.
+        For multiple axes, returns a tuple of ints corresponding to the indices of the axes.
+
+        If the axis is not present, returns None for that position
+        """
         if isinstance(axis, Axis):
             ax_name = axis.name
             try:
@@ -287,7 +482,7 @@ class NamedArray:
             except ValueError:
                 return None
         else:
-            return tuple(self._lookup_indices(a) for a in axis)
+            return tuple(self.axis_indices(a) for a in axis)
 
     # Axis rearrangement
     @typing.overload
@@ -711,7 +906,7 @@ def take(array: NamedArray, axis: AxisSelector, index: Union[int, NamedArray]) -
 
     if index is a NamedArray, then those axes are added to the output array
     """
-    axis_index = array._lookup_indices(axis)
+    axis_index = array.axis_indices(axis)
     if axis_index is None:
         raise ValueError(f"axis {axis} not found in {array}")
 
@@ -732,14 +927,14 @@ def take(array: NamedArray, axis: AxisSelector, index: Union[int, NamedArray]) -
 
         if intersecting_axes:
             # if the eliminated axis is also in the index, we rename it to a dummy axis that we can broadcast over it
-            need_to_use_dummy_axis = index._lookup_indices(axis.name) is not None
+            need_to_use_dummy_axis = index.axis_indices(axis.name) is not None
             if need_to_use_dummy_axis:
                 index = index.rename({axis.name: "__DUMMY_" + axis.name})
             array = haliax.broadcast_to(array, index.axes, ensure_order=False, enforce_no_extra_axes=False)
             new_axes = eliminate_axes(array.axes, axis)
             index = haliax.broadcast_to(index, new_axes, ensure_order=True, enforce_no_extra_axes=True)
 
-            axis_index = array._lookup_indices(axis)  # if it moved
+            axis_index = array.axis_indices(axis)  # if it moved
             index_array = jnp.expand_dims(index.array, axis=axis_index)
             new_array = jnp.take_along_axis(array.array, index_array, axis=axis_index)
             new_array = jnp.squeeze(new_array, axis=axis_index)
@@ -828,7 +1023,7 @@ def _slice_old(
     Note:
         This method is basically a wrapper around jax.lax.dynamic_slice_in_dim.
     """
-    axis_index = array._lookup_indices(axis)
+    axis_index = array.axis_indices(axis)
     if axis_index is None:
         raise ValueError(f"axis {axis} not found in {array}")
 
@@ -860,7 +1055,7 @@ def _slice_new(
     new_lengths = [axis.size for axis in array.axes]
 
     for axis, s in start.items():
-        axis_index = array._lookup_indices(axis_name(axis))
+        axis_index = array.axis_indices(axis_name(axis))
         if axis_index is None:
             raise ValueError(f"axis {axis} not found in {array}")
 
@@ -919,14 +1114,14 @@ def updated_slice(
         f = updated_slice
         for axis_name in map_axes:
             # make sure that axis_name is in `array`. otherwise it doesn't make sense to vmap over it
-            if array._lookup_indices(axis_name) is None:
+            if array.axis_indices(axis_name) is None:
                 raise ValueError(f"axis {axis_name} not found in original array's axes: {array.shape}")
             f = haliax.vmap(f, axis=axis_name)
         return f(array, start, update)
 
     array_slice_indices = [0] * len(array.axes)
     for axis, s in start.items():
-        axis_index = array._lookup_indices(haliax.axis_name(axis))
+        axis_index = array.axis_indices(haliax.axis_name(axis))
         if axis_index is None:
             raise ValueError(f"axis {axis} not found in {array}")
         if isinstance(s, NamedArray):  # this can happen in the vmap case
@@ -936,7 +1131,7 @@ def updated_slice(
 
         array_slice_indices[axis_index] = s
         total_length = array.axes[axis_index].size
-        update_axis = update._lookup_indices(haliax.axis_name(axis))
+        update_axis = update.axis_indices(haliax.axis_name(axis))
 
         # if s is a tracer we can't check the size
         if update_axis is None:
@@ -959,7 +1154,7 @@ def updated_slice(
             )
         broadcasted_axes = []
         for ax in array.axes:
-            upd_ax = update._lookup_indices(ax.name)
+            upd_ax = update.axis_indices(ax.name)
             broadcasted_axes.append(ax if upd_ax is None else update.axes[upd_ax])
         update = haliax.broadcast_to(update, broadcasted_axes, enforce_no_extra_axes=True)
         upd_arr = update.array
@@ -1003,7 +1198,7 @@ def _compute_new_axes_and_slices_for_index(
     index_axis_names = set()
 
     for axis, slice_ in slices.items():
-        axis_index = array._lookup_indices(axis)
+        axis_index = array.axis_indices(axis)
         if axis_index is None:
             raise ValueError(f"axis {axis} not found in {array}")
         if isinstance(slice_, py_slice) or isinstance(slice_, dslice) or is_pallas_dslice(slice_):
@@ -1147,7 +1342,7 @@ def split(a: NamedArray, axis: AxisSelector, new_axes: Sequence[Axis]) -> Sequen
         new_axes (Sequence[Axis]): the axes to split into. Must have the same total length as the axis being split.
     """
     # check the lengths of the new axes
-    index = a._lookup_indices(axis)
+    index = a.axis_indices(axis)
     if index is None:
         raise ValueError(f"Axis {axis} not found in {a.axes}")
 
@@ -1172,7 +1367,7 @@ def unbind(array: NamedArray, axis: AxisSelector) -> List[NamedArray]:
     Unbind an array along an axis, returning a list of NamedArrays, one for each position on that axis.
     Analogous to torch.unbind or np.rollaxis
     """
-    axis_index = array._lookup_indices(axis)
+    axis_index = array.axis_indices(axis)
     if axis_index is None:
         raise ValueError(f"axis {axis} not found in {array}")
     new_axes = array.axes[:axis_index] + array.axes[axis_index + 1 :]
@@ -1189,7 +1384,7 @@ def roll(array: NamedArray, shift: Union[int, Tuple[int, ...]], axis: AxisSelect
     """
     Roll an array along an axis or axes. Analogous to np.roll
     """
-    axis_indices = array._lookup_indices(axis)
+    axis_indices = array.axis_indices(axis)
     if axis_indices is None:
         raise ValueError(f"axis {axis} not found in {array}")
     return NamedArray(jnp.roll(array.array, shift, axis_indices), array.axes)
@@ -1367,7 +1562,7 @@ def unflatten_axis(array: NamedArray, axis: AxisSelector, new_axes: AxisSpec) ->
     """
     Split an axis into a sequence of axes. The old axis must have the same size as the product of the new axes.
     """
-    old_index = array._lookup_indices(axis)
+    old_index = array.axis_indices(axis)
     if old_index is None:
         raise ValueError(f"Axis {axis} not found in {array}")
 
@@ -1915,6 +2110,9 @@ def _convert_index_expr_to_dict(idx) -> dict[AxisSelector, NamedIndex]:
 
 
 __all__ = [
+    "NamedArrayAxesSpec",
+    "NamedArrayAxes",
+    "Named",
     "NamedArray",
     "named",
     "slice",

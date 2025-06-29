@@ -51,7 +51,7 @@ def wrap_reduction_call(
                 axis = axis_spec_to_shape_dict(axis)
                 if single_axis_only and len(axis) > 1:
                     raise ValueError(f"{fn.__name__} only supports a single axis")
-                indices = a._lookup_indices(axis)
+                indices = a.axis_indices(axis)
                 if indices is None or any(x is None for x in indices):
                     raise ValueError(f"axis {axis} is not in {a.axes}")
                 new_axes = eliminate_axes(a.axes, axis)
@@ -75,7 +75,7 @@ def wrap_axiswise_call(fn, a, axis: Optional[AxisSelection], *, single_axis_only
             return fn(a.array, axis=None, **kwargs)
         else:
             axis = axis_spec_to_shape_dict(axis)
-            indices = a._lookup_indices(axis)
+            indices = a.axis_indices(axis)
             if any(x is None for x in indices):
                 raise ValueError(f"Axis {axis} not in {a.axes}")
             if len(indices) == 1:
