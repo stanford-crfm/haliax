@@ -74,14 +74,26 @@ class NamedArrayAxes:
     subset: bool = False
     """If ``True``, other axes may appear where the ellipsis is located."""
 
+    dtype: typing.Any | None = None
+    """Optional dtype that the array should have."""
+
     def __repr__(self) -> str:
+        dtype_prefix = ""
+        if self.dtype is not None:
+            dtype_obj = self.dtype
+            if hasattr(dtype_obj, "category"):
+                dtype_name = dtype_obj.name
+            else:
+                dtype_name = getattr(dtype_obj, "name", str(dtype_obj))
+            dtype_prefix = f"{dtype_name} "
+
         if self.ordered:
             parts = list(self.before)
             if self.subset:
                 parts.append("...")
             parts.extend(self.after)
             spec = " ".join(parts)
-            return f"NamedArray[{spec}]"
+            return f"NamedArray[{dtype_prefix}{spec}]"
         else:
             part = ", ".join(self.before)
             if self.subset:
@@ -89,7 +101,7 @@ class NamedArrayAxes:
                     part += ", ..."
                 else:
                     part = "..."
-            return f"NamedArray[{{{part}}}]"
+            return f"NamedArray[{dtype_prefix}{{{part}}}]"
 
 
 # a specification for NamedArray axes used in type annotations
@@ -275,6 +287,14 @@ class NamedArray(metaclass=NamedArrayMeta):
         """
 
         ann = _parse_namedarray_axes(spec)
+        if ann.dtype is not None:
+            dtype_spec = ann.dtype
+            if hasattr(dtype_spec, "category"):
+                if not jnp.issubdtype(self.dtype, dtype_spec.category):
+                    return False
+            elif self.dtype != dtype_spec:
+                return False
+
         names = tuple(ax.name for ax in self.axes)
         if ann.ordered:
             if not ann.subset:

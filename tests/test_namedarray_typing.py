@@ -5,6 +5,7 @@ import typing
 import jax.numpy as jnp
 
 from haliax import Axis, Named, NamedArray
+from haliax.typing import Float, Int, f32, i32
 
 
 def test_namedarray_type_syntax():
@@ -47,3 +48,17 @@ def test_namedarray_runtime_check():
     assert arr.matches_axes(NamedArray[{"batch", "embed", ...}])
     assert not arr.matches_axes(NamedArray["embed batch"])
     assert not arr.matches_axes(NamedArray[{"batch", "foo", ...}])
+
+
+def test_namedarray_runtime_check_with_dtype():
+    Batch = Axis("batch", 2)
+    arr = NamedArray(jnp.zeros((Batch.size,), dtype=jnp.float32), (Batch,))
+    assert arr.matches_axes(f32["batch"])  # type: ignore
+    assert not arr.matches_axes(i32["batch"])  # type: ignore
+
+
+def test_namedarray_runtime_check_with_category():
+    B = Axis("batch", 1)
+    arr = NamedArray(jnp.zeros((B.size,), dtype=jnp.float32), (B,))
+    assert arr.matches_axes(Float["batch"])  # type: ignore
+    assert not arr.matches_axes(Int["batch"])  # type: ignore
