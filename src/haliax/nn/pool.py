@@ -52,15 +52,14 @@ def pool(
     Returns:
       The output of the reduction for each window slice.
     """
-    Window = ensure_tuple(Window)
+    Window = axis_spec_to_shape_dict(Window)
 
     reduce_fn = _patch_up_reduce_fn(reduce_fn)
 
-    window_map = axis_spec_to_shape_dict(Window)
     dims = []
     for ax in inputs.axes:
-        if ax.name in window_map:
-            dims.append(window_map[ax.name])
+        if ax.name in Window:
+            dims.append(Window[ax.name])
         else:
             dims.append(1)
 
@@ -71,7 +70,7 @@ def pool(
         if len(Window) != len(stride):
             raise ValueError(f"len(Window) ({len(Window)}) != len(stride) ({len(stride)})")
         stride = ensure_tuple(stride)
-        stride_map = {w.name: s for w, s in zip(Window, stride)}
+        stride_map = {w: s for w, s in zip(Window, stride)}
         stride_out = []
         for ax in inputs.axes:
             if ax.name in stride_map:
@@ -83,7 +82,7 @@ def pool(
         del stride_out
     else:
         stride = (1,) * len(dims)
-        stride_map = {w.name: 1 for w in Window}
+        stride_map = {w: 1 for w in Window}
 
     if isinstance(padding, int):
         padding = ((padding, padding),) * len(Window)
@@ -95,12 +94,12 @@ def pool(
         if not all([len(x) == 2 for x in padding]):
             raise ValueError(f"each entry in padding must be length 2, got {padding}")
 
-        padding_map = {w.name: p for w, p in zip(Window, padding)}
+        padding_map = {w: p for w, p in zip(Window, padding)}
         if use_ceil:
-            window_inputs = {w.name: ax.size for w, ax in zip(Window, inputs.axes)}
+            window_inputs = {w: ax.size for w, ax in zip(Window, inputs.axes)}
             padding_map = _use_ceil_padding(
                 window_inputs=window_inputs,
-                window_kernel=window_map,
+                window_kernel=(Window),
                 window_padding=padding_map,
                 window_stride=stride_map,
             )
@@ -214,8 +213,8 @@ def mean_pool(
     """
     tots = pool(Window, inputs, 0, jax.lax.add, stride, padding, use_ceil=use_ceil)
     if count_include_pad:
-        Window = ensure_tuple(Window)
-        window_size = reduce(lambda x, y: x * y, [w.size for w in Window])
+        Window = axis_spec_to_shape_dict(Window)
+        window_size = reduce(lambda x, y: x * y, [s for s in Window.values()])
         return tots / window_size
     else:
         inputs_axes_without_batches = inputs.resolve_axis(unsize_axes(Window))

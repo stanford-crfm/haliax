@@ -82,7 +82,7 @@ def gelu(a: A, approximate: bool = True) -> A:
 
 def glu(x: NamedArray, axis: Axis) -> NamedArray:
     axis_index = x.axes.index(axis)
-    return jnn.glu(x.array, axis_index)
+    return NamedArray(jnn.glu(x.array, axis_index), x.axes)
 
 
 def quick_gelu(x):

@@ -16,7 +16,7 @@ from jaxtyping import PyTree
 import haliax.tree_util as htu
 from haliax._src.compile_utils import compile_cache
 
-from .axis import Axis, AxisSelection, AxisSelector
+from .axis import Axis, AxisSelection, AxisSelector, axis_spec_to_shape_dict
 from .core import NamedArray
 from .jax_utils import Static, is_in_jit, is_jax_array_like, is_on_mac_metal
 from .tree_util import hashable_combine, hashable_partition
@@ -590,7 +590,7 @@ def sharding_for_axis(
 
 def pspec_for_axis(axis: AxisSelection, mapping: Optional[ResourceMapping] = None) -> PartitionSpec:
     """Get the PartitionSpec for a single axis"""
-    axis = ensure_tuple(axis)
+    axis = axis_spec_to_shape_dict(axis)
     return PartitionSpec(*(physical_axis_name(a, mapping) for a in axis))
 
 

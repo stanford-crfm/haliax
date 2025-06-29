@@ -1,7 +1,10 @@
 import jax
 import jax.numpy as jnp
+import numpy as np
+import pytest
 from jax.random import PRNGKey
 
+import haliax as hax
 from haliax import Axis, NamedArray, updated_slice
 
 
@@ -485,7 +488,9 @@ def test_index():
 
     named1 = hax.random.uniform(PRNGKey(0), (H, W, D))
 
-    assert jnp.all(jnp.equal(hax.index(named1, {"H": slice(0, 10, 2)}).array, named1.array[0:10:2, :, :]))  # type: ignore
+    assert jnp.all(
+        jnp.equal(hax.index(named1, {"H": slice(0, 10, 2)}).array, named1.array[0:10:2, :, :])
+    )  # type: ignore
     assert hax.index(named1, {"H": slice(0, 10, 2)}).axes == (Axis("H", 5), W, D)  # type: ignore
 
     # try indexing syntax
@@ -602,10 +607,45 @@ def test_slice_nd_array_present_dims():
     # this is not ok, since the H would not be eliminated
 
 
-import numpy as np
-import pytest
+def test_broadcast_to():
+    H, W, D = hax.make_axes(H=10, W=20, D=30)
 
-import haliax as hax
+    named1 = hax.random.uniform(PRNGKey(0), (H, W, D))
+
+    assert jnp.all(jnp.equal(hax.broadcast_to(named1, (H, W, D)).array, named1.array))
+
+    ZZ = Axis("ZZ", 5)
+
+    assert jnp.all(jnp.equal(hax.broadcast_to(named1, (H, W, D, ZZ)).array, named1.array.reshape(10, 20, 30, 1)))
+
+
+def test_at_set():
+    # tests the at/set syntax, similar to test_index but with jax-style modifications
+    HWD = {"H": 10, "W": 20, "D": 30}
+    WD = {"W": 20, "D": 30}
+
+    named1 = hax.random.uniform(PRNGKey(0), HWD)
+    named2 = hax.random.uniform(PRNGKey(1), HWD)["H", 0:10:2]
+
+    wd_only = hax.random.uniform(PRNGKey(2), WD)
+
+    # set a slice
+    r1 = named1.at["H", slice(0, 10, 2)].set(named2)
+
+    assert jnp.all(jnp.equal(r1.array, named1.array.at[0:10:2, :, :].set(named2.array)))
+
+    r2 = named1.at["H", slice(0, 10, 2)].add(named2)
+
+    assert jnp.all(jnp.equal(r2.array, named1.array.at[0:10:2, :, :].add(named2.array)))
+
+    r3 = named1.at["H", slice(0, 10, 2)].mul(named2)
+
+    assert jnp.all(jnp.equal(r3.array, named1.array.at[0:10:2, :, :].mul(named2.array)))
+
+    # set a single axis
+    r4 = named1.at["H", :].set(wd_only)
+
+    assert jnp.all(jnp.equal(r4.array, named1.array.at[:, :, :].set(wd_only.array)))
 
 
 def test_scalar_updated_slice():

@@ -1,6 +1,7 @@
 import pytest
 
-from haliax.axis import Axis, eliminate_axes, make_axes, overlapping_axes, rearrange_for_partial_order
+import haliax
+from haliax.axis import eliminate_axes, make_axes, rearrange_for_partial_order, replace_axis, without_axes
 
 
 def test_eliminate_axes():
@@ -21,6 +22,110 @@ def test_eliminate_axes():
     assert eliminate_axes(("H", W), (H,)) == (W,)
     assert eliminate_axes(("H", W), ("H",)) == (W,)
     assert eliminate_axes(("H", W), ("H", "W")) == ()
+
+    # test shape dicts
+
+    HWC = {"H": 3, "W": 4, "C": 5}
+    HW = {"H": 3, "W": 4}
+
+    assert eliminate_axes(HWC, HW) == {"C": 5}
+    with pytest.raises(ValueError):
+        eliminate_axes(HW, HWC)
+    assert eliminate_axes(HW, HW) == {}
+    assert eliminate_axes(HWC, {"H": 3}) == {"W": 4, "C": 5}
+    assert eliminate_axes(HWC, {"W": 4}) == {"H": 3, "C": 5}
+    assert eliminate_axes(HWC, {"C": 5}) == HW
+
+    C2 = make_axes(C=6)
+
+    with pytest.raises(ValueError):
+        eliminate_axes(HWC, C2)
+
+    with pytest.raises(ValueError):
+        eliminate_axes(C2, HWC)
+
+
+def test_without_axes():
+    H, W, C = make_axes(H=3, W=4, C=5)
+
+    assert without_axes((H, W), (H,)) == (W,)
+    assert without_axes((H, W), (W,)) == (H,)
+    assert without_axes((H, W), (H, W)) == ()
+
+    assert without_axes((H, W), (C,)) == (H, W)
+
+    assert without_axes((H, W), (H, C)) == (W,)
+
+    # test string references
+    assert without_axes((H, W), ("H",)) == (W,)
+    assert without_axes(("H", W), (H,)) == (W,)
+    assert without_axes(("H", W), ("H",)) == (W,)
+    assert without_axes(("H", W), ("H", "W")) == ()
+
+    # test shape dicts
+
+    HWC = {"H": 3, "W": 4, "C": 5}
+    HW = {"H": 3, "W": 4}
+
+    assert without_axes(HWC, HW) == {"C": 5}
+    assert without_axes(HW, HWC) == {}
+    assert without_axes(HW, HW) == {}
+    assert without_axes(HWC, {"H": 3}) == {"W": 4, "C": 5}
+    assert without_axes(HWC, {"W": 4}) == {"H": 3, "C": 5}
+    assert without_axes(HWC, {"C": 5}) == HW
+
+    # test different sizes cause error
+    C2 = make_axes(C=6)
+
+    with pytest.raises(ValueError):
+        without_axes(HWC, C2)
+
+    with pytest.raises(ValueError):
+        without_axes(C2, HWC)
+
+
+def test_replace_axis():
+    H, W, C = make_axes(H=3, W=4, C=5)
+    H2 = haliax.Axis("H2", 6)
+
+    assert replace_axis((H, W), W, (C,)) == (H, C)
+
+    with pytest.raises(ValueError):
+        replace_axis((H, W), C, (H,))
+
+    with pytest.raises(ValueError):
+        replace_axis((H, W), H2, (C, W))
+
+    # test string references
+    with pytest.raises(ValueError):
+        replace_axis((H, W), "H", (W,))
+
+    with pytest.raises(ValueError):
+        assert replace_axis(("H", W), "H", ("C", W))
+
+    with pytest.raises(ValueError):
+        assert replace_axis(("H", W), "H", ("W",)) == (W, W)
+
+    assert replace_axis(("H", W), "H", ("C",)) == ("C", W)
+    assert replace_axis(("H", W), "W", ("C",)) == ("H", "C")
+    assert replace_axis(("H", W), "W", ("C", "D")) == ("H", "C", "D")
+
+    # test shape dicts
+
+    HWC = {"H": 3, "W": 4, "C": 5}
+    HW = {"H": 3, "W": 4}
+    HC = {"H": 3, "C": 5}
+
+    assert replace_axis(HW, "H", HC) == {"H": 3, "C": 5, "W": 4}
+
+    with pytest.raises(ValueError):
+        replace_axis(HW, "H", HWC)
+
+    with pytest.raises(ValueError):
+        replace_axis(HW, "C", HC)
+
+    with pytest.raises(ValueError):
+        replace_axis(HW, "H", HWC)
 
 
 def assert_partial_order_respected(partial_order, output):
@@ -133,17 +238,3 @@ def test_duplicate_elements_errors():
 
     with pytest.raises(ValueError):
         rearrange_for_partial_order(partial_order, candidates)
-
-
-def test_overlapping_axes_with_different_sizes():
-    A1 = Axis("A", 10)
-    A2 = Axis("A", 12)
-    B = Axis("B", 14)
-    C = Axis("C", 16)
-    D = Axis("D", 18)
-
-    ax1 = (A1, B, C)
-    ax2 = (A2, C, D)
-
-    overlapping_names = overlapping_axes(ax1, ax2)  # Should not error
-    assert overlapping_names == ("A", "C")

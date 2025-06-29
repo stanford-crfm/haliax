@@ -19,7 +19,7 @@ from ._src.scan import (
     map,
     scan,
 )
-from .axis import Axis, AxisSelection, AxisSelector, selects_axis
+from .axis import Axis, AxisSelection, AxisSelector, axis_spec_to_shape_dict, axis_spec_to_tuple, selects_axis
 from .core import NamedArray
 from .jax_utils import Static, broadcast_prefix, is_jax_array_like
 from .partitioning import physical_axis_name
@@ -55,14 +55,17 @@ def vmap(
     if kwargs is None:
         kwargs = {}
 
-    axes = ensure_tuple(axis)  # type: ignore
+    axes = axis_spec_to_shape_dict(axis)
     if len(axes) > 1:
         mapped = fn
         for ax in reversed(axes):
+            size = axes.get(ax, None)
+            if size is not None:
+                ax = Axis(ax, size)  # type: ignore
             mapped = vmap(mapped, ax, default=default, args=args, kwargs=kwargs)
         return mapped
     elif len(axes) == 1:  # type: ignore
-        axis = axes[0]
+        axis = axis_spec_to_tuple(axis)[0]
     else:
         return fn
 
