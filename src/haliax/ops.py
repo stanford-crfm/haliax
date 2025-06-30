@@ -1,11 +1,11 @@
 import typing
-from typing import Optional, Union
+from typing import Optional, Union, cast
 
 import jax
 import jax.numpy as jnp
 
-from .axis import Axis, AxisSelector
-from .core import NamedArray, NamedOrNumeric, broadcast_arrays, broadcast_arrays_and_return_axes, named
+from .axis import Axis, AxisSelector  # Axis was already here
+from .core import NamedArray, NamedOrNumeric, broadcast_arrays, broadcast_arrays_and_return_axes, named # NamedArray was already here
 from .jax_utils import is_scalarish
 
 
@@ -156,4 +156,101 @@ def raw_array_or_scalar(x: NamedOrNumeric):
     return x
 
 
-__all__ = ["trace", "where", "tril", "triu", "isclose", "pad_left", "clip"]
+def norm(
+    x: NamedArray,
+    ord: Optional[Union[int, str]] = None,
+    axis: Optional[AxisSelector | tuple[AxisSelector, ...]] = None,
+    keepdims: bool = False,
+) -> NamedArray:
+    """Compute the norm of a matrix or vector.
+
+    This is a wrapper around `jax.numpy.linalg.norm` that handles named axes.
+
+    Args:
+        x (NamedArray): N-dimensional array for which the norm will be computed.
+        ord (int | str | None): specify the kind of norm to take. Default is Frobenius norm for matrices, and
+            the 2-norm for vectors. For other options, see `jax.numpy.linalg.norm`.
+        axis (None | AxisSelector | tuple[AxisSelector, ...]):
+            Named axis or sequence of named axes over which the norm will be computed.
+            For a single axis, compute a vector norm. For two axes, compute a matrix norm.
+            Defaults to all axes of x, producing a scalar result.
+        keepdims (bool): if True, the output array will have the same number of dimensions as the input,
+            with the size of reduced axes replaced by 1 (default: False).
+
+    Returns:
+        NamedArray: array containing the specified norm of x.
+    """
+    axis_indices_for_jax: Optional[Union[int, tuple[int, ...]]] = None
+
+    if axis is None:
+        # Reduce over all axes. jax.numpy.linalg.norm handles axis=None to mean all axes.
+        axis_indices_for_jax = None
+    elif isinstance(axis, (Axis, str)):
+        ax_name = axis.name if isinstance(axis, Axis) else axis
+        idx = x.axis_index(ax_name)
+        if idx is None:
+            raise ValueError(f"Axis {ax_name} not found in NamedArray with axes {x.axes}")
+        axis_indices_for_jax = idx # jnp.linalg.norm takes a single int for a single axis
+    elif isinstance(axis, tuple):
+        int_axes = []
+        for ax_selector in axis:
+            ax_name = ax_selector.name if isinstance(ax_selector, Axis) else ax_selector
+            idx = x.axis_index(ax_name)
+            if idx is None:
+                raise ValueError(f"Axis {ax_name} not found in NamedArray with axes {x.axes}")
+            int_axes.append(idx)
+        axis_indices_for_jax = tuple(int_axes)
+    else:
+        raise TypeError(f"Unsupported axis type: {type(axis)}")
+
+    result_array = jnp.linalg.norm(x.array, ord=ord, axis=axis_indices_for_jax, keepdims=keepdims)
+
+    if keepdims:
+        if axis is None:
+            # All axes were reduced and kept. Create new Axis objects with size 1.
+            kept_axes = tuple(Axis(name=ax.name, size=1) for ax in x.axes)
+            return NamedArray(result_array, kept_axes)
+        else:
+            # Specific axes were reduced and kept.
+            # The result_array from jax.linalg.norm has dimensions of size 1 for these axes.
+            # We need to update the corresponding Axis objects in our NamedArray's axes tuple.
+            output_axes_list = list(x.axes)
+            reduced_int_indices: list[int]
+            if isinstance(axis_indices_for_jax, int):
+                reduced_int_indices = [axis_indices_for_jax]
+            elif isinstance(axis_indices_for_jax, tuple):
+                reduced_int_indices = list(axis_indices_for_jax)
+            else:
+                # This should not be reached if axis is not None.
+                # If somehow axis_indices_for_jax is None here, it implies all axes reduced,
+                # which is handled by the `if axis is None:` block above.
+                # For safety, default to original axes, though this case is unlikely.
+                return NamedArray(result_array, x.axes)
+
+            for index in reduced_int_indices:
+                original_axis = output_axes_list[index]
+                output_axes_list[index] = Axis(name=original_axis.name, size=1)
+            return NamedArray(result_array, tuple(output_axes_list))
+    else:
+        # If keepdims is False, the reduced axes are removed.
+        if axis is None: # all axes were reduced
+            return NamedArray(result_array, ()) # Scalar result
+
+        # Calculate the output axes by removing the reduced axes.
+        # Get the integer indices of the axes that were actually reduced.
+        reduced_int_indices_set: set[int]
+        if isinstance(axis_indices_for_jax, int):
+            reduced_int_indices_set = {axis_indices_for_jax}
+        elif isinstance(axis_indices_for_jax, tuple):
+            reduced_int_indices_set = set(axis_indices_for_jax)
+        else:
+            # Should not happen if axis is not None. If axis_indices_for_jax is None here,
+            # it implies all axes were reduced, which is handled by the `if axis is None:` block.
+            # This path is for safety, returning scalar if something unexpected occurred.
+            return NamedArray(result_array, ())
+
+        output_axes = tuple(ax for i, ax in enumerate(x.axes) if i not in reduced_int_indices_set)
+        return NamedArray(result_array, output_axes)
+
+
+__all__ = ["trace", "where", "tril", "triu", "isclose", "pad_left", "clip", "norm"]
