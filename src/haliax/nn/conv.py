@@ -9,7 +9,16 @@ from jaxtyping import PRNGKeyArray
 
 import haliax.partitioning
 
-from ..axis import Axis, AxisSelection, axis_name, replace_axis, selects_axis, without_axes
+from ..axis import (
+    Axis,
+    AxisSelection,
+    axis_name,
+    axis_spec_to_shape_dict,
+    replace_axis,
+    selects_axis,
+    unsize_axes,
+    without_axes,
+)
 from ..core import NamedArray, named
 from ..jax_utils import named_call
 from ..random import uniform
@@ -127,7 +136,7 @@ class Conv(_ConvBase):
             use_bias: Whether to add a bias after the convolution.
             key: Random key
         """
-        Spatial = ensure_tuple(Spatial)
+        Spatial = axis_spec_to_shape_dict(Spatial)
         if len(Spatial) == 0:
             raise ValueError("Spatial must have at least one element")
 
@@ -191,7 +200,7 @@ class Conv(_ConvBase):
         # identify batch dims, which get special treatment
         # jax's conv_general_dilated only supports exactly one batch dimension (not 0), so we vmap over any others.
         # We could choose instead to flatten them, but then we'd definitely lose sharding.
-        batch_dims = without_axes(inputs.axes, self.weight.axes)
+        batch_dims = without_axes(inputs.axes, unsize_axes(self.weight.axes))
         flat_inputs, unflatten = haliax.core.flatten_all_axes_but(
             inputs, "__batch__", batch_dims, reorder_to_front=True
         )
@@ -275,7 +284,7 @@ class ConvTranspose(_ConvBase):
         """
         k_w, k_b = jax.random.split(key, 2)
 
-        Spatial = ensure_tuple(Spatial)
+        Spatial = axis_spec_to_shape_dict(Spatial)
 
         kernel_size = _expand_and_check_shape(len(Spatial), kernel_size, "kernel_size")
         stride = _expand_and_check_shape(len(Spatial), stride, "stride")
@@ -325,7 +334,7 @@ class ConvTranspose(_ConvBase):
         """
         del key
 
-        batch_dims = without_axes(inputs.axes, self.weight.axes)
+        batch_dims = without_axes(inputs.axes, unsize_axes(self.weight.axes))
         flat_inputs, unflatten = haliax.core.flatten_all_axes_but(
             inputs, "__batch__", batch_dims, reorder_to_front=True
         )

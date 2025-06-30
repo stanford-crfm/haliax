@@ -29,6 +29,7 @@ from .axis import (
     AxisSpec,
     axis_name,
     axis_size,
+    axis_spec_to_tuple,
     concat_axes,
     dblock,
     ds,
@@ -38,6 +39,7 @@ from .axis import (
     replace_axis,
     resolve_axis,
     selects_axis,
+    to_jax_shape,
 )
 from .core import (
     Named,
@@ -105,8 +107,8 @@ def full(shape: AxisSpec, fill_value: T, dtype: Optional[DTypeLike] = None) -> N
     if isinstance(shape, Axis):
         return NamedArray(jnp.full(shape=shape.size, fill_value=fill_value, dtype=dtype), (shape,))
     else:
-        x_shape = tuple(x.size for x in shape)
-        return NamedArray(jnp.full(shape=x_shape, fill_value=fill_value, dtype=dtype), tuple(shape))
+        x_shape = to_jax_shape(shape)
+        return NamedArray(jnp.full(shape=x_shape, fill_value=fill_value, dtype=dtype), shape)
 
 
 def zeros_like(a: NamedArray, dtype=None) -> NamedArray:
@@ -155,7 +157,7 @@ def arange(axis: AxisSpec, *, start=0, step=1, dtype: Optional[DTypeLike] = None
 
     arr = jax.lax.iota(dtype=dtype or jnp.result_type(start), size=size) * step + start
     arr = arr.reshape(to_jax_shape(axis))
-    return NamedArray(arr, ensure_tuple(axis))
+    return NamedArray(arr, axis_spec_to_tuple(axis))
 
 
 # TODO: add overrides for arraylike start/stop to linspace, logspace, geomspace
