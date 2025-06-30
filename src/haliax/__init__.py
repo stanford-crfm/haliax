@@ -1,4 +1,4 @@
-import typing
+import typing as pytyping
 from typing import Optional, Sequence
 
 import jax
@@ -83,8 +83,8 @@ from .wrap import (
 )
 
 
-T = typing.TypeVar("T")
-A = typing.TypeVar("A", Scalar, NamedArray, jnp.ndarray)
+T = pytyping.TypeVar("T")
+A = pytyping.TypeVar("A", Scalar, NamedArray, jnp.ndarray)
 
 
 # creation routines
@@ -274,7 +274,7 @@ def concatenate(axis: AxisSelector, arrays: Sequence[NamedArray]) -> NamedArray:
     if axis_index is None:
         raise ValueError(f"Axis {aname} not found in 0th array {arrays[0]}")
 
-    axes: typing.Tuple[AxisSelector, ...] = arrays[0].axes
+    axes: pytyping.Tuple[AxisSelector, ...] = arrays[0].axes
     # we want to use the axis name for `axis`, because it's not uncommon for those to be different lengths in the arrays
     axes = axes[:axis_index] + (aname,) + axes[axis_index + 1 :]
     arrays = [a.rearrange(axes) for a in arrays]
