@@ -1,7 +1,4 @@
 """Wrappers around jax.random functions."""
-import functools
-import inspect
-import warnings
 from typing import Optional
 
 import jax.random as jrandom

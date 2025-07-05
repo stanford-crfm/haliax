@@ -38,7 +38,9 @@ dev=["pytest >= 7.4.0", "mypy >= 0.910", "mkdocs >= 1.4.3", "mkdocs-material >= 
     "pymdown-extensions",
     "pygments",
     "pymdown-extensions",
-    "chex>=0.1.86"
+    "chex>=0.1.86",
+    "ruff",
+    "uv"
 ]
 
 
@@ -66,6 +68,13 @@ use_parentheses = true
 ensure_newline_before_comments = true
 line_length = 119
 src_paths = ["src", "tests"]
+
+[tool.ruff]
+line-length = 119
+target-version = "py310"
+fix = true
+ignore = ["E731"]
+src = ["src", "tests"]
 
 [project.urls]
 "Homepage" = "https://github.com/stanford-crfm/haliax"

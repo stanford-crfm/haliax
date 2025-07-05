@@ -5,7 +5,7 @@ from dataclasses import dataclass, replace
 
 import jax.numpy as jnp
 
-from .core import NamedArray, NamedArrayAxes, _parse_namedarray_axes
+from .core import NamedArray, _parse_namedarray_axes
 
 
 @dataclass(frozen=True)

@@ -4,7 +4,6 @@ import warnings
 from typing import Dict, Optional, Tuple
 
 import jax
-import jax.numpy as jnp
 
 import haliax
 from haliax.axis import (
@@ -20,7 +19,6 @@ from haliax.axis import (
 from haliax.core import NamedArray
 from haliax.jax_utils import _jittable_dg_einsum
 from haliax.types import DTypeLike, PrecisionLike
-from haliax.util import ensure_tuple
 
 
 # deprecated overload

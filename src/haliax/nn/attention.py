@@ -11,7 +11,6 @@ import haliax.random as hrandom
 from haliax.axis import Axis, AxisSelection, AxisSelector, AxisSpec, axis_name, axis_spec_to_shape_dict
 from haliax.core import NamedArray
 from haliax.types import PrecisionLike
-from haliax.util import ensure_tuple
 
 
 # With attention, we usually distinguish between the mask and the bias, though the former is just a special case of the

@@ -1,5 +1,4 @@
 import dataclasses
-import math
 import warnings
 from typing import Optional
 
@@ -12,7 +11,6 @@ from ..axis import Axis, AxisSpec, concat_axes
 from ..core import NamedArray
 from ..jax_utils import named_call
 from ..tree_util import resize_axis
-from ..util import ensure_tuple
 
 
 class Embedding(eqx.Module):

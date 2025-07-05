@@ -3,7 +3,7 @@ import pytest
 from jax import numpy as jnp
 
 import haliax as hax
-from haliax import Axis, NamedArray
+from haliax import Axis
 
 
 def test_dot():

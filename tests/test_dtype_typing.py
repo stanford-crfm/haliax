@@ -20,7 +20,7 @@ def test_dtype_and_axes_annotation():
 
 
 def test_other_dtype_annotation():
-    def bar(x: i32["batch"]):  # type: ignore  # noqa: F722
+    def bar(x: i32["batch"]):  # type: ignore  # noqa: F722,F821
         pass
 
     spec = typing.get_args(typing.get_type_hints(bar, include_extras=True)["x"])[1]
@@ -29,7 +29,7 @@ def test_other_dtype_annotation():
 
 
 def test_dtype_category_annotation_and_check():
-    def baz(x: Float["b"]):  # type: ignore  # noqa: F722
+    def baz(x: Float["b"]):  # type: ignore  # noqa: F722,F821
         pass
 
     spec = typing.get_args(typing.get_type_hints(baz, include_extras=True)["x"])[1]

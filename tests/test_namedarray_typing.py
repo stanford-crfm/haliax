@@ -30,7 +30,7 @@ def test_namedarray_type_syntax():
 
 
 def test_named_param_annotation():
-    def foo(x: Named["batch", "embed"]):  # type: ignore
+    def foo(x: Named["batch", "embed"]):  # type: ignore  # noqa: F821
         pass
 
     axes = typing.get_args(typing.get_type_hints(foo, include_extras=True)["x"])[1]
