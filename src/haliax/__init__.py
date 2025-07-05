@@ -12,11 +12,9 @@ except ImportError:
 
 import haliax.debug as debug
 import haliax.nn as nn
-import haliax.quantization as quantization
 import haliax.random as random
 import haliax.state_dict as state_dict
 import haliax.tree_util as tree_util
-import haliax.util as util
 
 from ._src.dot import dot
 from ._src.einsum import einsum
@@ -48,8 +46,8 @@ from .core import (
     NamedArrayAxesSpec,
     NamedOrNumeric,
     are_shape_checks_enabled,
-    broadcast_arrays,
     broadcast_axis,
+    broadcast_arrays,
     broadcast_to,
     enable_shape_checks,
     flatten,
@@ -74,8 +72,6 @@ from .specialized_fns import top_k
 from .types import Scalar
 from .util import is_named_array
 from .wrap import (
-    ReductionFunction,
-    SimpleReductionFunction,
     wrap_axiswise_call,
     wrap_elemwise_binary,
     wrap_elemwise_unary,
@@ -149,7 +145,6 @@ def arange(axis: AxisSpec, *, start=0, step=1, dtype: Optional[DTypeLike] = None
 
     """
     from haliax.jax_utils import to_jax_shape
-    from haliax.util import ensure_tuple
 
     # if start is a tracer, we need to be a bit cleverer since arange doesn't support tracers
     # return NamedArray(jnp.arange(start, stop, step, dtype=dtype), (axis,))
@@ -937,13 +932,16 @@ __all__ = [
     "NamedArray",
     "broadcast_to",
     "broadcast_axis",
+    "broadcast_arrays",
     "named",
     "dot",
+    "einsum",
     "roll",
     "split",
     "flatten_axes",
     "slice",
     "updated_slice",
+    "unflatten_axis",
     "ds",
     "dslice",
     "dblock",

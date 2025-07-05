@@ -21,16 +21,11 @@ repos:
     hooks:
     -   id: black
 
--   repo: https://github.com/timothycrosley/isort
-    rev: 5.11.5
-    hooks:
-    -   id: isort
 
--   repo: https://github.com/PyCQA/flake8
-    rev: 3.9.2
+-   repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.7
     hooks:
-    -   id: flake8
-        additional_dependencies: [flake8-isort]
+    -   id: ruff
 
 -   repo: https://github.com/pre-commit/mirrors-mypy
     rev: 'v1.5.1'

@@ -1,7 +1,7 @@
 # Module to support torch-style "state dict" serialization via safetensors
 import dataclasses
 import typing
-from typing import Any, Optional, Sequence, TypeVar
+from typing import Any, Dict, Optional, Sequence, TypeVar
 
 import equinox as eqx
 import jax
@@ -15,8 +15,7 @@ from jaxtyping import PyTree
 
 import haliax.partitioning as partitioning
 from haliax._src.util import index_where
-from haliax.axis import Axis
-from haliax.core import NamedArray, flatten_axes, named
+from haliax.core import NamedArray, named
 from haliax.jax_utils import is_jax_array_like, is_scalarish
 from haliax.tree_util import scan_aware_tree_map
 

@@ -2,7 +2,7 @@ import dataclasses
 import functools
 import re
 import warnings
-from typing import Any, Dict, Generic, Literal, Optional, Protocol, Sequence, Type, TypeVar, Union, cast
+from typing import Any, Dict, Generic, Optional, Protocol, Sequence, Type, TypeVar, cast
 
 import equinox as eqx
 import jax

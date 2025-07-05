@@ -8,8 +8,10 @@ Dev Installation
 
 First follow the same instructions as provided for the [Levanter README](README.md) to install Levanter.
 
-The main addition for a dev environment is to install [`pre-commit`](https://pre-commit.com/):
+We recommend using [`uv`](https://github.com/astral-sh/uv) to manage Python dependencies.
+Once `uv` is installed, set up the git hooks with [`pre-commit`](https://pre-commit.com/):
 
+    uv pip install pre-commit
     pre-commit install
 
 This will set up git hook scripts that ensure your code is formatted in a manner consistent with
@@ -52,7 +54,7 @@ Implement Your Changes
 
 As you implement your changes in your feature branch, the git hook scripts will check your
 code for proper formatting as you make commits. Make sure you have run `pre-commit install`
-before you start making commits.
+before you start making commits. The hooks run `ruff` and other tools via `pre-commit`.
 
 You can also check all files in the current branch with this command:
 
