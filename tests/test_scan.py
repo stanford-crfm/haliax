@@ -45,6 +45,30 @@ def test_unstacked():
         assert hax.all(module.array == m.stacked.array[i])
 
 
+def test_vmap():
+    class Module(eqx.Module):
+        weight: hax.NamedArray
+
+        def __call__(self, x):
+            return x + self.weight
+
+        @staticmethod
+        def init(weight):
+            return Module(weight=weight)
+
+    Block = hax.Axis("block", 4)
+    E = hax.Axis("E", 10)
+
+    weights = hax.random.uniform(jax.random.PRNGKey(0), (Block, E))
+    m = Stacked.init(Block, Module)(weight=weights)
+
+    x = hax.random.uniform(jax.random.PRNGKey(1), (E,))
+    y = m.vmap(x)
+
+    assert y.axes == (Block, E)
+    assert hax.all(y == weights + x)
+
+
 def test_seq_and_stacked_give_same_results():
     class Module(eqx.Module):
         named: hax.NamedArray

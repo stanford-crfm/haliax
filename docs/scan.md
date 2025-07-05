@@ -405,6 +405,17 @@ blocks = Stacked.init(Layers, Gpt2Block)(
 Any NamedArray passed to the Stacked init will have its Layers axis (if present) vmapped over. Any
 JAX array will have its first axis vmapped over.
 
+#### Apply Blocks in Parallel with `vmap`
+
+Sometimes you may want to apply each block independently, without feeding the
+output of one block into the next.  `Stacked.vmap` does exactly that: it uses
+[`haliax.vmap`][] to broadcast the initial value to every block and evaluates
+them in parallel, returning the stack of outputs.
+
+```python
+y = stacked.vmap(x)
+```
+
 
 #### Fold Blocks vs Scan Blocks
 
