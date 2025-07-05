@@ -2,7 +2,23 @@ import dataclasses
 import functools
 import re
 import warnings
-from typing import Any, Dict, Generic, Literal, Optional, Protocol, Sequence, Type, TypeVar, Union, cast
+from typing import (
+    Any,
+    Callable,
+    Concatenate,
+    Dict,
+    Generic,
+    Literal,
+    Optional,
+    ParamSpec,
+    Protocol,
+    Sequence,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+    cast,
+)
 
 import equinox as eqx
 import jax
@@ -20,8 +36,11 @@ from ..axis import Axis
 
 M = TypeVar("M", bound=eqx.Module)
 M_co = TypeVar("M_co", bound=eqx.Module, covariant=True)
+M_contra = TypeVar("M_contra", bound=eqx.Module, contravariant=True)
 S = TypeVar("S", bound=eqx.Module)
 T = TypeVar("T")
+P = ParamSpec("P")
+Y = TypeVar("Y", covariant=True)
 
 
 class ModuleInit(Protocol[M_co]):
@@ -62,6 +81,16 @@ class BlockFoldable(Protocol[M]):
         Returns the unstacked version of this module. This is useful for logging or saving checkpoints.
 
         """
+        ...
+
+
+class FoldViaFn(Protocol[M_contra, T, P]):
+    def __call__(self, block: M_contra, carry: T, *args: P.args, **kwargs: P.kwargs) -> T:
+        ...
+
+
+class ScanViaFn(Protocol[M_contra, T, Y, P]):
+    def __call__(self, block: M_contra, carry: T, *args: P.args, **kwargs: P.kwargs) -> tuple[T, Y]:
         ...
 
 
@@ -122,25 +151,19 @@ class BlockSeq(ModuleWithStateDictSerialization, Generic[M]):
 
         return fn
 
-    def scan(self, init: T, *extra_args, **extra_kwargs):
-        def do_scan(init, *extra_args, **extra_kwargs):
+    def scan_via(self, fn: ScanViaFn[M, T, Y, P]) -> Callable[Concatenate[T, P], tuple[T, Any]]:
+        """Scan over the blocks using ``fn`` to apply each block."""
+
+        def do_scan(init: T, *args: P.args, **kwargs: P.kwargs) -> tuple[T, Any]:
             out = []
             carry = init
 
             for i, block in enumerate(self.blocks):
-
-                (block_args, block_kwargs) = haliax.tree_util.tree_map(
-                    functools.partial(BlockSeq._slice_out, self.Block, i), (extra_args, extra_kwargs)
+                block_args, block_kwargs = haliax.tree_util.tree_map(
+                    functools.partial(BlockSeq._slice_out, self.Block, i), (args, kwargs)
                 )
 
-                block_result = block(carry, *block_args, **block_kwargs)
-
-                if not isinstance(block_result, (tuple, list)) or len(block_result) != 2:
-                    raise ValueError(
-                        f"BlockSeq.scan expects the block to return a pair of (carry, extra), got {block_result}"
-                    )
-
-                carry, extra = block_result
+                carry, extra = fn(block, carry, *block_args, **block_kwargs)
 
                 carry = tree_checkpoint_name(carry, self._carry_ckpt_name)
                 extra = tree_checkpoint_name(extra, self._output_ckpt_name)
@@ -149,20 +172,49 @@ class BlockSeq(ModuleWithStateDictSerialization, Generic[M]):
 
             return carry, haliax.tree_util.tree_map(lambda *x: haliax.stack(self.Block, x), *out)
 
-        return do_scan(init, *extra_args, **extra_kwargs)
+        return do_scan
+
+    def scan(self, init: T, *extra_args, **extra_kwargs):
+        """Scan over the sequence of blocks.
+
+        See :meth:`scan_via` for details.
+        """
+
+        def default(block: M, carry: T, *a: Any, **k: Any):
+            block_result = block(carry, *a, **k)
+            if not isinstance(block_result, (tuple, list)) or len(block_result) != 2:
+                raise ValueError(
+                    f"BlockSeq.scan expects the block to return a pair of (carry, extra), got {block_result}"
+                )
+            return block_result  # type: ignore[return-value]
+
+        return self.scan_via(default)(init, *extra_args, **extra_kwargs)
 
     def fold(self, init: T, *args, **kwargs) -> T:
-        def do_fold(init, *args, **kwargs):
+        """Fold over the sequence of blocks.
+
+        See :meth:`fold_via` for details.
+        """
+
+        def default(block: M, carry: T, *a: Any, **k: Any) -> T:
+            return block(carry, *a, **k)
+
+        return self.fold_via(default)(init, *args, **kwargs)
+
+    def fold_via(self, fn: FoldViaFn[M, T, P]) -> Callable[Concatenate[T, P], T]:
+        """Fold over the blocks using ``fn`` to apply each block."""
+
+        def do_fold(init: T, *args: P.args, **kwargs: P.kwargs) -> T:
             carry = init
             for i, block in enumerate(self.blocks):
-                (block_args, block_kwargs) = haliax.tree_util.tree_map(
+                block_args, block_kwargs = haliax.tree_util.tree_map(
                     functools.partial(BlockSeq._slice_out, self.Block, i), (args, kwargs)
                 )
-                carry = block(carry, *block_args, **block_kwargs)
+                carry = fn(block, carry, *block_args, **block_kwargs)
                 carry = tree_checkpoint_name(carry, self._carry_ckpt_name)
             return carry
 
-        return do_fold(init, *args, **kwargs)
+        return do_fold
 
     def unstacked(self) -> Sequence[M]:
         return self.blocks
@@ -308,83 +360,63 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
         return fn
 
     def scan(self, init, *extra_args, **extra_kwargs):
-        """
-        Scan over the stacked module. This is the same as a for loop that applies each instance of the module in sequence
-        to the input, passing the output of one instance to the next instance. It returns a stack of outputs as
-        well as the final output.
+        """Scan over the stacked module.
 
-        That is, it behaves similarly to the following Python code:
-
-        ```python
-        carry = init
-        outputs = []
-
-        for block in self.stacked:
-            carry, extra = block(carry)
-            outputs.append(extra)
-
-        return carry, hax.stack(Block, outputs)
-        ```
-
-        Args:
-            init:
-            *extra_args:
-            **extra_kwargs:
-
-        Returns:
-
+        See :meth:`scan_via` for details.
         """
 
-        def do_block(carry, block, *args, **kwargs):
-            carry, out = block(carry, *args, **kwargs)
-            return carry, out
+        def default(block: M, carry: T, *a: Any, **k: Any):
+            carry2, out = block(carry, *a, **k)
+            return carry2, out
 
-        def do_scan(init, *extra_args, **extra_kwargs):
-            carry, out = haliax.scan(do_block, self.Block, remat=self.gradient_checkpointing)(
-                init, self.stacked, *extra_args, **extra_kwargs
+        return self.scan_via(default)(init, *extra_args, **extra_kwargs)
+
+    def scan_via(self, fn: ScanViaFn[M, T, Y, P]) -> Callable[Concatenate[T, P], tuple[T, Any]]:
+        """Scan over the stacked module using ``fn`` to apply each block.
+
+        ``fn`` should accept ``(block, carry, *args, **kwargs)`` and return ``(carry, output)``.
+        The returned function mirrors :func:`haliax.scan`, taking the initial carry and any
+        additional arguments before returning the final carry and stacked outputs.
+        """
+
+        def do_block(carry: T, block: M, *args: P.args, **kwargs: P.kwargs):
+            return fn(block, carry, *args, **kwargs)
+
+        def do_scan(init: T, *args: P.args, **kwargs: P.kwargs) -> tuple[T, Any]:
+            return haliax.scan(do_block, self.Block, remat=self.gradient_checkpointing)(
+                init, self.stacked, *args, **kwargs
             )
-            return carry, out
 
-        return do_scan(init, *extra_args, **extra_kwargs)
+        return do_scan
 
     def fold(self, init, *args, **kwargs):
-        """
-        Fold over the stacked module. This is the same as a for loop that applies each instance of the module in sequence
-        to the input, passing the output of one instance to the next instance.
-        That is, it behaves similarly to the following Python code:
+        """Fold over the stacked module.
 
-        ```python
-        carry = init
-        for block in self.stacked:
-            carry = block(carry)
-
-        return carry
-        ```
-
-        Args:
-            init: The initial value of carry to pass to the first block
-            *args: Extra arguments to pass to the blocks. These are passed directly to the blocks
-            **kwargs: Extra keyword arguments to pass to the blocks. These are passed directly to the blocks
-
-        Returns:
-
+        See :meth:`fold_via` for details.
         """
 
-        def do_block(carry, block, *args, **kwargs):
-            carry = block(carry, *args, **kwargs)
-            return carry
+        def default(block: M, carry: T, *a: Any, **k: Any) -> T:
+            return block(carry, *a, **k)
 
-        def do_fold(init, *extra_args, **extra_kwargs):
-            carry = haliax.fold(do_block, self.Block, remat=self.gradient_checkpointing)(
-                init, self.stacked, *extra_args, **extra_kwargs
+        return self.fold_via(default)(init, *args, **kwargs)
+
+    def fold_via(self, fn: FoldViaFn[M, T, P]) -> Callable[Concatenate[T, P], T]:
+        """Fold over the stacked module using ``fn`` to apply each block.
+
+        ``fn`` should accept ``(block, carry, *args, **kwargs)`` and return the new carry.
+        The returned callable behaves like :func:`haliax.fold`, taking the initial carry
+        and extra arguments before returning the final carry.
+        """
+
+        def do_block(carry: T, block: M, *args: P.args, **kwargs: P.kwargs) -> T:
+            return fn(block, carry, *args, **kwargs)
+
+        def do_fold(init: T, *args: P.args, **kwargs: P.kwargs) -> T:
+            return haliax.fold(do_block, self.Block, remat=self.gradient_checkpointing)(
+                init, self.stacked, *args, **kwargs
             )
-            return carry
 
-        return do_fold(init, *args, **kwargs)
-
-    @staticmethod
-    def _do_block(carry, block, *extra_args, **extra_kwargs):
-        return block(carry, *extra_args, **extra_kwargs)
+        return do_fold
 
     # TODO: this is for logic that's in levanter. We should move that logic to haliax I guess?
     def _state_dict_key_map(self) -> Dict[str, Optional[str]]:

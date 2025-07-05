@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 import equinox as eqx
 import jax
 import pytest
@@ -285,3 +286,60 @@ def test_checkpoint_carries(name, policy, expected_scan_shapes, check_offloading
 
             assert target is not None, f"Could not find named value for {name}"
             assert found_saved, f"Could not find offloaded value for {name}"
+
+
+def test_fold_via_and_scan_via():
+    class Module(eqx.Module):
+        bias: hax.NamedArray
+
+        def __call__(self, x):
+            return x + self.bias
+
+        @staticmethod
+        def init(bias):
+            return Module(bias)
+
+        def dbl(self, x):
+            return x + 2 * self.bias
+
+        def call_and_double(self, x):
+            y = x + self.bias
+            return y, x * 2
+
+    Block = hax.Axis("block", 3)
+    E = hax.Axis("E", 5)
+
+    initial_bias = hax.random.uniform(jax.random.PRNGKey(0), (Block, E))
+    m = Stacked.init(Block, Module)(bias=initial_bias)
+    m_seq = BlockSeq.init(Block, Module)(bias=initial_bias)
+
+    x = hax.random.uniform(jax.random.PRNGKey(1), (E,))
+
+    # test fold_via with extra args/kwargs
+    y: hax.NamedArray = m.fold_via(lambda b, c, f, offset=0: b(c) * f + offset)(x, 2, offset=1)  # type: ignore[arg-type]
+    y_seq: hax.NamedArray = m_seq.fold_via(lambda b, c, f, offset=0: b(c) * f + offset)(x, 2, offset=1)  # type: ignore[arg-type]
+    expected = x
+    for block in m.unstacked():
+        expected = block(expected) * 2 + 1
+    assert hax.all(hax.isclose(y, expected))
+    assert hax.all(hax.isclose(y_seq, expected))
+
+    # test scan_via with extra args/kwargs
+    def custom(block, carry, factor, offset=0):
+        y, out = block.call_and_double(carry + offset)
+        return y, out * factor
+
+    carry: hax.NamedArray
+    carry, outs = m.scan_via(custom)(x, 3, offset=2)  # type: ignore[arg-type]
+    carry_seq, outs_seq = m_seq.scan_via(custom)(x, 3, offset=2)  # type: ignore[arg-type]
+    exp_carry = x
+    exp_outs: list[hax.NamedArray] = []
+    for block in m.unstacked():
+        exp_carry, out = block.call_and_double(exp_carry + 2)
+        exp_outs.append(out * 3)
+    exp_outs = hax.stack(Block, exp_outs)
+
+    assert hax.all(hax.isclose(carry, exp_carry))
+    assert hax.all(hax.isclose(carry_seq, exp_carry))
+    assert hax.all(hax.isclose(outs, exp_outs))
+    assert hax.all(hax.isclose(outs_seq, exp_outs))

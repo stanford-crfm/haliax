@@ -432,6 +432,11 @@ while a "scan Block" should have the signature `def __call__(self, x: Carry) -> 
 
 (See also [jax.lax.scan][], [haliax.fold][], and [haliax.scan][].)
 
+You can also invoke custom functions with each block using `Stacked.fold_via` and
+`Stacked.scan_via`. These take a callable ``fn(block, carry, *args, **kwargs)`` and
+return a function that behaves like `fold` or `scan`, respectively, using your
+callable to perform the block logic. `BlockSeq` provides the same helpers.
+
 #### Requirements for Stacked Blocks
 
 As we said above, the Stacked module requires that all the layers have the same shape and configuration.
