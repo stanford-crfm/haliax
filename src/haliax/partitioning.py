@@ -10,7 +10,13 @@ import equinox as eqx
 import jax
 from equinox import is_array, module_update_wrapper
 from jax.lax import with_sharding_constraint
-from jax.sharding import Mesh, NamedSharding, PartitionSpec, SingleDeviceSharding
+from jax.sharding import (
+    AbstractMesh,
+    Mesh,
+    NamedSharding,
+    PartitionSpec,
+    SingleDeviceSharding,
+)
 from jaxtyping import PyTree
 
 import haliax.tree_util as htu
@@ -84,7 +90,7 @@ def current_thread_local_mapping():
     return _mapping_holder.thread_data.resource_mapping
 
 
-def auto_sharded(x: T, mesh: Optional[Mesh] = None) -> T:
+def auto_sharded(x: T, mesh: Optional[AbstractMesh | Mesh] = None) -> T:
     """
     Shard a PyTree using the global axis mapping. NamedArrays in the PyTree are sharded using the axis mapping
      and the names in the tree.
@@ -99,7 +105,7 @@ def auto_sharded(x: T, mesh: Optional[Mesh] = None) -> T:
     return shard(x, mapping=mapping, mesh=mesh)
 
 
-def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] = None) -> T:
+def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[AbstractMesh | Mesh] = None) -> T:
     """
     Shard a PyTree using the provided axis mapping. NamedArrays in the PyTree are sharded using the axis mapping.
     Other arrays (i.e. plain JAX arrays) are left alone.
@@ -155,7 +161,7 @@ def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] 
 
 
 @functools.wraps(shard)
-def shard_with_axis_mapping(x: T, mapping: ResourceMapping, mesh: Optional[Mesh] = None) -> T:
+def shard_with_axis_mapping(x: T, mapping: ResourceMapping, mesh: Optional[AbstractMesh | Mesh] = None) -> T:
     # warnings.warn("`shard_with_axis_mapping` is deprecated. Use `shard` instead", DeprecationWarning)
     return shard(x, mapping, mesh)
 
@@ -165,7 +171,7 @@ def infer_resource_partitions(
     resource_mapping: Optional[ResourceMapping] = None,
     preserve_existing_shardings: bool = True,
     use_auto_sharding: bool = True,
-    mesh: Optional[Mesh] = None,
+    mesh: Optional[AbstractMesh | Mesh] = None,
 ) -> PyTree:
     """
     Infer the sharding for a module, to be used with named_jit.
@@ -353,8 +359,7 @@ def named_jit(
     keep_unused: bool = False,
     backend: Optional[str] = None,
     inline: Optional[bool] = None,
-) -> WrappedCallable[Args, R]:
-    ...
+) -> WrappedCallable[Args, R]: ...
 
 
 @typing.overload
@@ -369,8 +374,7 @@ def named_jit(
     keep_unused: bool = False,
     backend: Optional[str] = None,
     inline: Optional[bool] = None,
-) -> typing.Callable[[Callable[Args, R]], WrappedCallable[Args, R]]:
-    ...
+) -> typing.Callable[[Callable[Args, R]], WrappedCallable[Args, R]]: ...
 
 
 def named_jit(
@@ -454,13 +458,11 @@ def named_jit(
 
 
 @typing.overload
-def fsdp(fn: F, parameter_mapping: ResourceMapping, compute_mapping: ResourceMapping) -> F:
-    ...
+def fsdp(fn: F, parameter_mapping: ResourceMapping, compute_mapping: ResourceMapping) -> F: ...
 
 
 @typing.overload
-def fsdp(parameter_mapping: ResourceMapping, compute_mapping: ResourceMapping) -> typing.Callable[[F], F]:
-    ...
+def fsdp(parameter_mapping: ResourceMapping, compute_mapping: ResourceMapping) -> typing.Callable[[F], F]: ...
 
 
 def fsdp(*args, **kwargs):
@@ -582,7 +584,9 @@ def physical_axis_size(axis: AxisSelector, mapping: Optional[ResourceMapping] = 
 
 
 def sharding_for_axis(
-    axis: AxisSelection, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] = None
+    axis: AxisSelection,
+    mapping: Optional[ResourceMapping] = None,
+    mesh: Optional[AbstractMesh | Mesh] = None,
 ) -> NamedSharding:
     """Get the sharding for a single axis"""
     return NamedSharding(mesh or _get_mesh(), pspec_for_axis(axis, mapping))
@@ -604,13 +608,15 @@ def round_axis_for_partitioning(axis: Axis, mapping: Optional[ResourceMapping] =
         return Axis(axis.name, new_size)
 
 
-def _get_mesh() -> Mesh:
+def _get_mesh() -> AbstractMesh:
+    """Return the currently active (abstract) device mesh."""
     try:
         from jax.interpreters.pxla import thread_resources
-    except ImportError:
+    except ImportError:  # pragma: no cover - old jax fallback
         from jax.experimental.maps import thread_resources
 
-    return thread_resources.env.physical_mesh
+    physical_mesh = thread_resources.env.physical_mesh
+    return physical_mesh.abstract_mesh
 
 
 def _is_jit_tracer(x) -> bool:
