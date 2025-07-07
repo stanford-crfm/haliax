@@ -20,7 +20,7 @@ from .axis import Axis, AxisSelection, AxisSelector, axis_spec_to_shape_dict
 from .core import NamedArray
 from .jax_utils import Static, is_in_jit, is_jax_array_like, is_on_mac_metal
 from .tree_util import hashable_combine, hashable_partition
-from .util import StringHolderEnum, ensure_tuple
+from .util import StringHolderEnum
 
 
 PhysicalAxisSpec = Union[(str), Sequence[str]]
