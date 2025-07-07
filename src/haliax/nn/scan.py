@@ -180,13 +180,13 @@ class BlockSeq(ModuleWithStateDictSerialization, Generic[M]):
         See :meth:`scan_via` for details.
         """
 
-        def default(block: M, carry: T, *a: Any, **k: Any):
+        def default(block: M, carry: T, *a: Any, **k: Any) -> tuple[T, Any]:
             block_result = block(carry, *a, **k)
             if not isinstance(block_result, (tuple, list)) or len(block_result) != 2:
                 raise ValueError(
                     f"BlockSeq.scan expects the block to return a pair of (carry, extra), got {block_result}"
                 )
-            return block_result  # type: ignore[return-value]
+            return cast(tuple[T, Any], tuple(block_result))
 
         return self.scan_via(default)(init, *extra_args, **extra_kwargs)
 
@@ -460,8 +460,8 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
         # this method needs to "vectorize" the blocks, so that we have a single block h.FOO
         # first just do the normal thing with our own dict, which we'll post-process
         stacked = _stack_state_dict(state_dict, prefix=prefix)
-        out = super().from_state_dict(stacked, prefix=prefix)  # type: ignore
-        return out
+        out = ModuleWithStateDictSerialization.from_state_dict(self, stacked, prefix=prefix)
+        return cast(M, out)
 
 
 def _stack_state_dict(state_dict: StateDict, prefix: Optional[str] = None) -> StateDict:

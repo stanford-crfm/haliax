@@ -1,4 +1,3 @@
-# mypy: ignore-errors
 import equinox as eqx
 import jax
 import pytest
@@ -330,14 +329,17 @@ def test_fold_via_and_scan_via():
         return y, out * factor
 
     carry: hax.NamedArray
+    outs: hax.NamedArray
     carry, outs = m.scan_via(custom)(x, 3, offset=2)  # type: ignore[arg-type]
+    carry_seq: hax.NamedArray
+    outs_seq: hax.NamedArray
     carry_seq, outs_seq = m_seq.scan_via(custom)(x, 3, offset=2)  # type: ignore[arg-type]
     exp_carry = x
-    exp_outs: list[hax.NamedArray] = []
+    exp_outs_list: list[hax.NamedArray] = []
     for block in m.unstacked():
         exp_carry, out = block.call_and_double(exp_carry + 2)
-        exp_outs.append(out * 3)
-    exp_outs = hax.stack(Block, exp_outs)
+        exp_outs_list.append(out * 3)
+    exp_outs = hax.stack(Block, exp_outs_list)
 
     assert hax.all(hax.isclose(carry, exp_carry))
     assert hax.all(hax.isclose(carry_seq, exp_carry))
