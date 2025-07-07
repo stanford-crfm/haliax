@@ -2,7 +2,7 @@ import dataclasses
 import functools
 import re
 import warnings
-from typing import Any, Dict, Generic, Optional, Protocol, Sequence, Type, TypeVar, cast
+from typing import Any, Callable, Dict, Generic, Optional, Protocol, Sequence, Type, TypeVar, cast, overload, ParamSpec
 
 import equinox as eqx
 import jax
@@ -20,8 +20,21 @@ from ..axis import Axis
 
 M = TypeVar("M", bound=eqx.Module)
 M_co = TypeVar("M_co", bound=eqx.Module, covariant=True)
+M_contra = TypeVar("M_contra", bound=eqx.Module, contravariant=True)
 S = TypeVar("S", bound=eqx.Module)
 T = TypeVar("T")
+CarryT = TypeVar("CarryT")
+OutputT_co = TypeVar("OutputT_co", covariant=True)
+P = ParamSpec("P")
+
+class FoldFunction(Protocol[M_contra, CarryT]):
+    def __call__(self, module: M_contra, carry: CarryT) -> CarryT:
+        ...
+
+
+class ScanFunction(Protocol[M_contra, CarryT, OutputT_co]):
+    def __call__(self, module: M_contra, carry: CarryT) -> tuple[CarryT, OutputT_co]:
+        ...
 
 
 class ModuleInit(Protocol[M_co]):
@@ -381,6 +394,52 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
             return carry
 
         return do_fold(init, *args, **kwargs)
+
+    @overload
+    def fold_via(self, fn: FoldFunction[M, CarryT]) -> Callable[[CarryT], CarryT]:
+        ...
+
+    @overload
+    def fold_via(self, fn: Callable[[M, CarryT], CarryT]) -> Callable[[CarryT], CarryT]:
+        ...
+
+    def fold_via(self, fn: Callable[..., CarryT]):
+        """Return a function that folds over the stack using ``fn``.
+
+        ``fn`` should take a block and a carry and return a new carry.  The
+        returned function mirrors :func:`haliax.fold` over the block axis.
+        """
+
+        def do_block(carry: CarryT, block: M) -> CarryT:
+            return fn(block, carry)
+
+        def do_fold(init: CarryT) -> CarryT:
+            return haliax.fold(do_block, self.Block, remat=self.gradient_checkpointing)(init, self.stacked)
+
+        return do_fold
+
+    @overload
+    def scan_via(self, fn: ScanFunction[M, CarryT, OutputT_co]) -> Callable[[CarryT], tuple[CarryT, OutputT_co]]:
+        ...
+
+    @overload
+    def scan_via(self, fn: Callable[[M, CarryT], tuple[CarryT, OutputT_co]]) -> Callable[[CarryT], tuple[CarryT, OutputT_co]]:
+        ...
+
+    def scan_via(self, fn: Callable[..., tuple[CarryT, OutputT_co]]):
+        """Return a function that scans over the stack using ``fn``.
+
+        ``fn`` should take a block and a carry and return ``(carry, output)``.
+        Semantics match :func:`haliax.scan` over the block axis.
+        """
+
+        def do_block(carry: CarryT, block: M) -> tuple[CarryT, OutputT_co]:
+            return fn(block, carry)
+
+        def do_scan(init: CarryT) -> tuple[CarryT, OutputT_co]:
+            return haliax.scan(do_block, self.Block, remat=self.gradient_checkpointing)(init, self.stacked)
+
+        return do_scan
 
     @staticmethod
     def _do_block(carry, block, *extra_args, **extra_kwargs):
