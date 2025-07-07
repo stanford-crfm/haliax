@@ -3,7 +3,6 @@ import dataclasses
 import equinox as eqx
 import jax
 import jax.numpy as jnp
-from chex import assert_trees_all_close
 
 import haliax as hax
 import haliax.tree_util as htu

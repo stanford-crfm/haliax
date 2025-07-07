@@ -4,13 +4,13 @@ import typing
 
 import jax.numpy as jnp
 
-from haliax import Axis, Named, NamedArray
-from haliax.typing import Float, Int, f32, i32
+from haliax import Axis, NamedArray
+from haliax.haxtyping import Float, Int, f32, i32, Named
 
 
 def test_namedarray_type_syntax():
     axes1 = typing.get_args(NamedArray["batch", "embed"])[1]
-    axes2 = typing.get_args(Named["batch embed"])[1]  # type: ignore
+    axes2 = typing.get_args(Named[NamedArray, "batch embed"])[1]  # type: ignore
     assert axes1 == axes2
 
     axes3 = typing.get_args(NamedArray["batch embed ..."])[1]
@@ -30,7 +30,7 @@ def test_namedarray_type_syntax():
 
 
 def test_named_param_annotation():
-    def foo(x: Named["batch", "embed"]):  # type: ignore
+    def foo(x: f32[NamedArray, "batch embed"]):  # type: ignore  # noqa: F722
         pass
 
     axes = typing.get_args(typing.get_type_hints(foo, include_extras=True)["x"])[1]
@@ -42,7 +42,7 @@ def test_namedarray_runtime_check():
     Embed = Axis("embed", 3)
     arr = NamedArray(jnp.zeros((Batch.size, Embed.size)), (Batch, Embed))
     assert arr.matches_axes(NamedArray["batch", "embed"])
-    assert arr.matches_axes(Named["batch embed"])  # type: ignore
+    assert arr.matches_axes(Named[NamedArray,"batch embed"])  # type: ignore
     assert arr.matches_axes(NamedArray["batch embed ..."])
     assert arr.matches_axes(NamedArray[{"batch", "embed"}])
     assert arr.matches_axes(NamedArray[{"batch", "embed", ...}])
@@ -60,5 +60,5 @@ def test_namedarray_runtime_check_with_dtype():
 def test_namedarray_runtime_check_with_category():
     B = Axis("batch", 1)
     arr = NamedArray(jnp.zeros((B.size,), dtype=jnp.float32), (B,))
-    assert arr.matches_axes(Float["batch"])  # type: ignore
-    assert not arr.matches_axes(Int["batch"])  # type: ignore
+    assert arr.matches_axes(Float[NamedArray, "batch"])  # type: ignore
+    assert not arr.matches_axes(Int[NamedArray, "batch"])  # type: ignore
