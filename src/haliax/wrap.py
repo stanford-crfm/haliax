@@ -1,11 +1,8 @@
-import typing
 from typing import Optional, Protocol
 
 import jax
-import jax.numpy as jnp
 
 from haliax.core import NamedArray, _broadcast_order, broadcast_to
-from haliax.jax_utils import is_scalarish
 
 from .axis import AxisSelection, AxisSelector, axis_spec_to_shape_dict, eliminate_axes
 

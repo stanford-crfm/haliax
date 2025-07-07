@@ -72,6 +72,11 @@ src_paths = ["src", "tests"]
 "Bug Tracker" = "https://github.com/stanford-crfm/haliax/issues/"
 "Documentation" = "https://haliax.readthedocs.io/en/latest/"
 
+[tool.ruff.lint]
+ignore = [ "E203", "E501", "W605", "F821", "E266", "F722", "E731", "E741" ]
+
+[tool.setuptools.package-data]
+"haliax" = ["*.pyi"]
 
 [tool.coverage.report]
 exclude_also = [

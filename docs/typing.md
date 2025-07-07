@@ -59,3 +59,19 @@ import haliax.typing as ht
 arr = zeros({"batch": 4})
 assert arr.matches_axes(ht.f32["batch"])  # dtype and axes both match
 ```
+
+
+## Inspiration
+
+This type annotation syntax is inspired by the excellent [`jaxtyping`](https://docs.kidger.site/jaxtyping/)
+library, which provides a similar approach for plain JAX arrays. Because Haliax has actual names,
+we can provide a more powerful and flexible syntax that works with known names and generic names.
+
+
+## FAQ
+
+### Why not use `NamedArray` directly in type annotations?
+
+Using `NamedArray` directly in type annotations is not recommended because it does not play nice with static type checkers like `mypy`.
+The `Named` syntax is designed to be compatible with type checkers, allowing them to understand the structure of the data
+without needing to resolve the actual `NamedArray` class at runtime. This makes it easier to catch type errors during development.
