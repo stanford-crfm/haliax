@@ -8,15 +8,12 @@ from typing import (
     Concatenate,
     Dict,
     Generic,
-    Literal,
     Optional,
     ParamSpec,
     Protocol,
     Sequence,
-    Tuple,
     Type,
     TypeVar,
-    Union,
     cast,
 )
 
@@ -221,7 +218,7 @@ class BlockSeq(ModuleWithStateDictSerialization, Generic[M]):
 
     @staticmethod
     def _slice_out(Block, i, x):
-        if haliax.is_named_array(x):
+        if isinstance(x, haliax.core.NamedArray):
             if haliax.selects_axis(x.axes, Block):
                 return x[Block, i]
             else:
@@ -443,7 +440,7 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
             else:
                 return tuple(x for _ in range(self.Block.size))
 
-        leaves, structure = jax.tree_util.tree_flatten(self.stacked, is_leaf=haliax.is_named_array)
+        leaves, structure = jax.tree_util.tree_flatten(self.stacked, is_leaf=haliax.util.is_named_array)
         unstacked_leaves = tuple(map(unbatch_leaf, leaves))
         # now we need to transpose the leaves
         unstacked_leaves = tuple(zip(*unstacked_leaves))
