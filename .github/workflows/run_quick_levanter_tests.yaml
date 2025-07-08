@@ -39,10 +39,11 @@ jobs:
         run: |
           uv pip install -e .[tests]
           uv pip install -e ../haliax
+          uv pip install pytest
 
       - name: Run pytest suite
         env:
           XLA_FLAGS: --xla_force_host_platform_device_count=8
           VIRTUAL_ENV: ${{ github.workspace }}/.venv
         run: |
-          pytest tests -m "not entry and not slow"
+          uv run pytest tests -m "not entry and not slow"
