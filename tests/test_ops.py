@@ -237,3 +237,117 @@ def test_reductions_produce_scalar_named_arrays_when_None_axis():
     # But if we specify axes, we always get a NamedArray, even if it's a scalar
     assert isinstance(hax.mean(named1, axis=("Height", "Width")), NamedArray)
     assert hax.mean(named1, axis=("Height", "Width")).axes == ()
+
+
+def test_norm():
+    H = Axis("H", 3)
+    W = Axis("W", 4)
+    D = Axis("D", 5)
+
+    x_array = jnp.arange(H.size * W.size * D.size, dtype=jnp.float32).reshape((H.size, W.size, D.size))
+    x_named = NamedArray(x_array, (H, W, D))
+
+    # Test case 1: Default ord, axis=None (vector 2-norm of flattened array)
+    norm_none_axis = hax.norm(x_named)
+    expected_none_axis = jnp.linalg.norm(x_array)
+    assert norm_none_axis.axes == ()
+    assert jnp.allclose(norm_none_axis.array, expected_none_axis)
+
+    # Test case 2: Vector norm (ord=1, axis=H)
+    norm_vec_h = hax.norm(x_named, ord=1, axis=H)
+    expected_vec_h = jnp.linalg.norm(x_array, ord=1, axis=0)
+    assert norm_vec_h.axes == (W, D)
+    assert jnp.allclose(norm_vec_h.array, expected_vec_h)
+
+    # Test case 3: Matrix norm (ord='fro', axis=(H, W))
+    norm_mat_hw = hax.norm(x_named, ord="fro", axis=(H, W))
+    expected_mat_hw = jnp.linalg.norm(x_array, ord="fro", axis=(0, 1))
+    assert norm_mat_hw.axes == (D,)
+    assert jnp.allclose(norm_mat_hw.array, expected_mat_hw)
+
+    # Test case 4: ord=inf, single axis W
+    norm_inf_w = hax.norm(x_named, ord=jnp.inf, axis=W)
+    expected_inf_w = jnp.linalg.norm(x_array, ord=jnp.inf, axis=1)
+    assert norm_inf_w.axes == (H, D)
+    assert jnp.allclose(norm_inf_w.array, expected_inf_w)
+
+    # Test case 5: Matrix norm (ord=2, axis=(W, D))
+    # For matrix ord=2 (largest singular value)
+    M = Axis("M", 4)
+    N = Axis("N", 5) # Non-square is fine for singular values
+    K = Axis("K", 3)
+    # Ensure non-zero values for more stable singular value computation if array contains zeros
+    y_array = jnp.arange(M.size * N.size * K.size, dtype=jnp.float32).reshape((M.size, N.size, K.size)) + 1.0
+    y_named = NamedArray(y_array, (M, N, K))
+
+    norm_mat_mn_ord2 = hax.norm(y_named, ord=2, axis=(M, N))
+    expected_mat_mn_ord2 = jnp.linalg.norm(y_array, ord=2, axis=(0, 1))
+    assert norm_mat_mn_ord2.axes == (K,)
+    # Relax tolerance for singular value computations as they can be sensitive
+    assert jnp.allclose(norm_mat_mn_ord2.array, expected_mat_mn_ord2, atol=1e-5, rtol=1e-5)
+
+
+    # Test case 6: Scalar input
+    scalar_array = jnp.array(5.0, dtype=jnp.float32)
+    scalar_named = NamedArray(scalar_array, ())
+    norm_scalar = hax.norm(scalar_named)
+    expected_scalar = jnp.linalg.norm(scalar_array)
+    assert norm_scalar.axes == ()
+    assert jnp.allclose(norm_scalar.array, expected_scalar)
+
+
+    # Test with string axis selectors
+    # Re-use expected_vec_h from Test Case 2
+    norm_vec_h_str = hax.norm(x_named, ord=1, axis="H")
+    assert norm_vec_h_str.axes == (W, D)
+    assert jnp.allclose(norm_vec_h_str.array, expected_vec_h)
+
+    # Re-use expected_mat_hw from Test Case 3
+    norm_mat_hw_str = hax.norm(x_named, ord="fro", axis=("H", "W"))
+    assert norm_mat_hw_str.axes == (D,)
+    assert jnp.allclose(norm_mat_hw_str.array, expected_mat_hw)
+
+    # Error cases for axis
+    with pytest.raises(ValueError, match="Axis 'MissingAxis' not found"):
+        hax.norm(x_named, axis="MissingAxis")
+
+    with pytest.raises(ValueError, match="Axis 'MissingAxis' not found"):
+        hax.norm(x_named, axis=(H, "MissingAxis"))
+
+    # New error cases for axis tuple length
+    with pytest.raises(ValueError, match="If `axis` is a tuple, it must contain 1 or 2 axes, but got 3."):
+        hax.norm(x_named, axis=(H, W, D))
+
+    with pytest.raises(ValueError, match="If `axis` is a tuple, it must contain 1 or 2 axes, but got 0."):
+        hax.norm(x_named, axis=())
+
+
+    # Test with a 1D array (vector)
+    V = Axis("V", 10)
+    v_array = jnp.arange(V.size, dtype=jnp.float32)
+    v_named = NamedArray(v_array, (V,))
+
+    # Default ord=2
+    norm_v_axis_none = hax.norm(v_named, axis=None)
+    expected_v_axis_none = jnp.linalg.norm(v_array)
+    assert norm_v_axis_none.axes == ()
+    assert jnp.allclose(norm_v_axis_none.array, expected_v_axis_none)
+
+    # Default ord=2, specific axis
+    norm_v_axis_v = hax.norm(v_named, axis=V)
+    expected_v_axis_v = jnp.linalg.norm(v_array, axis=0)
+    assert norm_v_axis_v.axes == ()
+    assert jnp.allclose(norm_v_axis_v.array, expected_v_axis_v)
+
+    # Test with tuple of one axis
+    norm_v_axis_tuple_v = hax.norm(v_named, axis=(V,))
+    assert norm_v_axis_tuple_v.axes == ()
+    assert jnp.allclose(norm_v_axis_tuple_v.array, expected_v_axis_v)
+
+
+    # Test case: 0-dim array (scalar already tested, but ensure consistency)
+    s_array = jnp.array(3.0)
+    s_named = NamedArray(s_array, ())
+    norm_s_ax_none = hax.norm(s_named, axis=None)
+    assert norm_s_ax_none.axes == ()
+    assert jnp.allclose(norm_s_ax_none.array, jnp.linalg.norm(s_array, axis=None))
