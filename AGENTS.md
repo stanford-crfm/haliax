@@ -12,11 +12,11 @@ repository. Follow these notes when implementing new features or fixing bugs.
   floating point tests, add that to the list.
 * **Playbooks.** Sometimes, there are repeatable tasks (e.g. porting models) for which we follow a standard set of steps.
   Please reference `.playbooks/` to see what playbooks are available, or see the list below. If you want to add a playbook
-  write a markdown doc named e.g. `.playbooks/port-models.md` and add a pointer to it in the list below.
+  write a markdown doc named e.g. `.playbooks/add-types.md` and add a pointer to it in the list below.
 
 ## Playbook
 
-- Adding Haliax-style tensor typing annotations are described in @.playbooks/add-typing.md
+- Adding Haliax-style tensor typing annotations are described in @.playbooks/add-types.md
 
 ## Code Style
 
@@ -44,7 +44,7 @@ repository. Follow these notes when implementing new features or fixing bugs.
 
 ## Testing
 
-* Tests are executed with `pytest`. The default workflow runs `uv run pytest tests`.
+* Tests are executed with `pytest`. The default workflow runs ` XLA_FLAGS=--xla_force_host_platform_device_count=8 PYTHONPATH=tests:src:. uv run pytest tests`.
 * In general, never relax tolerances in floating point tests unless specifically discussed with the
   team. Use `assert_allclose` with appropriate tolerances for numerical comparisons. We typically use
   1e-4 for more complex modules, and 1e-5 for simpler ones.
