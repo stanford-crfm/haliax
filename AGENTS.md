@@ -25,7 +25,8 @@ repository. Follow these notes when implementing new features or fixing bugs.
 * **Formatting and Linting**: We use `ruff` via `pre-commit`.
 * **Typing**: the code base uses `mypy` for static type checking. `mypy` is run by pre‑commit and the
   configuration is found in `pyproject.toml`.
-* **Run `pre-commit run --all-files`** before committing. The CI workflows run the same checks.
+* **Run `uv run pre-commit run --all-files`** before committing. The CI workflows run the same checks.
+* **Use `uv run` for commands.** When running tools like `pytest` or other scripts, invoke them via `uv run` so the development dependencies are active.
 * **Doc Strings**: All public functions, classes, and modules should have docstrings, unless
   their purpose is painfully obvious. Use
   [Google style](https://google.github.io/styleguide/pyguide.html#38-comments-and-docstrings) for
