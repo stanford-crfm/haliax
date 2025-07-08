@@ -246,6 +246,8 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
     output, while "scan" is the same as a for loop that accumulates a list of outputs as well as the final output.
 
     Stacked also supports gradient checkpointing, which is useful for very large models that don't fit in memory.
+    If your blocks are independent of each other you can instead use :py:meth:`Stacked.vmap`
+    to apply every block in parallel.
 
     Typically only one of "fold" or "scan" can be used with a given Stacked module, depending on the what the module
     returns: if the module returns a single output, use "fold"; if the module returns a sequence of outputs and
@@ -440,6 +442,35 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
             return haliax.scan(do_block, self.Block, remat=self.gradient_checkpointing)(init, self.stacked)
 
         return do_scan
+
+    def vmap(self, init, *extra_args, **extra_kwargs):
+        """Apply each block independently using :func:`haliax.vmap`.
+
+        This maps ``init`` through every block in parallel, so each block
+        receives the same ``init`` but its own parameters.  Extra ``args`` and
+        ``kwargs`` are also mapped over the block axis by default.
+
+        Returns the stacked outputs of each block.
+        """
+
+        if haliax.is_named_array(init):
+            init = init.broadcast_axis(self.Block)
+        elif haliax.jax_utils.is_jax_array_like(init):
+            init = jnp.broadcast_to(init, (self.Block.size,) + init.shape)
+        else:
+            init = tuple(init for _ in range(self.Block.size))
+
+        arg_spec = (0, 0) + (0,) * len(extra_args)
+        kwarg_spec = {k: 0 for k in extra_kwargs}
+
+        do_vmap = haliax.vmap(
+            Stacked._do_block,
+            self.Block,
+            default=0,
+            args=arg_spec,
+            kwargs=kwarg_spec,
+        )
+        return do_vmap(init, self.stacked, *extra_args, **extra_kwargs)
 
     @staticmethod
     def _do_block(carry, block, *extra_args, **extra_kwargs):
