@@ -16,8 +16,7 @@ repository. Follow these notes when implementing new features or fixing bugs.
 
 ## Playbook
 
-- At the moment, there are no playbooks available. If you have a repeatable task that you think
-  should be documented, please create a new markdown file in `.playbooks/` and add it to the list above.
+- Adding Haliax-style tensor typing annotations are described in @.playbooks/add-typing.md
 
 ## Code Style
 
@@ -58,6 +57,11 @@ repository. Follow these notes when implementing new features or fixing bugs.
 
 * **Generic code**: many utilities are written with Python generics and dataclasses. Where possible,
   write reusable functions or classes that operate over TypeVars instead of hard coding concrete types.
+* **Configurations**: configuration files are dataclasses loaded via `draccus`. Keep configs
+  declarative and typed.
+* **Reproducibility**: Levanter aims for deterministic training where possible. Avoid sources of
+  nondeterminism unless explicitly required.
+* Prefer Stacked with fold or scan over writing custom loops, for better compile times and gradient checkpointing support
 
 ## Library conventions
 - Haliax revolves around `NamedArray` and explicit `Axis` objects. Prefer APIs that accept
