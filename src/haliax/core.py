@@ -27,6 +27,7 @@ from .axis import (
     PartialShapeDict,
     ShapeDict,
     axis_name,
+    axis_spec_to_shape_dict,
     axis_spec_to_tuple,
     dslice,
     eliminate_axes,
@@ -1679,7 +1680,7 @@ def broadcast_to(
     all_axes = to_add + a.axes
 
     if enforce_no_extra_axes and len(all_axes) != len(axes):
-        raise ValueError(f"Cannot broadcast {a} to {axes}: extra axes present")
+        raise ValueError(f"Cannot broadcast {a.shape} to {axis_spec_to_shape_dict(axes)}: extra axes present")
 
     extra_axes = tuple(ax for ax in a.axes if ax not in axes)
 
