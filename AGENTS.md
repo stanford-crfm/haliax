@@ -45,12 +45,10 @@ repository. Follow these notes when implementing new features or fixing bugs.
 
 ## Testing
 
-* Tests are executed with `pytest`. The default workflow runs
-  `pytest tests -m "not entry and not slow and not ray"`.
+* Tests are executed with `pytest`. The default workflow runs `uv run pytest tests`.
 * In general, never relax tolerances in floating point tests unless specifically discussed with the
   team. Use `assert_allclose` with appropriate tolerances for numerical comparisons. We typically use
   1e-4 for more complex modules, and 1e-5 for simpler ones.
-* Tests should be reasonably fast. Mark long-running tests with @pytest.mark.slow so they are excluded from the default suite.
 * Always mark tests that depend on pytorch with `@skip_if_no_torch` to ensure they are skipped
   when PyTorch is not available. This is particularly important for tests that require PyTorch-specific
   functionality.
@@ -60,11 +58,6 @@ repository. Follow these notes when implementing new features or fixing bugs.
 
 * **Generic code**: many utilities are written with Python generics and dataclasses. Where possible,
   write reusable functions or classes that operate over TypeVars instead of hard coding concrete types.
-* **Configurations**: configuration files are dataclasses loaded via `draccus`. Keep configs
-  declarative and typed.
-* **Reproducibility**: Levanter aims for deterministic training where possible. Avoid sources of
-  nondeterminism unless explicitly required.
-* Prefer Stacked with fold or scan over writing custom loops, for better compile times and gradient checkpointing support
 
 ## Library conventions
 - Haliax revolves around `NamedArray` and explicit `Axis` objects. Prefer APIs that accept
