@@ -16,8 +16,7 @@ repository. Follow these notes when implementing new features or fixing bugs.
 
 ## Playbook
 
-- At the moment, there are no playbooks available. If you have a repeatable task that you think
-  should be documented, please create a new markdown file in `.playbooks/` and add it to the list above.
+- Adding Haliax-style tensor typing annotations are described in @.playbooks/add-typing.md
 
 ## Code Style
 
@@ -25,7 +24,8 @@ repository. Follow these notes when implementing new features or fixing bugs.
 * **Formatting and Linting**: We use `ruff` via `pre-commit`.
 * **Typing**: the code base uses `mypy` for static type checking. `mypy` is run by pre‑commit and the
   configuration is found in `pyproject.toml`.
-* **Run `pre-commit run --all-files`** before committing. The CI workflows run the same checks.
+* **Run `uv run pre-commit run --all-files`** before committing. The CI workflows run the same checks.
+* **Use `uv run` for commands.** When running tools like `pytest` or other scripts, invoke them via `uv run` so the development dependencies are active.
 * **Doc Strings**: All public functions, classes, and modules should have docstrings, unless
   their purpose is painfully obvious. Use
   [Google style](https://google.github.io/styleguide/pyguide.html#38-comments-and-docstrings) for
@@ -44,12 +44,10 @@ repository. Follow these notes when implementing new features or fixing bugs.
 
 ## Testing
 
-* Tests are executed with `pytest`. The default workflow runs
-  `pytest tests -m "not entry and not slow and not ray"`.
+* Tests are executed with `pytest`. The default workflow runs `uv run pytest tests`.
 * In general, never relax tolerances in floating point tests unless specifically discussed with the
   team. Use `assert_allclose` with appropriate tolerances for numerical comparisons. We typically use
   1e-4 for more complex modules, and 1e-5 for simpler ones.
-* Tests should be reasonably fast. Mark long-running tests with @pytest.mark.slow so they are excluded from the default suite.
 * Always mark tests that depend on pytorch with `@skip_if_no_torch` to ensure they are skipped
   when PyTorch is not available. This is particularly important for tests that require PyTorch-specific
   functionality.
