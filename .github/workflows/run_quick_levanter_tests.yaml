@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.10, 3.11]
+        python-version: ["3.10", "3.11"]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -39,10 +39,11 @@ jobs:
         run: |
           uv pip install -e .[tests]
           uv pip install -e ../haliax
+          uv pip install pytest
 
       - name: Run pytest suite
         env:
           XLA_FLAGS: --xla_force_host_platform_device_count=8
           VIRTUAL_ENV: ${{ github.workspace }}/.venv
         run: |
-          pytest tests -m "not entry and not slow"
+          uv run pytest tests -m "not entry and not slow"
