@@ -28,8 +28,8 @@ class Linear(ModuleWithStateDictSerialization):
     weight: NamedArray
     bias: Optional[NamedArray]
 
-    In: AxisSpec = eqx.static_field()
-    Out: AxisSpec = eqx.static_field()
+    In: AxisSpec = eqx.field(static=True)
+    Out: AxisSpec = eqx.field(static=True)
     dot_general: DotGeneralOp = eqx.field(default_factory=DotGeneralOp.default)
 
     @staticmethod
@@ -140,9 +140,9 @@ class MoELinear(eqx.Module):
     weight: NamedArray
     bias: Optional[NamedArray]
 
-    Experts: AxisSpec = eqx.static_field()
-    In: Axis = eqx.static_field()
-    Out: Axis = eqx.static_field()
+    Experts: AxisSpec = eqx.field(static=True)
+    In: Axis = eqx.field(static=True)
+    Out: Axis = eqx.field(static=True)
     # TODO: support quanitization for ragged_dot?
     # dot_general: DotGeneralOp = eqx.field(default_factory=DotGeneralOp.default)
 
