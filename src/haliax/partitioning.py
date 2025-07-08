@@ -10,7 +10,24 @@ import equinox as eqx
 import jax
 from equinox import is_array, module_update_wrapper
 from jax.lax import with_sharding_constraint
-from jax.sharding import Mesh, NamedSharding, PartitionSpec, SingleDeviceSharding
+from jax.sharding import (
+    Mesh,
+    NamedSharding,
+    PartitionSpec,
+    SingleDeviceSharding,
+)
+
+try:  # jax>=0.4.26
+    from jax.sharding import AbstractMesh, get_abstract_mesh
+except Exception:  # pragma: no cover - older JAX versions
+    AbstractMesh = Mesh  # type: ignore[misc,assignment]
+    def get_abstract_mesh():  # type: ignore[dead-code]
+        try:
+            from jax.interpreters.pxla import thread_resources
+        except Exception:
+            from jax.experimental.maps import thread_resources
+
+        return thread_resources.env.physical_mesh
 from jaxtyping import PyTree
 
 import haliax.tree_util as htu
@@ -604,10 +621,25 @@ def round_axis_for_partitioning(axis: Axis, mapping: Optional[ResourceMapping] =
         return Axis(axis.name, new_size)
 
 
-def _get_mesh() -> Mesh:
+def _get_mesh() -> Mesh | AbstractMesh:
+    """Return the current mesh.
+
+    On newer versions of JAX this prefers ``get_abstract_mesh`` which does not
+    capture concrete devices.  If no abstract mesh is currently active we fall
+    back to the concrete mesh used by ``Mesh``'s context manager so existing
+    code continues to work.
+    """
+
+    try:  # jax>=0.4.26
+        mesh = get_abstract_mesh()
+        if not getattr(mesh, "empty", False):
+            return mesh
+    except Exception:  # pragma: no cover - older JAX versions
+        pass
+
     try:
         from jax.interpreters.pxla import thread_resources
-    except ImportError:
+    except Exception:  # pragma: no cover - jax<0.4
         from jax.experimental.maps import thread_resources
 
     return thread_resources.env.physical_mesh

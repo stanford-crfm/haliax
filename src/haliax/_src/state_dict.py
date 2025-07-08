@@ -197,7 +197,7 @@ def from_state_dict(tree: T, state_dict: StateDict, prefix: Optional[str] = None
         if isinstance(array, np.ndarray):
             mesh = partitioning._get_mesh()
             # TODO: modernize this
-            if mesh.devices.size > 1:  # this happens with the default mesh
+            if jax.device_count() > 1:  # this happens with the default mesh
                 pspec = partitioning.pspec_for_axis(tree.axes)
                 sharding = jax.sharding.NamedSharding(mesh, pspec)
                 array = jax.make_array_from_callback(tree.array.shape, sharding, lambda indices: array[indices])
