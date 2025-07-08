@@ -15,6 +15,8 @@ from jaxtyping import PyTree
 
 import haliax.tree_util as htu
 from haliax._src.compile_utils import compile_cache
+import jax.tree_util as jtu
+from jax.experimental.shard_map import shard_map as jax_shard_map
 
 from .axis import Axis, AxisSelection, AxisSelector, axis_spec_to_shape_dict
 from .core import NamedArray
@@ -604,6 +606,123 @@ def round_axis_for_partitioning(axis: Axis, mapping: Optional[ResourceMapping] =
         return Axis(axis.name, new_size)
 
 
+def shard_map(
+    f: Callable,
+    *,
+    in_specs: Optional[PyTree] = None,
+    out_specs,
+    mesh: Optional[Mesh] = None,
+    axis_mapping: Optional[ResourceMapping] = None,
+    check_rep: bool = False,
+    **kwargs,
+):
+    """A NamedArray-friendly wrapper around :func:`jax.experimental.shard_map.shard_map`.
+
+    If ``in_specs`` is not provided, it will be inferred from the axes of the
+    ``NamedArray`` arguments when the returned function is called. ``out_specs``
+    must be provided as either ``PartitionSpec`` objects or axis specifications
+    (``Axis`` or ``Sequence[Axis]``).
+    """
+
+    mesh = mesh or _get_mesh()
+
+    def _axes(spec):
+        if isinstance(spec, NamedArray):
+            return spec.axes
+        elif isinstance(spec, Axis):
+            return spec
+        elif isinstance(spec, Sequence) and all(isinstance(ax, Axis) for ax in spec):
+            return tuple(spec)
+        else:
+            return None
+
+    def _pspec(spec):
+        if isinstance(spec, (PartitionSpec, NamedSharding)) or spec is None:
+            return spec
+        axes = _axes(spec)
+        if axes is None:
+            return spec
+        return pspec_for_axis(axes, axis_mapping)
+
+    if in_specs is not None:
+        arg_axes = jtu.tree_map(_axes, in_specs, is_leaf=lambda x: isinstance(x, NamedArray))
+        part_in_specs = jtu.tree_map(_pspec, in_specs, is_leaf=lambda x: isinstance(x, NamedArray))
+    else:
+        arg_axes = None  # will be computed from call-time args
+        part_in_specs = None
+    out_axes = jtu.tree_map(_axes, out_specs, is_leaf=lambda x: isinstance(x, NamedArray))
+    part_out_specs = jtu.tree_map(_pspec, out_specs, is_leaf=lambda x: isinstance(x, NamedArray))
+
+    def _build_sm_fn(arg_axes_flat, arg_treedef):
+        part_leaves = [pspec_for_axis(ax, axis_mapping) if ax is not None else None for ax in arg_axes_flat]
+        part_in_local = jtu.tree_unflatten(arg_treedef, part_leaves)
+
+        def inner(*arrays):
+            arr_flat, arr_tree = jtu.tree_flatten(arrays)
+
+            def wrap_arg(a, ax):
+                if ax is None:
+                    return a
+                axes = ax if isinstance(ax, tuple) else (ax,)
+                return NamedArray(a, axes)
+
+            named_args_flat = [wrap_arg(a, ax) for a, ax in zip(arr_flat, arg_axes_flat)]
+            named_args = jtu.tree_unflatten(arr_tree, named_args_flat)
+            result = f(*named_args)
+            return jtu.tree_map(
+                lambda r: r.array if isinstance(r, NamedArray) else r,
+                result,
+                is_leaf=lambda x: isinstance(x, NamedArray),
+            )
+
+        return jax_shard_map(
+            inner,
+            mesh=mesh,
+            in_specs=part_in_local,
+            out_specs=part_out_specs,
+            check_rep=check_rep,
+            **kwargs,
+        )
+
+    if in_specs is not None:
+        arg_leaves, arg_treedef = jtu.tree_flatten(arg_axes, is_leaf=lambda x: isinstance(x, Axis) or isinstance(x, tuple))
+        sm_fn_static = _build_sm_fn(arg_leaves, arg_treedef)
+    else:
+        sm_fn_static = None
+
+    def wrapper(*args):
+        arrays = jtu.tree_map(
+            lambda a: a.array if isinstance(a, NamedArray) else a,
+            args,
+            is_leaf=lambda x: isinstance(x, NamedArray),
+        )
+
+        if in_specs is None:
+            arr_leaves, arg_treedef = jtu.tree_flatten(
+                args, is_leaf=lambda x: isinstance(x, NamedArray)
+            )
+            arg_axes_flat = [a.axes if isinstance(a, NamedArray) else None for a in arr_leaves]
+            sm_fn = _build_sm_fn(arg_axes_flat, arg_treedef)
+        else:
+            sm_fn = sm_fn_static
+
+        out = sm_fn(*arrays)
+
+        out_flat, out_tree = jtu.tree_flatten(out)
+        ax_out_flat, _ = jtu.tree_flatten(out_axes)
+
+        def wrap_out(a, ax):
+            if ax is None:
+                return a
+            axes = ax if isinstance(ax, tuple) else (ax,)
+            return NamedArray(a, axes)
+
+        wrapped_out = [wrap_out(a, ax) for a, ax in zip(out_flat, ax_out_flat)]
+        return jtu.tree_unflatten(out_tree, wrapped_out)
+
+    return wrapper
+
+
 def _get_mesh() -> Mesh:
     try:
         from jax.interpreters.pxla import thread_resources
@@ -630,6 +749,7 @@ __all__ = [
     "infer_resource_partitions",
     "named_jit",
     "fsdp",
+    "shard_map",
     "physical_axis_name",
     "pspec_for_axis",
     "round_axis_for_partitioning",
