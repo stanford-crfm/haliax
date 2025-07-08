@@ -5,7 +5,7 @@ import typing
 import jax.numpy as jnp
 
 from haliax import Axis, NamedArray
-from haliax.typing import Float, Int, f32, i32
+from haliax.haxtyping import Float, Int, f32, i32
 
 
 def test_dtype_and_axes_annotation():

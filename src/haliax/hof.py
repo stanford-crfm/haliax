@@ -23,7 +23,7 @@ from .axis import Axis, AxisSelection, AxisSelector, axis_spec_to_shape_dict, ax
 from .core import NamedArray
 from .jax_utils import Static, broadcast_prefix, is_jax_array_like
 from .partitioning import physical_axis_name
-from .util import ensure_tuple, is_named_array
+from .util import is_named_array
 
 
 def vmap(

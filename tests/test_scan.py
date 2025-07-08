@@ -45,6 +45,30 @@ def test_unstacked():
         assert hax.all(module.array == m.stacked.array[i])
 
 
+def test_vmap():
+    class Module(eqx.Module):
+        weight: hax.NamedArray
+
+        def __call__(self, x):
+            return x + self.weight
+
+        @staticmethod
+        def init(weight):
+            return Module(weight=weight)
+
+    Block = hax.Axis("block", 4)
+    E = hax.Axis("E", 10)
+
+    weights = hax.random.uniform(jax.random.PRNGKey(0), (Block, E))
+    m = Stacked.init(Block, Module)(weight=weights)
+
+    x = hax.random.uniform(jax.random.PRNGKey(1), (E,))
+    y = m.vmap(x)
+
+    assert y.axes == (Block, E)
+    assert hax.all(y == weights + x)
+
+
 def test_seq_and_stacked_give_same_results():
     class Module(eqx.Module):
         named: hax.NamedArray
@@ -285,3 +309,58 @@ def test_checkpoint_carries(name, policy, expected_scan_shapes, check_offloading
 
             assert target is not None, f"Could not find named value for {name}"
             assert found_saved, f"Could not find offloaded value for {name}"
+
+
+def test_fold_via():
+    class Module(eqx.Module):
+        w: hax.NamedArray
+
+        def __call__(self, x):
+            return x + self.w
+
+        def intermediate(self, x):
+            return x + 2 * self.w
+
+        @staticmethod
+        def init(named):
+            return Module(w=named)
+
+    Block = hax.Axis("block", 3)
+    E = hax.Axis("E", 5)
+
+    named = hax.random.uniform(jax.random.PRNGKey(0), (Block, E))
+    m = Stacked.init(Block, Module)(named=named)
+
+    x = hax.random.uniform(jax.random.PRNGKey(1), (E,))
+    result = m.fold_via(Module.intermediate)(x)
+
+    expected = x + 2 * hax.sum(named, Block)
+    assert hax.all(hax.isclose(result, expected))
+
+
+def test_scan_via():
+    class Module(eqx.Module):
+        w: hax.NamedArray
+
+        def with_output(self, x):
+            out = x + self.w
+            return out, 2 * self.w
+
+        @staticmethod
+        def init(named):
+            return Module(w=named)
+
+    Block = hax.Axis("block", 4)
+    E = hax.Axis("E", 6)
+
+    named = hax.random.uniform(jax.random.PRNGKey(0), (Block, E))
+    m = Stacked.init(Block, Module)(named=named)
+
+    x = hax.random.uniform(jax.random.PRNGKey(1), (E,))
+    carry, outs = m.scan_via(Module.with_output)(x)
+
+    expected_carry = x + hax.sum(named, Block)
+    expected_outs = 2 * named
+
+    assert hax.all(hax.isclose(carry, expected_carry))
+    assert hax.all(hax.isclose(outs, expected_outs))

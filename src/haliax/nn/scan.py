@@ -2,7 +2,7 @@ import dataclasses
 import functools
 import re
 import warnings
-from typing import Any, Dict, Generic, Literal, Optional, Protocol, Sequence, Type, TypeVar, Union, cast
+from typing import Any, Callable, Dict, Generic, Optional, Protocol, Sequence, Type, TypeVar, cast, overload, ParamSpec
 
 import equinox as eqx
 import jax
@@ -20,8 +20,21 @@ from ..axis import Axis
 
 M = TypeVar("M", bound=eqx.Module)
 M_co = TypeVar("M_co", bound=eqx.Module, covariant=True)
+M_contra = TypeVar("M_contra", bound=eqx.Module, contravariant=True)
 S = TypeVar("S", bound=eqx.Module)
 T = TypeVar("T")
+CarryT = TypeVar("CarryT")
+OutputT_co = TypeVar("OutputT_co", covariant=True)
+P = ParamSpec("P")
+
+class FoldFunction(Protocol[M_contra, CarryT]):
+    def __call__(self, module: M_contra, carry: CarryT) -> CarryT:
+        ...
+
+
+class ScanFunction(Protocol[M_contra, CarryT, OutputT_co]):
+    def __call__(self, module: M_contra, carry: CarryT) -> tuple[CarryT, OutputT_co]:
+        ...
 
 
 class ModuleInit(Protocol[M_co]):
@@ -169,7 +182,7 @@ class BlockSeq(ModuleWithStateDictSerialization, Generic[M]):
 
     @staticmethod
     def _slice_out(Block, i, x):
-        if haliax.is_named_array(x):
+        if isinstance(x, haliax.core.NamedArray):
             if haliax.selects_axis(x.axes, Block):
                 return x[Block, i]
             else:
@@ -233,6 +246,8 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
     output, while "scan" is the same as a for loop that accumulates a list of outputs as well as the final output.
 
     Stacked also supports gradient checkpointing, which is useful for very large models that don't fit in memory.
+    If your blocks are independent of each other you can instead use :py:meth:`Stacked.vmap`
+    to apply every block in parallel.
 
     Typically only one of "fold" or "scan" can be used with a given Stacked module, depending on the what the module
     returns: if the module returns a single output, use "fold"; if the module returns a sequence of outputs and
@@ -382,6 +397,81 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
 
         return do_fold(init, *args, **kwargs)
 
+    @overload
+    def fold_via(self, fn: FoldFunction[M, CarryT]) -> Callable[[CarryT], CarryT]:
+        ...
+
+    @overload
+    def fold_via(self, fn: Callable[[M, CarryT], CarryT]) -> Callable[[CarryT], CarryT]:
+        ...
+
+    def fold_via(self, fn: Callable[..., CarryT]):
+        """Return a function that folds over the stack using ``fn``.
+
+        ``fn`` should take a block and a carry and return a new carry.  The
+        returned function mirrors :func:`haliax.fold` over the block axis.
+        """
+
+        def do_block(carry: CarryT, block: M) -> CarryT:
+            return fn(block, carry)
+
+        def do_fold(init: CarryT) -> CarryT:
+            return haliax.fold(do_block, self.Block, remat=self.gradient_checkpointing)(init, self.stacked)
+
+        return do_fold
+
+    @overload
+    def scan_via(self, fn: ScanFunction[M, CarryT, OutputT_co]) -> Callable[[CarryT], tuple[CarryT, OutputT_co]]:
+        ...
+
+    @overload
+    def scan_via(self, fn: Callable[[M, CarryT], tuple[CarryT, OutputT_co]]) -> Callable[[CarryT], tuple[CarryT, OutputT_co]]:
+        ...
+
+    def scan_via(self, fn: Callable[..., tuple[CarryT, OutputT_co]]):
+        """Return a function that scans over the stack using ``fn``.
+
+        ``fn`` should take a block and a carry and return ``(carry, output)``.
+        Semantics match :func:`haliax.scan` over the block axis.
+        """
+
+        def do_block(carry: CarryT, block: M) -> tuple[CarryT, OutputT_co]:
+            return fn(block, carry)
+
+        def do_scan(init: CarryT) -> tuple[CarryT, OutputT_co]:
+            return haliax.scan(do_block, self.Block, remat=self.gradient_checkpointing)(init, self.stacked)
+
+        return do_scan
+
+    def vmap(self, init, *extra_args, **extra_kwargs):
+        """Apply each block independently using :func:`haliax.vmap`.
+
+        This maps ``init`` through every block in parallel, so each block
+        receives the same ``init`` but its own parameters.  Extra ``args`` and
+        ``kwargs`` are also mapped over the block axis by default.
+
+        Returns the stacked outputs of each block.
+        """
+
+        if haliax.is_named_array(init):
+            init = init.broadcast_axis(self.Block)
+        elif haliax.jax_utils.is_jax_array_like(init):
+            init = jnp.broadcast_to(init, (self.Block.size,) + init.shape)
+        else:
+            init = tuple(init for _ in range(self.Block.size))
+
+        arg_spec = (0, 0) + (0,) * len(extra_args)
+        kwarg_spec = {k: 0 for k in extra_kwargs}
+
+        do_vmap = haliax.vmap(
+            Stacked._do_block,
+            self.Block,
+            default=0,
+            args=arg_spec,
+            kwargs=kwarg_spec,
+        )
+        return do_vmap(init, self.stacked, *extra_args, **extra_kwargs)
+
     @staticmethod
     def _do_block(carry, block, *extra_args, **extra_kwargs):
         return block(carry, *extra_args, **extra_kwargs)
@@ -411,7 +501,7 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
             else:
                 return tuple(x for _ in range(self.Block.size))
 
-        leaves, structure = jax.tree_util.tree_flatten(self.stacked, is_leaf=haliax.is_named_array)
+        leaves, structure = jax.tree_util.tree_flatten(self.stacked, is_leaf=haliax.util.is_named_array)
         unstacked_leaves = tuple(map(unbatch_leaf, leaves))
         # now we need to transpose the leaves
         unstacked_leaves = tuple(zip(*unstacked_leaves))

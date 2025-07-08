@@ -55,7 +55,6 @@ We don't provide an explicit attention module, but we do provide an attention fu
 
 :::haliax.nn.attention.dot_product_attention
 :::haliax.nn.attention.dot_product_attention_weights
-:::haliax.nn.attention.self_attention
 
 ### Masks
 ::: haliax.nn.attention.causal_mask

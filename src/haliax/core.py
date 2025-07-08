@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import contextlib
 import functools as ft
 import typing
@@ -32,7 +34,6 @@ from .axis import (
     selects_axis,
 )
 from .types import GatherScatterModeStr, IntScalar, PrecisionLike, Scalar
-
 
 NamedOrNumeric = Union[Scalar, "NamedArray"]
 NamedIndex = Union[int, slice_t, "NamedArray", dslice, list[int], jnp.ndarray]
@@ -180,19 +181,6 @@ def _parse_namedarray_axes(
         else:
             return NamedArrayAxes(tuple(before_list), (), ordered=True, subset=False)
     raise TypeError(f"Invalid NamedArray typing spec: {item}")
-
-
-class Named:
-    """Type annotation helper for :class:`NamedArray`.
-
-    ``Named["batch embed"]`` expands to ``Annotated[NamedArray, axes]`` so that
-    type checkers treat it as a ``NamedArray`` at static time while the axis
-    metadata is available at runtime via :func:`typing.get_args`.
-    """
-
-    def __class_getitem__(cls, item: NamedArrayAxesSpec) -> typing.Any:
-        axes = _parse_namedarray_axes(item)
-        return typing.Annotated[NamedArray, axes]
 
 
 class NamedArrayMeta(type):
@@ -2113,7 +2101,6 @@ def _convert_index_expr_to_dict(idx) -> dict[AxisSelector, NamedIndex]:
 __all__ = [
     "NamedArrayAxesSpec",
     "NamedArrayAxes",
-    "Named",
     "NamedArray",
     "named",
     "slice",
