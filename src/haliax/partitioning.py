@@ -622,17 +622,27 @@ def round_axis_for_partitioning(axis: Axis, mapping: Optional[ResourceMapping] =
 
 
 def _get_mesh() -> Mesh | AbstractMesh:
-    """Return the current abstract mesh if available."""
+    """Return the current mesh.
+
+    On newer versions of JAX this prefers ``get_abstract_mesh`` which does not
+    capture concrete devices.  If no abstract mesh is currently active we fall
+    back to the concrete mesh used by ``Mesh``'s context manager so existing
+    code continues to work.
+    """
+
+    try:  # jax>=0.4.26
+        mesh = get_abstract_mesh()
+        if not getattr(mesh, "empty", False):
+            return mesh
+    except Exception:  # pragma: no cover - older JAX versions
+        pass
 
     try:
-        return get_abstract_mesh()
-    except Exception:  # pragma: no cover - older JAX versions
-        try:
-            from jax.interpreters.pxla import thread_resources
-        except Exception:
-            from jax.experimental.maps import thread_resources
+        from jax.interpreters.pxla import thread_resources
+    except Exception:  # pragma: no cover - jax<0.4
+        from jax.experimental.maps import thread_resources
 
-        return thread_resources.env.physical_mesh
+    return thread_resources.env.physical_mesh
 
 
 def _is_jit_tracer(x) -> bool:
