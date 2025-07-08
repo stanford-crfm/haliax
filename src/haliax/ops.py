@@ -11,8 +11,8 @@ from .jax_utils import is_scalarish
 
 def trace(array: NamedArray, axis1: AxisSelector, axis2: AxisSelector, offset=0, dtype=None) -> NamedArray:
     """Compute the trace of an array along two named axes."""
-    a1_index = array._lookup_indices(axis1)
-    a2_index = array._lookup_indices(axis2)
+    a1_index = array.axis_indices(axis1)
+    a2_index = array.axis_indices(axis2)
 
     if a1_index is None:
         raise ValueError(f"Axis {axis1} not found in array. Available axes: {array.axes}")
@@ -139,7 +139,7 @@ def pad_left(array: NamedArray, axis: Axis, new_axis: Axis, value=0) -> NamedArr
     if amount_to_pad_to < 0:
         raise ValueError(f"Cannot pad {axis} to {new_axis}")
 
-    idx = array._lookup_indices(axis)
+    idx = array.axis_indices(axis)
 
     padding = [(0, 0)] * array.ndim
     if idx is None:

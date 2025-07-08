@@ -4,7 +4,6 @@ import warnings
 from typing import Dict, Optional, Tuple
 
 import jax
-import jax.numpy as jnp
 
 import haliax
 from haliax.axis import (
@@ -12,6 +11,7 @@ from haliax.axis import (
     AxisSelection,
     PartialAxisSpec,
     axis_name,
+    axis_spec_to_shape_dict,
     eliminate_axes,
     rearrange_for_partial_order,
     union_axes,
@@ -19,7 +19,6 @@ from haliax.axis import (
 from haliax.core import NamedArray
 from haliax.jax_utils import _jittable_dg_einsum
 from haliax.types import DTypeLike, PrecisionLike
-from haliax.util import ensure_tuple
 
 
 # deprecated overload
@@ -140,8 +139,8 @@ def dot(
     if axis is None:
         jax_str = f"contract {', '.join(axis_name(ax) for ax in all_axes)} -> <scalar>"
     else:
-        axis = ensure_tuple(axis)
-        jax_str = f"contract {', '.join(axis_name(ax) for ax in axis)} -> {', '.join(a.name for a in output_axes)}"
+        axis = axis_spec_to_shape_dict(axis)
+        jax_str = f"contract {', '.join(axis)} -> {', '.join(a.name for a in output_axes)}"
 
     with jax.named_scope(jax_str):
         output = _jittable_dg_einsum(

@@ -8,10 +8,9 @@ from jaxtyping import PRNGKeyArray
 
 import haliax
 import haliax.random as hrandom
-from haliax.axis import Axis, AxisSelection, AxisSelector, AxisSpec, axis_name
+from haliax.axis import Axis, AxisSelection, AxisSelector, AxisSpec, axis_name, axis_spec_to_shape_dict
 from haliax.core import NamedArray
 from haliax.types import PrecisionLike
-from haliax.util import ensure_tuple
 
 
 # With attention, we usually distinguish between the mask and the bias, though the former is just a special case of the
@@ -108,10 +107,11 @@ def dot_product_attention(
             f"query must be a NamedArray, got {type(query)}. Probably you are still using the old signature"
             "of dot_product_attention. It no longer takes a QPos argument."
         )
-    KPos = ensure_tuple(key.resolve_axis(KPos))
+    KPos = axis_spec_to_shape_dict(KPos)
+    KPos = key.resolve_axis(KPos)
     # any axis in KPos that's in query is a problem
     for axis in KPos:
-        if axis in query.axes:
+        if query.has_axis(axis):
             raise ValueError(
                 f"Axis {axis} in KPos is also in query. Attended-to axes must be distinct from query axis"
             )
@@ -121,56 +121,6 @@ def dot_product_attention(
     )
 
     return haliax.dot(weights, value, axis=KPos)
-
-
-def self_attention(
-    Pos: AxisSelection,
-    Key: AxisSelector,
-    query: NamedArray,
-    key: NamedArray,
-    value: NamedArray,
-    is_causal: bool,  # make people be explicit about this
-    mask: Optional[NamedArray] = None,
-    bias: Optional[NamedArray] = None,
-    attention_dtype: Optional[jnp.dtype] = None,
-    precision: PrecisionLike = None,
-) -> NamedArray:
-    """
-    Convenience function for self attention. This is just a wrapper around dot_product_attention that makes sure
-    the query and key axes are distinct. This is a common mistake and it's better to catch it early.
-
-    Note that mask and bias's Pos axis/axes should be key axes, not query axes. You can't use
-    query axes in a mask/bias with this method. Use dot_product_attention directly if you need to do that.
-    As an exception, if is_causal is True, then we create a causal mask for you.
-
-    Args:
-        Pos: Axis of sequence length
-        Key: Axis of head dimension
-        query: NamedArray of shape {..., Pos, KeySize}
-        key: NamedArray of shape {..., Pos, KeySize}
-        value: NamedArray of shape {..., Pos, KeySize}
-        is_causal: whether to use a causal mask
-        mask: Optional[NamedArray] broadcast compatible with (KeySize, Pos, Pos). Should be boolean
-        bias: Optional[NamedArray] broadcast compatible with (KeySize, Pos, Pos). Should be float
-        attention_dtype: Optional dtype to use for attention
-        precision: PrecisionLike for dot product. See precision argument to jax.lax.dot_general
-    """
-    Pos = ensure_tuple(key.resolve_axis(Pos))
-
-    # rename key/value length axes if necessary
-    QPos, renames = _get_query_pos_renames(Pos)
-
-    query = query.rename(renames)
-
-    if is_causal:
-        # require that QPos is a single axis
-        if len(Pos) != 1:
-            raise ValueError("QPos must be a single axis for causal self attention")
-        mask = causal_mask(QPos[0], Pos[0])
-
-    out = dot_product_attention(Pos, Key, query, key, value, mask, bias, attention_dtype, precision)
-    # now rename back
-    return out.rename({v: k for k, v in renames.items()})
 
 
 def _get_query_pos_renames(Pos):

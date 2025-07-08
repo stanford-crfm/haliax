@@ -1,15 +1,12 @@
-import jax.numpy as jnp
 import numpy as np
 from jax.random import PRNGKey
 
 import haliax as hax
 from haliax.nn.attention import (
     alibi_attention_bias,
-    causal_mask,
     dot_product_attention,
     dot_product_attention_weights,
     forgetful_causal_mask,
-    self_attention,
 )
 from test_utils import skip_if_no_torch
 
@@ -47,26 +44,6 @@ def test_attention_doesnt_allow_overlapping_axes():
         assert "must be distinct" in str(e)
     else:
         raise AssertionError("Should have raised an error")
-
-
-def test_self_attention_basically_works():
-    Pos = hax.Axis("Pos", 20)
-    KeyPos = hax.Axis("Pos_key", 20)
-    NumHeads = hax.Axis("NumHeads", 1)
-    Hid = hax.Axis("Hid", 8)
-
-    query = hax.ones((NumHeads, Pos, Hid))
-
-    result = self_attention(Pos, Hid, query, query, query, is_causal=True)
-    assert result.axes == (NumHeads, Pos, Hid)
-
-    k = query.rename({Pos: KeyPos})
-    cmask = causal_mask(Pos, KeyPos)
-    result2 = dot_product_attention(KeyPos, Hid, query, k, k, mask=cmask)
-    assert result2.axes == (NumHeads, Pos, Hid)
-
-    # tight tolerances because it should be exactly the same computation
-    assert jnp.allclose(result.array, result2.array)
 
 
 def test_alibi_attention_bias():

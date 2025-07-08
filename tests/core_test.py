@@ -1,11 +1,11 @@
-import equinox as eqx
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 from jax.random import PRNGKey
 
 import haliax as hax
-from haliax import Axis, NamedArray
+from haliax import Axis, NamedArray, updated_slice
 
 
 def test_unary_np_functions():
@@ -488,7 +488,9 @@ def test_index():
 
     named1 = hax.random.uniform(PRNGKey(0), (H, W, D))
 
-    assert jnp.all(jnp.equal(hax.index(named1, {"H": slice(0, 10, 2)}).array, named1.array[0:10:2, :, :]))  # type: ignore
+    assert jnp.all(
+        jnp.equal(hax.index(named1, {"H": slice(0, 10, 2)}).array, named1.array[0:10:2, :, :])
+    )  # type: ignore
     assert hax.index(named1, {"H": slice(0, 10, 2)}).axes == (Axis("H", 5), W, D)  # type: ignore
 
     # try indexing syntax
@@ -603,3 +605,125 @@ def test_slice_nd_array_present_dims():
     assert jnp.all(jnp.equal(named1[{"H": index1}].array, named1.array[index1.array, :, :]))
 
     # this is not ok, since the H would not be eliminated
+
+
+def test_broadcast_to():
+    H, W, D = hax.make_axes(H=10, W=20, D=30)
+
+    named1 = hax.random.uniform(PRNGKey(0), (H, W, D))
+
+    assert jnp.all(jnp.equal(hax.broadcast_to(named1, (H, W, D)).array, named1.array))
+
+    ZZ = Axis("ZZ", 5)
+
+    assert jnp.all(jnp.equal(hax.broadcast_to(named1, (H, W, D, ZZ)).array, named1.array.reshape(10, 20, 30, 1)))
+
+
+def test_at_set():
+    # tests the at/set syntax, similar to test_index but with jax-style modifications
+    HWD = {"H": 10, "W": 20, "D": 30}
+    WD = {"W": 20, "D": 30}
+
+    named1 = hax.random.uniform(PRNGKey(0), HWD)
+    named2 = hax.random.uniform(PRNGKey(1), HWD)["H", 0:10:2]
+
+    wd_only = hax.random.uniform(PRNGKey(2), WD)
+
+    # set a slice
+    r1 = named1.at["H", slice(0, 10, 2)].set(named2)
+
+    assert jnp.all(jnp.equal(r1.array, named1.array.at[0:10:2, :, :].set(named2.array)))
+
+    r2 = named1.at["H", slice(0, 10, 2)].add(named2)
+
+    assert jnp.all(jnp.equal(r2.array, named1.array.at[0:10:2, :, :].add(named2.array)))
+
+    r3 = named1.at["H", slice(0, 10, 2)].mul(named2)
+
+    assert jnp.all(jnp.equal(r3.array, named1.array.at[0:10:2, :, :].mul(named2.array)))
+
+    # set a single axis
+    r4 = named1.at["H", :].set(wd_only)
+
+    assert jnp.all(jnp.equal(r4.array, named1.array.at[:, :, :].set(wd_only.array)))
+
+
+def test_scalar_updated_slice():
+    # Base case: scalar start on a 1D array
+    Seq = hax.Axis("seq", 5)
+    arr = hax.arange((Seq,), dtype=int)
+    # replace positions 2 and 3 with [100, 101]
+    upd = hax.named([100, 101], "seq")
+
+    result = updated_slice(arr, {"seq": 2}, upd)
+    # expect [0,1,100,101,4]
+    assert np.array_equal(result.array, np.array([0, 1, 100, 101, 4]))
+
+
+def test_ragged_single_token():
+    # Ragged case: one token per batch at different positions
+    Batch = hax.Axis("batch", 3)
+    Seq = hax.Axis("seq", 5)
+    cache = hax.zeros((Batch, Seq), dtype=int)
+
+    # lengths[b] is next free slot for batch b
+    lengths = hax.named([0, 1, 2], axis=Batch)
+    new_k = hax.named([7, 8, 9], axis=Batch)
+
+    result = updated_slice(cache, {"seq": lengths}, new_k)
+
+    # build expected NumPy array
+    exp = np.zeros((3, 5), int)
+    exp[0, 0] = 7
+    exp[1, 1] = 8
+    exp[2, 2] = 9
+
+    assert np.array_equal(result.array, exp)
+
+
+def test_ragged_multi_token():
+    # Ragged case: a block of 2 tokens per batch at different positions
+    Batch = hax.Axis("batch", 2)
+    Seq = hax.Axis("seq", 5)
+    New = hax.Axis("seq", 2)
+
+    cache = hax.zeros((Batch, Seq), dtype=int)
+    lengths = hax.named([1, 3], axis=Batch)
+    # for batch=0 insert [1,2] at pos=1, for batch=1 insert [3,4] at pos=3
+    kv = hax.named([[1, 2], [3, 4]], axis=(Batch, New))
+
+    result = updated_slice(cache, {"seq": lengths}, kv)
+
+    exp = np.zeros((2, 5), int)
+    exp[0, 1] = 1
+    exp[0, 2] = 2
+    exp[1, 3] = 3
+    exp[1, 4] = 4
+
+    assert np.array_equal(result.array, exp)
+
+
+def test_ragged_multi_token_bad_axis_name():
+    # Ragged case: a block of 2 tokens per batch at different positions
+    Batch = hax.Axis("batch", 2)
+    Seq = hax.Axis("seq", 5)
+    New = hax.Axis("new", 2)
+
+    cache = hax.zeros((Batch, Seq), dtype=int)
+    lengths = hax.named([1, 3], axis=Batch)
+    # for batch=0 insert [1,2] at pos=1, for batch=1 insert [3,4] at pos=3
+    kv = hax.named([[1, 2], [3, 4]], axis=(Batch, New))
+
+    with pytest.raises(ValueError, match="that are not in the original array with shape "):
+        updated_slice(cache, {"seq": lengths}, kv)
+
+
+def test_update_overflow_error():
+    # Overflow: scalar start + update too large for axis → ValueError
+    Seq = hax.Axis("seq", 4)
+    arr = hax.zeros((Seq,), dtype=int)
+    # update of length 3 starting at pos=2 would run off the end (2+3 > 4)
+    upd = hax.arange((hax.Axis("seq", 3),), dtype=int)
+
+    with pytest.raises(ValueError):
+        updated_slice(arr, {"seq": 2}, upd)

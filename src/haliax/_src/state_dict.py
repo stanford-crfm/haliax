@@ -15,8 +15,7 @@ from jaxtyping import PyTree
 
 import haliax.partitioning as partitioning
 from haliax._src.util import index_where
-from haliax.axis import Axis
-from haliax.core import NamedArray, flatten_axes, named
+from haliax.core import NamedArray, named
 from haliax.jax_utils import is_jax_array_like, is_scalarish
 from haliax.tree_util import scan_aware_tree_map
 
@@ -209,12 +208,14 @@ def from_state_dict(tree: T, state_dict: StateDict, prefix: Optional[str] = None
             array = named(array, tree.axes)
             array = partitioning.auto_sharded(array)
 
-        return array
+        return array  # type: ignore
     elif is_jax_array_like(tree):
         if prefix is None:
             raise ValueError("Cannot extract a leaf value from a state dict without a prefix")
         # TODO: add "strict" flag so we can return None in cases where it's just missing
         return jnp.array(state_dict[prefix])
+    elif tree is None:
+        return None  # type: ignore
     else:
         if prefix is None:
             return tree
