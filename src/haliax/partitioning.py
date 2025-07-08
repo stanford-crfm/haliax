@@ -10,7 +10,24 @@ import equinox as eqx
 import jax
 from equinox import is_array, module_update_wrapper
 from jax.lax import with_sharding_constraint
-from jax.sharding import Mesh, NamedSharding, PartitionSpec, SingleDeviceSharding
+from jax.sharding import (
+    Mesh,
+    NamedSharding,
+    PartitionSpec,
+    SingleDeviceSharding,
+)
+
+try:  # jax>=0.4.26
+    from jax.sharding import AbstractMesh, get_abstract_mesh
+except Exception:  # pragma: no cover - older JAX versions
+    AbstractMesh = Mesh  # type: ignore[misc,assignment]
+    def get_abstract_mesh():  # type: ignore[dead-code]
+        try:
+            from jax.interpreters.pxla import thread_resources
+        except Exception:
+            from jax.experimental.maps import thread_resources
+
+        return thread_resources.env.physical_mesh
 from jaxtyping import PyTree
 
 import haliax.tree_util as htu
@@ -604,13 +621,18 @@ def round_axis_for_partitioning(axis: Axis, mapping: Optional[ResourceMapping] =
         return Axis(axis.name, new_size)
 
 
-def _get_mesh() -> Mesh:
-    try:
-        from jax.interpreters.pxla import thread_resources
-    except ImportError:
-        from jax.experimental.maps import thread_resources
+def _get_mesh() -> Mesh | AbstractMesh:
+    """Return the current abstract mesh if available."""
 
-    return thread_resources.env.physical_mesh
+    try:
+        return get_abstract_mesh()
+    except Exception:  # pragma: no cover - older JAX versions
+        try:
+            from jax.interpreters.pxla import thread_resources
+        except Exception:
+            from jax.experimental.maps import thread_resources
+
+        return thread_resources.env.physical_mesh
 
 
 def _is_jit_tracer(x) -> bool:
