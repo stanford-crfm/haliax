@@ -24,14 +24,14 @@ jobs:
           cd ..
           git clone https://github.com/stanford-crfm/levanter.git
           cd levanter
-          pip install -e .[tests]
-          pip install -r tests/requirements.txt
           # i don't know why this is necessary
-          pip install tensorboardX
+          pip install uv
+          uv install -e .[dev] --system
       - name: Install Haliax on top
         run: |
           # install second since levanter will install a built version of haliax
           cd ../haliax
+          uv install -e .[dev] --system
       - name: Test levanter with pytest
         run: |
           cd ../levanter
