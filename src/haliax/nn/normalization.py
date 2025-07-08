@@ -20,10 +20,10 @@ A = TypeVar("A", Scalar, NamedArray, jnp.ndarray)
 
 
 class LayerNormBase(ModuleWithStateDictSerialization):
-    axis: AxisSpec = eqx.static_field()
+    axis: AxisSpec = eqx.field(static=True)
     weight: Optional[NamedArray]
     bias: Optional[NamedArray]
-    eps: float = eqx.static_field(default=1e-5)
+    eps: float = eqx.field(default=1e-5, static=True)
     dtype: Optional[jnp.dtype] = eqx.field(default=None, static=True)
 
     @abstractmethod
