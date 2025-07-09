@@ -458,7 +458,9 @@ We also provide a way to create a sequence of layers that can be applied to a se
 same interface as [haliax.nn.Stacked][], but with a different implementation. This is the [haliax.nn.BlockSeq][] module.
 BlockSeq implements those for loops directly, rather than using [haliax.fold][] or [haliax.scan][].
 
-[haliax.nn.scan.BlockFoldable][] is an interface that both [haliax.nn.Stacked][] and [haliax.nn.BlockSeq][] implement.
+[haliax.nn.scan.BlockFoldable][] is an interface that both [haliax.nn.Stacked][] and [haliax.nn.BlockSeq][] implement. It
+exposes the usual ``fold`` and ``scan`` methods as well as helpers ``fold_via`` and ``scan_via`` which return
+callables that perform the respective operations using a custom block function.
 
 ## API
 
