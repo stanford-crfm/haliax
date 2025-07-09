@@ -32,8 +32,8 @@ class FoldFunction(Protocol[M_contra, CarryT]):
         ...
 
 
-class ScanFunction(Protocol[M_contra, CarryT, OutputT_co]):
-    def __call__(self, module: M_contra, carry: CarryT) -> tuple[CarryT, OutputT_co]:
+class ScanFunction(Protocol[M_contra, CarryT, P, OutputT_co]):
+    def __call__(self, module: M_contra, carry: CarryT, *args: P.args, **kwargs: P.kwargs) -> tuple[CarryT, OutputT_co]:
         ...
 
 
@@ -421,7 +421,7 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
         return do_fold
 
     @overload
-    def scan_via(self, fn: ScanFunction[M, CarryT, OutputT_co]) -> Callable[[CarryT], tuple[CarryT, OutputT_co]]:
+    def scan_via(self, fn: ScanFunction[M, CarryT, P, OutputT_co]) -> Callable[[CarryT], tuple[CarryT, OutputT_co]]:
         ...
 
     @overload
@@ -436,10 +436,12 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
         """
 
         def do_block(carry: CarryT, block: M) -> tuple[CarryT, OutputT_co]:
-            return fn(block, carry)
+            carry, output = fn(block, carry)
+            return carry, output
 
-        def do_scan(init: CarryT) -> tuple[CarryT, OutputT_co]:
-            return haliax.scan(do_block, self.Block, remat=self.gradient_checkpointing)(init, self.stacked)
+
+        def do_scan(init: CarryT, *args, **kwargs) -> tuple[CarryT, OutputT_co]:
+            return haliax.scan(do_block, self.Block, remat=self.gradient_checkpointing)(init, self.stacked, *args, **kwargs)
 
         return do_scan
 
