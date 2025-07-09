@@ -44,12 +44,13 @@ class ModuleInit(Protocol[M_co]):
 
 
 class BlockFoldable(Protocol[M]):
-    """
-    A superclass for [haliax.nn.Stacked][] and [haliax.nn.BlockSeq][] that exposes the fold and scan methods, as
-    well as a few other methods that are useful for these modules.
+    """Common interface for :class:`~haliax.nn.Stacked` and :class:`~haliax.nn.BlockSeq`.
 
-    This is a protocol, so you can use it as a type hint for a function that takes a Stacked or BlockSeq.
-    Equinox modules can't directly inherit from Protocols, but you can use it as a type hint.
+    The interface exposes the :py:meth:`fold` and :py:meth:`scan` methods along with the helper
+    methods :py:meth:`fold_via` and :py:meth:`scan_via`.
+
+    This is a protocol, so you can use it as a type hint for a function that takes a ``Stacked`` or ``BlockSeq``.
+    Equinox modules can't directly inherit from ``Protocol`` classes, but you can use it as a type hint.
     """
 
     Block: Axis
@@ -69,6 +70,28 @@ class BlockFoldable(Protocol[M]):
         ...
 
     def fold(self, init: T, *args, **kwargs) -> T:
+        ...
+
+    @overload
+    def fold_via(self, fn: FoldFunction[M, CarryT]) -> Callable[[CarryT], CarryT]:
+        ...
+
+    @overload
+    def fold_via(self, fn: Callable[[M, CarryT], CarryT]) -> Callable[[CarryT], CarryT]:
+        ...
+
+    def fold_via(self, fn: Callable[..., CarryT]) -> Callable[[CarryT], CarryT]:
+        ...
+
+    @overload
+    def scan_via(self, fn: ScanFunction[M, CarryT, OutputT_co]) -> Callable[[CarryT], tuple[CarryT, OutputT_co]]:
+        ...
+
+    @overload
+    def scan_via(self, fn: Callable[[M, CarryT], tuple[CarryT, OutputT_co]]) -> Callable[[CarryT], tuple[CarryT, OutputT_co]]:
+        ...
+
+    def scan_via(self, fn: Callable[..., tuple[CarryT, OutputT_co]]) -> Callable[[CarryT], tuple[CarryT, OutputT_co]]:
         ...
 
     def unstacked(self) -> Sequence[M]:
@@ -177,6 +200,59 @@ class BlockSeq(ModuleWithStateDictSerialization, Generic[M]):
             return carry
 
         return do_fold(init, *args, **kwargs)
+
+    @overload
+    def fold_via(self, fn: FoldFunction[M, CarryT]) -> Callable[[CarryT], CarryT]:
+        ...
+
+    @overload
+    def fold_via(self, fn: Callable[[M, CarryT], CarryT]) -> Callable[[CarryT], CarryT]:
+        ...
+
+    def fold_via(self, fn: Callable[..., CarryT]):
+        """Return a function that folds over the sequence using ``fn``.
+
+        ``fn`` should take a block and a carry and return a new carry. The
+        returned function mirrors :func:`haliax.fold` over the block axis.
+        """
+
+        def do_fold(init: CarryT) -> CarryT:
+            carry = init
+            for block in self.blocks:
+                carry = fn(block, carry)
+                carry = tree_checkpoint_name(carry, self._carry_ckpt_name)
+            return carry
+
+        return do_fold
+
+    @overload
+    def scan_via(self, fn: ScanFunction[M, CarryT, OutputT_co]) -> Callable[[CarryT], tuple[CarryT, OutputT_co]]:
+        ...
+
+    @overload
+    def scan_via(self, fn: Callable[[M, CarryT], tuple[CarryT, OutputT_co]]) -> Callable[[CarryT], tuple[CarryT, OutputT_co]]:
+        ...
+
+    def scan_via(self, fn: Callable[..., tuple[CarryT, OutputT_co]]):
+        """Return a function that scans over the sequence using ``fn``.
+
+        ``fn`` should take a block and a carry and return ``(carry, output)``.
+        Semantics match :func:`haliax.scan` over the block axis.
+        """
+
+        def do_scan(init: CarryT) -> tuple[CarryT, OutputT_co]:
+            out = []
+            carry = init
+            for block in self.blocks:
+                carry, extra = fn(block, carry)
+                carry = tree_checkpoint_name(carry, self._carry_ckpt_name)
+                extra = tree_checkpoint_name(extra, self._output_ckpt_name)
+                out.append(extra)
+
+            stacked_out = haliax.tree_util.tree_map(lambda *x: haliax.stack(self.Block, x), *out)
+            return carry, stacked_out
+
+        return do_scan
 
     def unstacked(self) -> Sequence[M]:
         return self.blocks
