@@ -413,16 +413,16 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
         returned function mirrors :func:`haliax.fold` over the block axis.
         """
 
-        def do_block(carry: CarryT, block: M) -> CarryT:
-            return fn(block, carry)
+        def do_block(carry: CarryT, block: M, *args, **kwargs) -> CarryT:
+            return fn(block, carry, *args, **kwargs)
 
-        def do_fold(init: CarryT) -> CarryT:
-            return haliax.fold(do_block, self.Block, remat=self.gradient_checkpointing)(init, self.stacked)
+        def do_fold(init: CarryT, *args, **kwargs) -> CarryT:
+            return haliax.fold(do_block, self.Block, remat=self.gradient_checkpointing)(init, self.stacked, *args, **kwargs)
 
         return do_fold
 
     @overload
-    def scan_via(self, fn: ScanFunction[M, CarryT, P, OutputT_co]) -> Callable[[CarryT], tuple[CarryT, OutputT_co]]:
+    def scan_via(self, fn: ScanFunction[M, CarryT, P, OutputT_co]) -> Callable[Concatenate[CarryT, P], tuple[CarryT, OutputT_co]]:
         ...
 
     @overload
@@ -436,8 +436,8 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
         Semantics match :func:`haliax.scan` over the block axis.
         """
 
-        def do_block(carry: CarryT, block: M) -> tuple[CarryT, OutputT_co]:
-            carry, output = fn(block, carry)
+        def do_block(carry: CarryT, block: M, *args, **kwargs) -> tuple[CarryT, OutputT_co]:
+            carry, output = fn(block, carry, *args, **kwargs)
             return carry, output
 
 

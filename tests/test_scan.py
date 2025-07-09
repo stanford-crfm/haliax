@@ -364,3 +364,204 @@ def test_scan_via():
 
     assert hax.all(hax.isclose(carry, expected_carry))
     assert hax.all(hax.isclose(outs, expected_outs))
+
+
+def test_scan_via_multi_args():
+    class Module(eqx.Module):
+        w: hax.NamedArray
+
+        def with_output(self, x, y, z, *, static1, static2):
+            assert static1 is True
+            assert static2 is False
+            out = x + self.w + y + z
+            return out, 2 * self.w + y
+
+        @staticmethod
+        def init(named):
+            return Module(w=named)
+
+    Block = hax.Axis("block", 4)
+    E = hax.Axis("E", 6)
+
+    named = hax.random.uniform(jax.random.PRNGKey(0), (Block, E))
+    m = Stacked.init(Block, Module)(named=named)
+
+    x = hax.random.uniform(jax.random.PRNGKey(1), (E,))
+    y = hax.random.uniform(jax.random.PRNGKey(2), (E,))
+    z = 3.0  # scalar that shouldn't be scanned
+
+    carry, outs = m.scan_via(Module.with_output)(x, y, z, static1=True, static2=False)
+
+    # compute expected values via a reference Python loop
+    expected_carry = x
+    expected_outs_list = []
+    for i in range(Block.size):
+        expected_outs_list.append(2 * named["block", i] + y)
+        expected_carry = expected_carry + named["block", i] + y + z
+
+    expected_outs = hax.stack(Block, expected_outs_list)
+
+    assert hax.all(hax.isclose(carry, expected_carry))
+    assert hax.all(hax.isclose(outs, expected_outs))
+
+
+def test_scan_via_static_args():
+    class Module(eqx.Module):
+        w: hax.NamedArray
+
+        def with_output(self, x, static1, *, static2):
+            assert static1 == 1.0
+            assert static2 is False
+            out = x + self.w + static1
+            return out, 2 * self.w
+
+        @staticmethod
+        def init(named):
+            return Module(w=named)
+
+    Block = hax.Axis("block", 4)
+    E = hax.Axis("E", 6)
+
+    named = hax.random.uniform(jax.random.PRNGKey(0), (Block, E))
+    m = Stacked.init(Block, Module)(named=named)
+
+    x = hax.random.uniform(jax.random.PRNGKey(1), (E,))
+
+    carry, outs = m.scan_via(Module.with_output)(x, 1.0, static2=False)
+
+    expected_carry = x
+    expected_outs_list = []
+    for i in range(Block.size):
+        expected_outs_list.append(2 * named["block", i])
+        expected_carry = expected_carry + named["block", i] + 1.0  # True -> 1.0
+
+    expected_outs = hax.stack(Block, expected_outs_list)
+
+    assert hax.all(hax.isclose(carry, expected_carry))
+    assert hax.all(hax.isclose(outs, expected_outs))
+
+
+def test_scan_via_doesnt_scan_scalars():
+    class Module(eqx.Module):
+        w: hax.NamedArray
+
+        def with_output(self, x, scalar):
+            out = x + self.w + scalar
+            return out, x * scalar
+
+        @staticmethod
+        def init(named):
+            return Module(w=named)
+
+    Block = hax.Axis("block", 4)
+    E = hax.Axis("E", 6)
+
+    named = hax.random.uniform(jax.random.PRNGKey(0), (Block, E))
+    m = Stacked.init(Block, Module)(named=named)
+
+    x = hax.random.uniform(jax.random.PRNGKey(1), (E,))
+    scalar = 4.0
+
+    carry, outs = m.scan_via(Module.with_output)(x, scalar)
+
+    expected_carry = x
+    expected_outs_list = []
+    for i in range(Block.size):
+        expected_outs_list.append(expected_carry * scalar)
+        expected_carry = expected_carry + named["block", i] + scalar
+
+    expected_outs = hax.stack(Block, expected_outs_list)
+
+    assert hax.all(hax.isclose(carry, expected_carry))
+    assert hax.all(hax.isclose(outs, expected_outs))
+
+
+def test_fold_via_multi_args():
+    class Module(eqx.Module):
+        w: hax.NamedArray
+
+        def intermediate(self, x, y, z, *, static1, static2):
+            assert static1 is True
+            assert static2 is False
+            return x + 2 * self.w + y + z
+
+        @staticmethod
+        def init(named):
+            return Module(w=named)
+
+    Block = hax.Axis("block", 3)
+    E = hax.Axis("E", 5)
+
+    named = hax.random.uniform(jax.random.PRNGKey(0), (Block, E))
+    m = Stacked.init(Block, Module)(named=named)
+
+    x = hax.random.uniform(jax.random.PRNGKey(1), (E,))
+    y = hax.random.uniform(jax.random.PRNGKey(2), (E,))
+    z = 3.0  # scalar that shouldn't be scanned
+
+    result = m.fold_via(Module.intermediate)(x, y, z, static1=True, static2=False)
+
+    expected = x
+    for i in range(Block.size):
+        expected = expected + 2 * named["block", i] + y + z
+
+    assert hax.all(hax.isclose(result, expected))
+
+
+def test_fold_via_static_args():
+    class Module(eqx.Module):
+        w: hax.NamedArray
+
+        def intermediate(self, x, static1, *, static2):
+            assert static1 is True
+            assert static2 is False
+            return x + 2 * self.w + static1
+
+        @staticmethod
+        def init(named):
+            return Module(w=named)
+
+    Block = hax.Axis("block", 3)
+    E = hax.Axis("E", 5)
+
+    named = hax.random.uniform(jax.random.PRNGKey(0), (Block, E))
+    m = Stacked.init(Block, Module)(named=named)
+
+    x = hax.random.uniform(jax.random.PRNGKey(1), (E,))
+
+    result = m.fold_via(Module.intermediate)(x, True, static2=False)
+
+    expected = x
+    for i in range(Block.size):
+        expected = expected + 2 * named["block", i] + 1.0
+
+    assert hax.all(hax.isclose(result, expected))
+
+
+def test_fold_via_doesnt_reduce_scalars():
+    class Module(eqx.Module):
+        w: hax.NamedArray
+
+        def intermediate(self, x, scalar):
+            return x + 2 * self.w + scalar
+
+        @staticmethod
+        def init(named):
+            return Module(w=named)
+
+    Block = hax.Axis("block", 3)
+    E = hax.Axis("E", 5)
+
+    named = hax.random.uniform(jax.random.PRNGKey(0), (Block, E))
+    m = Stacked.init(Block, Module)(named=named)
+
+    x = hax.random.uniform(jax.random.PRNGKey(1), (E,))
+    scalar = 4.0
+
+    result = m.fold_via(Module.intermediate)(x, scalar)
+
+    expected = x
+    for i in range(Block.size):
+        expected = expected + 2 * named["block", i] + scalar
+
+    assert hax.all(hax.isclose(result, expected))
