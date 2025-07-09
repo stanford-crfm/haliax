@@ -2,7 +2,8 @@ import dataclasses
 import functools
 import re
 import warnings
-from typing import Any, Callable, Dict, Generic, Optional, Protocol, Sequence, Type, TypeVar, cast, overload, ParamSpec
+from typing import Any, Callable, Concatenate, Dict, Generic, Optional, Protocol, Sequence, Type, TypeVar, cast, \
+    overload, ParamSpec
 
 import equinox as eqx
 import jax
@@ -27,8 +28,8 @@ CarryT = TypeVar("CarryT")
 OutputT_co = TypeVar("OutputT_co", covariant=True)
 P = ParamSpec("P")
 
-class FoldFunction(Protocol[M_contra, CarryT]):
-    def __call__(self, module: M_contra, carry: CarryT) -> CarryT:
+class FoldFunction(Protocol[M_contra, P, CarryT]):
+    def __call__(self, module: M_contra, carry: CarryT, *args: P.args, **kwargs: P.kwargs) -> CarryT:
         ...
 
 
@@ -398,7 +399,7 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
         return do_fold(init, *args, **kwargs)
 
     @overload
-    def fold_via(self, fn: FoldFunction[M, CarryT]) -> Callable[[CarryT], CarryT]:
+    def fold_via(self, fn: FoldFunction[M, P, CarryT]) -> Callable[Concatenate[CarryT, P], CarryT]:
         ...
 
     @overload
