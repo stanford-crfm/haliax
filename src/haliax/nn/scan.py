@@ -91,8 +91,8 @@ class BlockSeq(ModuleWithStateDictSerialization, Generic[M]):
     """
 
     blocks: Sequence[M]
-    Block: Axis = eqx.static_field()
-    gradient_checkpointing: ScanCheckpointPolicy = eqx.static_field()
+    Block: Axis = eqx.field(static=True)
+    gradient_checkpointing: ScanCheckpointPolicy = eqx.field(static=True)
 
     @classmethod
     def init(
@@ -280,8 +280,8 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
     # TODO: we can probably make this module support pipeline parallelism, but that's a whole project in itself
 
     stacked: M
-    Block: Axis = eqx.static_field()
-    gradient_checkpointing: ScanCheckpointPolicy = eqx.static_field()
+    Block: Axis = eqx.field(static=True)
+    gradient_checkpointing: ScanCheckpointPolicy = eqx.field(static=True)
 
     @classmethod
     def init(

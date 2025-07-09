@@ -61,8 +61,8 @@ class Dropout(eqx.Module):
     """
 
     # key difference from equinox: these are static fields
-    pdrop: float = eqx.static_field()
-    broadcast_axes: Optional[AxisSpec] = eqx.static_field()
+    pdrop: float = eqx.field(static=True)
+    broadcast_axes: Optional[AxisSpec] = eqx.field(static=True)
     inference: bool = False  # note: not static
 
     def __init__(

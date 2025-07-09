@@ -17,8 +17,8 @@ class Embedding(eqx.Module):
     weight: NamedArray
 
     # axes
-    Vocab: Axis = eqx.static_field()
-    Embed: AxisSpec = eqx.static_field()
+    Vocab: Axis = eqx.field(static=True)
+    Embed: AxisSpec = eqx.field(static=True)
 
     @staticmethod
     def init(Vocab: Axis, Embed: AxisSpec, *, init_scale: float = 1, key, initializer_range: Optional[float] = None):
