@@ -155,7 +155,7 @@ def combine_masks_or(mask1: Optional[NamedArray], mask2: Optional[NamedArray]) -
     return mask1 | mask2.broadcast_axis(mask1.axes)
 
 
-def causal_mask(QPos: Axis, KPos: Axis, q_start: int = 0, k_start: int = 0) -> NamedArray:
+def causal_mask(QPos: Axis, KPos: Axis, q_start: int | NamedArray = 0, k_start: int  | NamedArray= 0) -> NamedArray:
     """
     Creates a materialized causal mask for attention.
 
@@ -163,7 +163,18 @@ def causal_mask(QPos: Axis, KPos: Axis, q_start: int = 0, k_start: int = 0) -> N
     :param KPos: Axis of key sequence length
     :return: NamedArray of shape (QPos, KPos)
     """
-    return haliax.arange(QPos, start=q_start) >= haliax.arange(KPos, start=k_start).broadcast_axis(QPos)
+    # if q_start is a named array, we vmap the arange
+    if isinstance(q_start, NamedArray):
+        q_range = haliax.vmap(haliax.arange, q_start.axes)(QPos, start=q_start)
+    else:
+        q_range = haliax.arange(QPos, start=q_start)
+
+    if isinstance(k_start, NamedArray):
+        k_range = haliax.vmap(haliax.arange, k_start.axes)(KPos, start=k_start)
+    else:
+        k_range = haliax.arange(KPos, start=k_start)
+
+    return q_range >= k_range.broadcast_axis(QPos)
 
 
 def prefix_lm_mask(QSeqLen: Axis, KSeqLen: Axis, prefix_len: int, q_start: int = 0, k_start: int = 0) -> NamedArray:

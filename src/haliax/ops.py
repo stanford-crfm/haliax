@@ -85,6 +85,8 @@ def where(
                 raise ValueError("x must be a NamedArray or scalar if y is a NamedArray")
             x = named(x, ())
         x, y = broadcast_arrays(x, y)
+        if isinstance(condition, NamedArray):
+            condition = condition.scalar()
         return jax.lax.cond(condition, lambda _: x, lambda _: y, None)
 
     condition, x, y = broadcast_arrays(condition, x, y)  # type: ignore
