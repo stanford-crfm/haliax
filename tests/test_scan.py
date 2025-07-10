@@ -565,3 +565,200 @@ def test_fold_via_doesnt_reduce_scalars():
         expected = expected + 2 * named["block", i] + scalar
 
     assert hax.all(hax.isclose(result, expected))
+
+
+def test_vmap_via():
+    class Module(eqx.Module):
+        w: hax.NamedArray
+
+        def transform(self, x):
+            return x + self.w
+
+        @staticmethod
+        def init(named):
+            return Module(w=named)
+
+    Block = hax.Axis("block", 4)
+    E = hax.Axis("E", 6)
+
+    named = hax.random.uniform(jax.random.PRNGKey(0), (Block, E))
+    m = Stacked.init(Block, Module)(named=named)
+
+    x = hax.random.uniform(jax.random.PRNGKey(1), (E,))
+    outs = m.vmap_via(Module.transform)(x)
+
+    expected_outs = x + named
+
+    assert hax.all(hax.isclose(outs, expected_outs))
+
+
+def test_vmap_via_multi_args():
+    class Module(eqx.Module):
+        w: hax.NamedArray
+
+        def transform(self, x, y, z, *, static1, static2):
+            assert static1 is True
+            assert static2 is False
+            return x + self.w + y + z
+
+        @staticmethod
+        def init(named):
+            return Module(w=named)
+
+    Block = hax.Axis("block", 4)
+    E = hax.Axis("E", 6)
+
+    named = hax.random.uniform(jax.random.PRNGKey(0), (Block, E))
+    m = Stacked.init(Block, Module)(named=named)
+
+    x = hax.random.uniform(jax.random.PRNGKey(1), (E,))
+    y = hax.random.uniform(jax.random.PRNGKey(2), (E,))
+    z = 3.0  # scalar that shouldn't be vmapped
+
+    outs = m.vmap_via(Module.transform)(x, y, z, static1=True, static2=False)
+
+    expected_outs = x + named + y + z
+
+    assert hax.all(hax.isclose(outs, expected_outs))
+
+
+def test_vmap_via_static_args():
+    class Module(eqx.Module):
+        w: hax.NamedArray
+
+        def transform(self, x, static1, *, static2):
+            assert static1 == 1.0
+            assert static2 is False
+            return x + self.w + static1
+
+        @staticmethod
+        def init(named):
+            return Module(w=named)
+
+    Block = hax.Axis("block", 4)
+    E = hax.Axis("E", 6)
+
+    named = hax.random.uniform(jax.random.PRNGKey(0), (Block, E))
+    m = Stacked.init(Block, Module)(named=named)
+
+    x = hax.random.uniform(jax.random.PRNGKey(1), (E,))
+
+    outs = m.vmap_via(Module.transform)(x, 1.0, static2=False)
+
+    expected_outs = x + named + 1.0
+
+    assert hax.all(hax.isclose(outs, expected_outs))
+
+
+def test_vmap_via_doesnt_vmap_scalars():
+    class Module(eqx.Module):
+        w: hax.NamedArray
+
+        def transform(self, x, scalar):
+            return x + self.w + scalar
+
+        @staticmethod
+        def init(named):
+            return Module(w=named)
+
+    Block = hax.Axis("block", 4)
+    E = hax.Axis("E", 6)
+
+    named = hax.random.uniform(jax.random.PRNGKey(0), (Block, E))
+    m = Stacked.init(Block, Module)(named=named)
+
+    x = hax.random.uniform(jax.random.PRNGKey(1), (E,))
+    scalar = 4.0
+
+    outs = m.vmap_via(Module.transform)(x, scalar)
+
+    expected_outs = x + named + scalar
+
+    assert hax.all(hax.isclose(outs, expected_outs))
+
+
+def test_vmap_via_blockseq():
+    class Module(eqx.Module):
+        w: hax.NamedArray
+
+        def transform(self, x):
+            return x + self.w
+
+        @staticmethod
+        def init(named):
+            return Module(w=named)
+
+    Block = hax.Axis("block", 4)
+    E = hax.Axis("E", 6)
+
+    named = hax.random.uniform(jax.random.PRNGKey(0), (Block, E))
+    m = BlockSeq.init(Block, Module)(named=named)
+
+    x = hax.random.uniform(jax.random.PRNGKey(1), (E,))
+    outs = m.vmap_via(Module.transform)(x)
+
+    expected_outs = x + named
+
+    assert hax.all(hax.isclose(outs, expected_outs))
+
+
+def test_vmap_via_blockseq_multi_args():
+    class Module(eqx.Module):
+        w: hax.NamedArray
+
+        def transform(self, x, y, z, *, static1, static2):
+            assert static1 is True
+            assert static2 is False
+            return x + self.w + y + z
+
+        @staticmethod
+        def init(named):
+            return Module(w=named)
+
+    Block = hax.Axis("block", 4)
+    E = hax.Axis("E", 6)
+
+    named = hax.random.uniform(jax.random.PRNGKey(0), (Block, E))
+    m = BlockSeq.init(Block, Module)(named=named)
+
+    x = hax.random.uniform(jax.random.PRNGKey(1), (E,))
+    y = hax.random.uniform(jax.random.PRNGKey(2), (E,))
+    z = 3.0  # scalar that shouldn't be vmapped
+
+    outs = m.vmap_via(Module.transform)(x, y, z, static1=True, static2=False)
+
+    expected_outs = x + named + y + z
+
+    assert hax.all(hax.isclose(outs, expected_outs))
+
+
+def test_vmap_via_consistency():
+    """Test that vmap_via gives the same results as vmap for Stacked."""
+    class Module(eqx.Module):
+        w: hax.NamedArray
+
+        def transform(self, x):
+            return x + self.w
+
+        def __call__(self, x):
+            return self.transform(x)
+
+        @staticmethod
+        def init(named):
+            return Module(w=named)
+
+    Block = hax.Axis("block", 4)
+    E = hax.Axis("E", 6)
+
+    named = hax.random.uniform(jax.random.PRNGKey(0), (Block, E))
+    m = Stacked.init(Block, Module)(named=named)
+
+    x = hax.random.uniform(jax.random.PRNGKey(1), (E,))
+
+    # Test vmap_via
+    outs_via = m.vmap_via(Module.transform)(x)
+
+    # Test direct vmap
+    outs_direct = m.vmap(x)
+
+    assert hax.all(hax.isclose(outs_via, outs_direct))
