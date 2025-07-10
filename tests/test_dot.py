@@ -31,7 +31,7 @@ def test_dot():
     # reduce to scalar
     assert jnp.all(
         jnp.equal(
-            hax.dot(m1, m2, axis=None),
+            hax.dot(m1, m2, axis=None).array,
             jnp.einsum("ijk,kji->", m1.array, m2.array),
         )
     )

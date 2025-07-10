@@ -5,6 +5,7 @@ import jax
 from haliax.core import NamedArray, _broadcast_order, broadcast_to
 
 from .axis import AxisSelection, AxisSelector, axis_spec_to_shape_dict, eliminate_axes
+from .jax_utils import is_scalarish
 
 
 def wrap_elemwise_unary(f, a, *args, **kwargs):
@@ -94,8 +95,33 @@ def wrap_elemwise_binary(op):
             b = broadcast_to(b, axes)
             return NamedArray(op(a.array, b.array), axes)
         elif isinstance(a, NamedArray):
+            # b isn't named.
+            if not is_scalarish(a):
+                if not is_scalarish(b):
+                    raise ValueError(
+                        f"Cannot apply {op.__name__} to a NamedArray and a non-scalar {type(b)}. "
+                        "Either both must be NamedArrays or b must be a scalar."
+                    )
+            else:
+                if is_scalarish(b):
+                    return NamedArray(op(a.array, b), a.axes)
+                a = a.scalar()
+                return op(a, b)
+
             return NamedArray(op(a.array, b), a.axes)
         elif isinstance(b, NamedArray):
+            if not is_scalarish(b):
+                if not is_scalarish(a):
+                    raise ValueError(
+                        f"Cannot apply {op.__name__} to a non-scalar {type(a)} and a NamedArray. "
+                        "Either both must be NamedArrays or a must be a scalar."
+                    )
+            else:
+                if is_scalarish(a):
+                    return NamedArray(op(a, b.array), b.axes)
+                b = b.scalar()
+                return op(a, b)
+
             return NamedArray(op(a, b.array), b.axes)
         else:
             return op(a, b)

@@ -32,7 +32,7 @@ def test_resize_axis():
     assert module2.name3.axes == (NewA,)
 
     # we don't mess with the mean or std of the original array too much
-    assert jnp.allclose(module2.name1.mean(), module.name1.mean(), rtol=1e-1, atol=1e-2)
+    assert jnp.allclose(module2.name1.mean().array, module.name1.mean().array, rtol=1e-1, atol=1e-2)
 
 
 def test_scan_aware_tree_map():

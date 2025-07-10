@@ -79,7 +79,7 @@ def test_scan_doesnt_scan_scalars():
     named1 = hax.random.uniform(PRNGKey(0), (Height,))
 
     def scan_fun(acc, z, x):
-        return acc + z * x, x * z
+        return (acc + z * x).scalar(), x * z
 
     total, selected = hax.scan(scan_fun, Height)(0.0, 4.0, named1)
 

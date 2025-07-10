@@ -241,15 +241,15 @@ class NamedArray(metaclass=NamedArrayMeta):
             raise ValueError(f"Expected scalar, got {self.array.ndim}-dimensional array")
         return self.array
 
-    def __jax_array__(self):
-        if self.ndim == 0:
-            return self.array
-        else:
-            raise ValueError(
-                "Only scalar NamedArrays can be implicitly converted to jax arrays, but "
-                f"got {self.shape} array. This error typically occurs when you pass a "
-                "NamedArray to a plain jax.numpy function. Please use `x.array` instead."
-            )
+    # def __jax_array__(self):
+    #     if self.ndim == 0:
+    #         return self.array
+    #     else:
+    #         raise ValueError(
+    #             "Only scalar NamedArrays can be implicitly converted to jax arrays, but "
+    #             f"got {self.shape} array. This error typically occurs when you pass a "
+    #             "NamedArray to a plain jax.numpy function. Please use `x.array` instead."
+    #         )
 
     @ft.cached_property
     def shape(self) -> Dict[str, int]:
@@ -1787,12 +1787,22 @@ def broadcast_arrays_and_return_axes(
     """
     if len(arrays) == 0:
         return ((), ())
+    elif len(arrays) == 1:
+        a = arrays[0]
+        if a is None:
+            return (None,), ()
+        if isinstance(a, NamedArray):
+            return (a,), a.axes
+        return (named(jnp.asarray(a), ()), ), ()
 
     # sort the arrays by size, so that we use the biggest ones to broadcast the others
     # need to hold on to the order so we can return the arrays in the same order
     actual_arrays = [x for x in arrays if isinstance(x, NamedArray)]
     size_order = sorted(range(len(actual_arrays)), key=lambda i: actual_arrays[i].size, reverse=True)
     all_axes = [actual_arrays[i].axes for i in size_order]
+    if len(all_axes) == 0:
+        return (arrays, ())
+
     full_axes = ft.reduce(lambda a, b: _broadcast_axes(a, b, require_subset) if a is not None else None, all_axes)  # type: ignore
     if full_axes is None:
         raise ValueError(f"Cannot broadcast arrays {arrays}: no subset relationship")
