@@ -237,3 +237,16 @@ def test_reductions_produce_scalar_named_arrays_when_None_axis():
     # But if we specify axes, we always get a NamedArray, even if it's a scalar
     assert isinstance(hax.mean(named1, axis=("Height", "Width")), NamedArray)
     assert hax.mean(named1, axis=("Height", "Width")).axes == ()
+
+
+def test_pad():
+    Height = Axis("Height", 3)
+    Width = Axis("Width", 2)
+
+    arr = hax.arange((Height, Width))
+    padded = hax.pad(arr, {Height: (1, 2), Width: (0, 1)}, mode="constant", constant_values=0)
+
+    expected = jnp.pad(arr.array, [(1, 2), (0, 1)], mode="constant", constant_values=0)
+    assert padded.axes[0].size == Height.size + 3
+    assert padded.axes[1].size == Width.size + 1
+    assert jnp.all(expected == padded.array)

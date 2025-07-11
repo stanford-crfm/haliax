@@ -1,10 +1,10 @@
 import typing
-from typing import Optional, Union
+from typing import Mapping, Optional, Union
 
 import jax
 import jax.numpy as jnp
 
-from .axis import Axis, AxisSelector
+from .axis import Axis, AxisSelector, axis_name
 from .core import NamedArray, NamedOrNumeric, broadcast_arrays, broadcast_arrays_and_return_axes, named
 from .jax_utils import is_scalarish
 
@@ -152,10 +152,48 @@ def pad_left(array: NamedArray, axis: Axis, new_axis: Axis, value=0) -> NamedArr
     return NamedArray(padded, array.axes[:idx] + (new_axis,) + array.axes[idx + 1 :])
 
 
+def pad(
+    array: NamedArray,
+    pad_width: Mapping[AxisSelector, tuple[int, int]],
+    *,
+    mode: str = "constant",
+    constant_values: NamedOrNumeric = 0,
+    **kwargs,
+) -> NamedArray:
+    """Version of ``jax.numpy.pad`` that works with ``NamedArray``.
+
+    ``pad_width`` should be a mapping from axis (or axis name) to a ``(before, after)``
+    tuple specifying how much padding to add on each side of that axis. Any axis
+    not present in ``pad_width`` will not be padded.
+    """
+
+    padding = []
+    new_axes = []
+    for ax in array.axes:
+        left_right = pad_width.get(ax)
+        if left_right is None:
+            left_right = pad_width.get(axis_name(ax))  # type: ignore[arg-type]
+        if left_right is None:
+            left_right = (0, 0)
+        left, right = left_right
+        padding.append((left, right))
+        new_axes.append(ax.resize(ax.size + left + right))
+
+    result = jnp.pad(
+        array.array,
+        padding,
+        mode=mode,
+        constant_values=raw_array_or_scalar(constant_values),
+        **kwargs,
+    )
+
+    return NamedArray(result, tuple(new_axes))
+
+
 def raw_array_or_scalar(x: NamedOrNumeric):
     if isinstance(x, NamedArray):
         return x.array
     return x
 
 
-__all__ = ["trace", "where", "tril", "triu", "isclose", "pad_left", "clip"]
+__all__ = ["trace", "where", "tril", "triu", "isclose", "pad_left", "pad", "clip"]
