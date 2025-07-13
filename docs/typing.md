@@ -1,4 +1,4 @@
-from haliax import NamedArrayfrom haliax import NamedArray
+from haliax import NamedArray
 
 # NamedArray Type Annotations
 

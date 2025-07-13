@@ -1,7 +1,7 @@
 # Indexing and Slicing
 
 Haliax supports Numpy-style indexing, including so-called [Advanced Indexing](https://numpy.org/doc/stable/user/basics.indexing.html#advanced-indexing),
-though the syntax is necessarily different. Most forms of indexing are supporting, except we don't support indexing with
+though the syntax is necessarily different. Most forms of indexing are supported, except we don't support indexing with
 booleans right now. (JAX doesn't support indexing with non-constant bool arrays anyway,
 so I don't think it's worth the effort to implement it in Haliax.)
 

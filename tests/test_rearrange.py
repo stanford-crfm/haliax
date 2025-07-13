@@ -293,7 +293,7 @@ def test_examples():
     r = einops_rearrange(z, "{B (H: h1 h) (W: w1 w) C} -> (B: B h1 w1) ... (C: C h w) ", h1=2, w1=2)
     assert r.axes == (Axis("B", B.size * 2 * 2), D, Axis("C", C.size * sH.size * sW.size))
     # unet attention reordering:
-    # postional: (qkv heads c) h w -> qkv heads c (h w)
+    # positional: (qkv heads c) h w -> qkv heads c (h w)
     # named: { (embed: qkv heads c) h w } -> qkv heads c (pos: h w)
     Embed = Axis("embed", 3 * 4 * C.size)
     attn = hax.random.randint(PRNGKey(0), (Embed, H, W), 0, 255)
