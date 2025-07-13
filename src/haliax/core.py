@@ -1163,6 +1163,11 @@ def index(array: NamedArray, slices: Mapping[AxisSelector, NamedIndex]) -> Named
     you might use `array[{"batch": slice(0, 10)}]` or `array["batch", 0:10]` to select the first 10 elements
     of the 'batch' axis.
 
+    When indexing with a ``dslice`` the slice is gathered starting at the given
+    ``start`` for ``size`` elements. Values read past the end of the array are
+    filled with the ``fill_value`` (defaults to ``0``), and writes outside the
+    bounds are dropped.
+
     See Also:
         * [haliax.NamedArray.at][] for a functional equivalent of in-place array modifications.
 
@@ -1172,8 +1177,12 @@ def index(array: NamedArray, slices: Mapping[AxisSelector, NamedIndex]) -> Named
     """
     # indices where we have array args
     new_axes, ordered_slices = _compute_new_axes_and_slices_for_index(array, slices)
-    sliced, ordered_slices = _handle_dynamic_slices(array.array, ordered_slices)
-    sliced = sliced[tuple(ordered_slices)]
+    needs_fill = any(isinstance(s, dslice) or is_pallas_dslice(s) for s in slices.values())
+    ordered_slices = [s.array if isinstance(s, NamedArray) else s for s in ordered_slices]
+    if needs_fill:
+        sliced = array.array.at[tuple(ordered_slices)].get(mode="fill", fill_value=0)
+    else:
+        sliced = array.array[tuple(ordered_slices)]
 
     return haliax.named(sliced, new_axes)
 
@@ -1190,9 +1199,19 @@ def _compute_new_axes_and_slices_for_index(
         axis_index = array.axis_indices(axis)
         if axis_index is None:
             raise ValueError(f"axis {axis} not found in {array}")
-        if isinstance(slice_, py_slice) or isinstance(slice_, dslice) or is_pallas_dslice(slice_):
+        if isinstance(slice_, py_slice):
             ordered_slices[axis_index] = slice_
             kept_axes[axis_index] = True
+        elif is_pallas_dslice(slice_) or isinstance(slice_, dslice):
+            # we want to treat this like a slice, but the closest approximation is an arange, but those have to broadcast.
+            # So instead we make a named array arange with the same name as the axis.
+            start = slice_.start
+            size = slice_.size
+            orig_axis = array.axes[axis_index]
+            ordered_slices[axis_index] = haliax.arange(orig_axis.resize(size), start=start)
+            kept_axes[axis_index] = False
+            array_slice_indices.append(axis_index)
+            index_axis_names.add(orig_axis.name)
         elif isinstance(slice_, int):
             ordered_slices[axis_index] = slice_
             kept_axes[axis_index] = False
@@ -1291,34 +1310,6 @@ def _compute_new_axes_and_slices_for_index(
     new_axes = tuple(axis_name(ax) for ax in new_axes)
     return new_axes, ordered_slices
 
-
-def _handle_dynamic_slices(array: jnp.ndarray, slices):
-    """
-    Helper function to handle dynamic slices in the array. These have to be handled with jax.lax.dynamic_slice,
-    which is for when the start index is not known at compile time. (Sizes must always be known at compile time.)
-
-    Notes:
-        **MUTATES `slices` IN PLACE**
-
-    Returns:
-        array.array: the sliced array
-
-    """
-    indices_for_dslice = [0] * array.ndim
-    lengths_for_dslice = list(array.shape)
-    dslice_indices = []
-    need_to_slice = False
-    for axis_index, slice_ in enumerate(slices):
-        if isinstance(slice_, dslice) or is_pallas_dslice(slice_):
-            dslice_indices.append(axis_index)
-            indices_for_dslice[axis_index] = slice_.start
-            lengths_for_dslice[axis_index] = slice_.size
-            need_to_slice = True
-    if need_to_slice:
-        array = jax.lax.dynamic_slice(array, indices_for_dslice, lengths_for_dslice)
-        for i in dslice_indices:
-            slices[i] = py_slice(None, None, None)
-    return array, slices
 
 
 def split(a: NamedArray, axis: AxisSelector, new_axes: Sequence[Axis]) -> Sequence[NamedArray]:
@@ -2056,38 +2047,8 @@ class _NamedIndexUpdateRef:
 
 def _raw_indices_for_at(array, indexes):
     sliced_axes, ordered_slices = _compute_new_axes_and_slices_for_index(array, indexes)
-    del sliced_axes
-    # this isn't the fastest (it does the _compute_new_axes_and_slices_for_index twice)
-    # but it's easy
     _sliced = index(array, indexes)
-    # we have to handle dslices differently than for normal indexing, because we can't use
-    # extra dynamic_slices...
-    # we'd like to just replace these with iota, but we have account for broadcasting semantics
-    # for the other arrays
-    dslice_sizes = tuple(x.size for x in ordered_slices if isinstance(x, dslice) or is_pallas_dslice(x))  # type: ignore
-    current_array_slice_shape = next((x.shape for x in ordered_slices if is_jax_array_like(x)), None)  # type: ignore
-    dims_to_expand = list(range(len(dslice_sizes)))
-    if current_array_slice_shape is not None:
-        iota_shape = dslice_sizes + current_array_slice_shape
-    else:
-        iota_shape = dslice_sizes
-
-    def iota_for_dslice(dslice, cur_dynamic_slice):
-        return jax.lax.broadcasted_iota(int, iota_shape, cur_dynamic_slice) + dslice.start
-
-    if len(dslice_sizes) > 0:
-        cur_dynamic_slice = 0
-        for i in range(len(ordered_slices)):
-            if isinstance(ordered_slices[i], dslice) or is_pallas_dslice(ordered_slices[i]):
-                ordered_slices[i] = iota_for_dslice(ordered_slices[i], cur_dynamic_slice)
-                cur_dynamic_slice += 1
-            elif is_jax_array_like(ordered_slices[i]):
-                # prepend array slices with one 1 for each dynamic slice
-                ordered_slices[i] = jnp.expand_dims(ordered_slices[i], axis=dims_to_expand)
-
-        assert cur_dynamic_slice == len(dslice_sizes)
-
-    # ok the ordered slices are now correct
+    ordered_slices = [s.array if isinstance(s, NamedArray) else s for s in ordered_slices]
     return ordered_slices, _sliced.axes
 
 

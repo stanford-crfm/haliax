@@ -598,14 +598,19 @@ def resolve_axis(axis_spec: AxisSpec, axis_selection: AxisSelection) -> AxisSpec
 
 
 class dslice(eqx.Module):
-    """
-    Dynamic slice, comprising a (start, length) pair. Also aliased as ds.
+    """Dynamic slice, comprising a (start, length) pair. Also aliased as ``ds``.
 
-    Normal numpy-isms like a[i:i+16] don't work in Jax inside jit, because slice doesn't like tracers and JAX
-    can't see that the slice is constant. This is a workaround that lets you do a[dslice(i, 16)] or even a[ds(i, 16)]
-    instead.
+    NumPy-style slices like ``a[i:i+16]`` don't work inside :func:`jax.jit`, because
+    JAX requires slice bounds to be static. ``dslice`` works around this by
+    separating the dynamic ``start`` from the static ``size`` so that you can
+    write ``a[dslice(i, 16)]`` or simply ``a[ds(i, 16)]``.
 
-    This class's name is taken from [jax.experimental.pallas.dslice][].
+    When used in indexing or ``at`` updates, ``dslice`` behaves like a gather of
+    ``size`` elements starting at ``start``. Reads beyond the end of the array are
+    filled with a value (0 by default) and writes outside the array bounds are
+    dropped, matching JAX's default scatter/gather semantics.
+
+    This class's name is taken from :mod:`jax.experimental.pallas`.
     """
 
     start: int
