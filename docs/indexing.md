@@ -147,6 +147,11 @@ def f(x, slice_size: int):
 f(q, 2)
 ```
 
+When indexing with ``dslice`` the slice is gathered starting at ``start`` for
+``size`` elements.  Reads beyond the end of the array return the ``fill_value``
+(0 by default).  When used with ``at`` updates, any writes outside the bounds of
+the array are dropped.  These semantics match JAX's scatter/gather behavior.
+
 For convenience/brevity, `dslice` is aliased as `ds`. In addition, we also expose `dblock`, which is a convenience
 function for computing the start and size of a slice given a block index and the size of the slice. Thus, the above
 example can be written as follows:

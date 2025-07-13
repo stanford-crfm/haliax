@@ -586,11 +586,36 @@ def test_slice_nd_dslice():
     named1 = hax.random.uniform(PRNGKey(0), (H, W, D))
     from haliax import ds
 
-    assert jnp.all(jnp.equal(named1["H", ds(0, 5), "D", ds(3, 7)].array, named1.array[0:5, :, 3:10]))
+    ref = jnp.take(named1.array, jnp.arange(0, 5), axis=0, mode="fill", fill_value=0)
+    ref = jnp.take(ref, jnp.arange(3, 10), axis=2, mode="fill", fill_value=0)
+    ref = jnp.transpose(ref, (0, 2, 1))
+    assert jnp.all(jnp.equal(named1["H", ds(0, 5), "D", ds(3, 7)].array, ref))
     # test mixed normal and dslice
-    assert jnp.all(jnp.equal(named1["H", ds(1, 5), "D", 3:7].array, named1.array[1:6, :, 3:7]))
-    assert jnp.all(jnp.equal(named1["H", ds(2, 5), "D", 3].array, named1.array[2:7, :, 3]))
-    assert jnp.all(jnp.equal(named1["H", ds(3, 5), "D", 3:10:2].array, named1.array[3:8, :, 3:10:2]))
+    ref = jnp.take(named1.array, jnp.arange(1, 6), axis=0, mode="fill", fill_value=0)
+    ref = jnp.take(ref, jnp.arange(3, 7), axis=2, mode="fill", fill_value=0)
+    assert jnp.all(jnp.equal(named1["H", ds(1, 5), "D", 3:7].array, ref))
+    ref = jnp.take(named1.array, jnp.arange(2, 7), axis=0, mode="fill", fill_value=0)
+    ref = jnp.take(ref, jnp.arange(3, 4), axis=2, mode="fill", fill_value=0)
+    ref = ref.squeeze(2)
+    assert jnp.all(jnp.equal(named1["H", ds(2, 5), "D", 3].array, ref))
+    ref = jnp.take(named1.array, jnp.arange(3, 8), axis=0, mode="fill", fill_value=0)
+    ref = jnp.take(ref, jnp.arange(3, 10, 2), axis=2, mode="fill", fill_value=0)
+    assert jnp.all(jnp.equal(named1["H", ds(3, 5), "D", 3:10:2].array, ref))
+
+
+def test_dslice_oob_read_and_write():
+    Seq = hax.Axis("seq", 5)
+    from haliax import ds
+
+    arr = hax.arange((Seq,), dtype=int)
+    out = arr[{"seq": ds(3, 4)}]
+    ref = jnp.take(arr.array, jnp.arange(3, 7), mode="fill", fill_value=0)
+    assert jnp.array_equal(out.array, ref)
+
+    upd = hax.arange((Seq.resize(4),), dtype=int)
+    updated = arr.at[{"seq": ds(3, 4)}].set(upd)
+    ref_upd = arr.array.at[jnp.arange(3, 7)].set(upd.array, mode="drop")
+    assert jnp.array_equal(updated.array, ref_upd)
 
 
 def test_slice_nd_array_present_dims():
