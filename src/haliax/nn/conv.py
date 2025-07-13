@@ -213,7 +213,7 @@ class Conv(_ConvBase):
         return x
 
     def _do_conv(self, inputs):
-        # _do_conv expects there ot be a single __batch__ dimension
+        # _do_conv expects there to be a single __batch__ dimension
         output_axes = _compute_output_axes(inputs, "__batch__", self.In, self.Out)
 
         batch_index = _index_of_name(inputs.axes, "__batch__")

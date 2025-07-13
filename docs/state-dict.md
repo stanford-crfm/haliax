@@ -226,7 +226,7 @@ any Axis members to match the new shape.
 ::: haliax.state_dict.save_state_dict
 ::: haliax.state_dict.load_state_dict
 
-### Converting betweewn State Dicts and Modules
+### Converting between State Dicts and Modules
 
 ::: haliax.state_dict.from_state_dict
 ::: haliax.state_dict.to_state_dict

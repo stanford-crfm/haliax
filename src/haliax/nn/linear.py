@@ -143,7 +143,7 @@ class MoELinear(eqx.Module):
     Experts: AxisSpec = eqx.field(static=True)
     In: Axis = eqx.field(static=True)
     Out: Axis = eqx.field(static=True)
-    # TODO: support quanitization for ragged_dot?
+    # TODO: support quantization for ragged_dot?
     # dot_general: DotGeneralOp = eqx.field(default_factory=DotGeneralOp.default)
 
     use_gmm: bool = eqx.field(static=True)
