@@ -17,6 +17,7 @@ repository. Follow these notes when implementing new features or fixing bugs.
 ## Playbook
 
 - Adding Haliax-style tensor typing annotations are described in @.playbooks/add-types.md
+- Wrapping standard JAX functions so they operate on `NamedArray` is explained in @.playbooks/wrap-non-named.md
 
 ## Code Style
 
