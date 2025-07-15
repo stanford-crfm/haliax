@@ -66,7 +66,21 @@ from .core import (
 from .haxtyping import Named
 from .hof import fold, map, scan, vmap
 from .jax_utils import tree_checkpoint_name
-from .ops import clip, isclose, pad_left, pad, trace, tril, triu, unique, where
+from .ops import (
+    clip,
+    isclose,
+    pad_left,
+    pad,
+    trace,
+    tril,
+    triu,
+    unique,
+    unique_values,
+    unique_counts,
+    unique_inverse,
+    unique_all,
+    where,
+)
 from .partitioning import auto_sharded, axis_mapping, fsdp, named_jit, shard, shard_with_axis_mapping
 from .specialized_fns import top_k
 from .types import Scalar
@@ -1035,6 +1049,10 @@ __all__ = [
     "trace",
     "where",
     "unique",
+    "unique_values",
+    "unique_counts",
+    "unique_inverse",
+    "unique_all",
     "clip",
     "tril",
     "triu",

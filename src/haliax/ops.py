@@ -342,4 +342,106 @@ def unique(
     return tuple(ret)
 
 
-__all__ = ["trace", "where", "tril", "triu", "isclose", "pad_left", "pad", "clip", "unique"]
+def unique_values(
+    array: NamedArray,
+    Unique: Axis,
+    *,
+    axis: AxisSelector | None = None,
+    fill_value: ArrayLike | None = None,
+) -> NamedArray:
+    """Shortcut for :func:`unique` that returns only unique values."""
+
+    return typing.cast(
+        NamedArray,
+        unique(
+            array,
+            Unique,
+            axis=axis,
+            fill_value=fill_value,
+        ),
+    )
+
+
+def unique_counts(
+    array: NamedArray,
+    Unique: Axis,
+    *,
+    axis: AxisSelector | None = None,
+    fill_value: ArrayLike | None = None,
+) -> tuple[NamedArray, NamedArray]:
+    """Shortcut for :func:`unique` that also returns counts."""
+
+    values, counts = typing.cast(
+        tuple[NamedArray, NamedArray],
+        unique(
+            array,
+            Unique,
+            return_counts=True,
+            axis=axis,
+            fill_value=fill_value,
+        ),
+    )
+    return values, counts
+
+
+def unique_inverse(
+    array: NamedArray,
+    Unique: Axis,
+    *,
+    axis: AxisSelector | None = None,
+    fill_value: ArrayLike | None = None,
+) -> tuple[NamedArray, NamedArray]:
+    """Shortcut for :func:`unique` that also returns inverse indices."""
+
+    values, inverse = typing.cast(
+        tuple[NamedArray, NamedArray],
+        unique(
+            array,
+            Unique,
+            return_inverse=True,
+            axis=axis,
+            fill_value=fill_value,
+        ),
+    )
+    return values, inverse
+
+
+def unique_all(
+    array: NamedArray,
+    Unique: Axis,
+    *,
+    axis: AxisSelector | None = None,
+    fill_value: ArrayLike | None = None,
+) -> tuple[NamedArray, NamedArray, NamedArray, NamedArray]:
+    """Shortcut for :func:`unique` returning values, indices, inverse, and counts."""
+
+    values, indices, inverse, counts = typing.cast(
+        tuple[NamedArray, NamedArray, NamedArray, NamedArray],
+        unique(
+            array,
+            Unique,
+            return_index=True,
+            return_inverse=True,
+            return_counts=True,
+            axis=axis,
+            fill_value=fill_value,
+        ),
+    )
+    return values, indices, inverse, counts
+
+
+__all__ = [
+    "trace",
+    "where",
+    "tril",
+    "triu",
+    "isclose",
+    "pad_left",
+    "pad",
+    "clip",
+    "unique",
+    "unique_values",
+    "unique_counts",
+    "unique_inverse",
+    "unique_all",
+]
