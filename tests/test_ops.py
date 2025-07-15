@@ -1,4 +1,5 @@
 from typing import Callable
+import typing
 
 import jax.numpy as jnp
 import pytest
@@ -359,3 +360,50 @@ def test_unique():
 
     assert jnp.all(jnp.equal(values.array, jnp.array([[1, 2], [2, 3]])))
     assert jnp.all(jnp.equal(counts.array, jnp.array([2, 1])))
+
+
+def test_unique_shortcuts():
+    Height = Axis("Height", 3)
+    Width = Axis("Width", 2)
+
+    arr2d = hax.named([[1, 2], [2, 3], [1, 2]], (Height, Width))
+    U = Axis("U", 3)
+
+    # unique_values
+    uv = hax.unique_values(arr2d, U)
+    uv_expected = hax.unique(arr2d, U)
+    assert jnp.all(uv.array == uv_expected.array)
+
+    # unique_counts
+    vc, cc = hax.unique_counts(arr2d, U)
+    vc_exp, cc_exp = hax.unique(arr2d, U, return_counts=True)
+    assert jnp.all(vc.array == vc_exp.array)
+    assert jnp.all(cc.array == cc_exp.array)
+
+    # unique_inverse
+    Height1 = Axis("Height1", 5)
+    arr1d = hax.named([3, 4, 1, 3, 1], (Height1,))
+    U2 = Axis("U2", 3)
+    vi, ii = hax.unique_inverse(arr1d, U2)
+    vi_exp, ii_exp = hax.unique(arr1d, U2, return_inverse=True)
+    assert jnp.all(vi.array == vi_exp.array)
+    assert jnp.all(ii.array == ii_exp.array)
+
+    # unique_all
+    U3 = Axis("U3", 2)
+    va, ia, ina, ca = hax.unique_all(arr2d, U3, axis=Height)
+    va_exp, ia_exp, ina_exp, ca_exp = typing.cast(
+        tuple[NamedArray, NamedArray, NamedArray, NamedArray],
+        hax.unique(
+            arr2d,
+            U3,
+            axis=Height,
+            return_index=True,
+            return_inverse=True,
+            return_counts=True,
+        ),
+    )
+    assert jnp.all(va.array == va_exp.array)
+    assert jnp.all(ia.array == ia_exp.array)
+    assert jnp.all(ina.array == ina_exp.array)
+    assert jnp.all(ca.array == ca_exp.array)
