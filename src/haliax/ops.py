@@ -4,7 +4,7 @@ from typing import Mapping, Optional, Union
 import jax
 import jax.numpy as jnp
 
-from .axis import Axis, AxisSelector, axis_name
+from .axis import Axis, AxisSelector, AxisSelection, axis_name
 from .core import NamedArray, NamedOrNumeric, broadcast_arrays, broadcast_arrays_and_return_axes, named
 from .jax_utils import is_scalarish
 
@@ -135,6 +135,38 @@ def isclose(a: NamedArray, b: NamedArray, rtol=1e-05, atol=1e-08, equal_nan=Fals
     return NamedArray(jnp.isclose(a.array, b.array, rtol=rtol, atol=atol, equal_nan=equal_nan), a.axes)
 
 
+def norm(
+    array: NamedArray,
+    ord: Optional[Union[int, float, str]] = None,
+    axis: Optional[AxisSelection] = None,
+    *,
+    keepdims: bool = False,
+) -> NamedArray:
+    """Compute the vector or matrix norm of a ``NamedArray``.
+
+    This is the named version of :func:`jax.numpy.linalg.norm`.
+    """
+
+    if keepdims:
+        raise ValueError("keepdims is not supported for NamedArray")
+
+    if axis is None:
+        result = jnp.linalg.norm(array.array, ord=ord, axis=None, keepdims=False)
+        return NamedArray(result, ())
+
+    indices = array.axis_indices(axis)
+    if isinstance(indices, tuple):
+        indices_tuple = tuple(indices)
+    else:
+        indices_tuple = (indices,)
+    if any(i is None for i in indices_tuple):
+        raise ValueError(f"Axis {axis} not found in array. Available axes: {array.axes}")
+
+    result = jnp.linalg.norm(array.array, ord=ord, axis=indices_tuple, keepdims=False)
+    new_axes = tuple(ax for i, ax in enumerate(array.axes) if i not in indices_tuple)
+    return NamedArray(result, new_axes)
+
+
 def pad_left(array: NamedArray, axis: Axis, new_axis: Axis, value=0) -> NamedArray:
     """Pad an array along named axes."""
     amount_to_pad_to = new_axis.size - axis.size
@@ -196,4 +228,14 @@ def raw_array_or_scalar(x: NamedOrNumeric):
     return x
 
 
-__all__ = ["trace", "where", "tril", "triu", "isclose", "pad_left", "pad", "clip"]
+__all__ = [
+    "trace",
+    "where",
+    "tril",
+    "triu",
+    "isclose",
+    "norm",
+    "pad_left",
+    "pad",
+    "clip",
+]

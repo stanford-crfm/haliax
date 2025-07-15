@@ -250,3 +250,28 @@ def test_pad():
     assert padded.axes[0].size == Height.size + 3
     assert padded.axes[1].size == Width.size + 1
     assert jnp.all(expected == padded.array)
+
+
+def test_norm():
+    H, W, D = hax.make_axes(H=3, W=4, D=5)
+
+    arr = hax.random.uniform(PRNGKey(0), (H, W, D))
+
+    # no axis -> scalar
+    assert jnp.allclose(hax.norm(arr).array, jnp.linalg.norm(arr.array))
+    assert hax.norm(arr).axes == ()
+
+    # single axis
+    n1 = hax.norm(arr, axis=H)
+    exp1 = jnp.linalg.norm(arr.array, axis=0)
+    assert n1.axes == (W, D)
+    assert jnp.allclose(n1.array, exp1)
+
+    # two axes with ord=1
+    n2 = hax.norm(arr, ord=1, axis=(H, W))
+    exp2 = jnp.linalg.norm(arr.array, ord=1, axis=(0, 1))
+    assert n2.axes == (D,)
+    assert jnp.allclose(n2.array, exp2)
+
+    with pytest.raises(ValueError):
+        _ = hax.norm(arr, axis=H, keepdims=True)

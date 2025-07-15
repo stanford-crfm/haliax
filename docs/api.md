@@ -136,6 +136,7 @@ You can convert it to a [jax.numpy.ndarray][] with [haliax.NamedArray.scalar][],
 ::: haliax.min
 ::: haliax.prod
 ::: haliax.ptp
+::: haliax.norm
 ::: haliax.std
 ::: haliax.sum
 ::: haliax.var
