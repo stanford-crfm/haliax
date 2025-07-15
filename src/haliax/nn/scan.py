@@ -1,6 +1,9 @@
+import dataclasses
 import functools
 import re
-from typing import Any, Dict, Generic, Optional, Protocol, Sequence, Type, TypeVar, cast
+import warnings
+from typing import Any, Callable, Concatenate, Dict, Generic, Optional, Protocol, Sequence, Type, TypeVar, cast, \
+    overload, ParamSpec
 
 import equinox as eqx
 import jax
@@ -8,17 +11,36 @@ from jax import numpy as jnp
 
 import haliax
 import haliax.util
-from haliax.jax_utils import filter_checkpoint, is_jax_array_like
+from haliax.jax_utils import tree_checkpoint_name
 from haliax.util import is_jax_or_hax_array_like
 
+from .._src.scan import ScanCheckpointPolicy, ScanCheckpointSpec
 from .._src.state_dict import ModuleWithStateDictSerialization, StateDict, with_prefix
 from ..axis import Axis
 
 
 M = TypeVar("M", bound=eqx.Module)
 M_co = TypeVar("M_co", bound=eqx.Module, covariant=True)
+M_contra = TypeVar("M_contra", bound=eqx.Module, contravariant=True)
 S = TypeVar("S", bound=eqx.Module)
 T = TypeVar("T")
+CarryT = TypeVar("CarryT")
+OutputT_co = TypeVar("OutputT_co", covariant=True)
+P = ParamSpec("P")
+
+class FoldFunction(Protocol[M_contra, P, CarryT]):
+    def __call__(self, module: M_contra, carry: CarryT, *args: P.args, **kwargs: P.kwargs) -> CarryT:
+        ...
+
+
+class ScanFunction(Protocol[M_contra, CarryT, P, OutputT_co]):
+    def __call__(self, module: M_contra, carry: CarryT, *args: P.args, **kwargs: P.kwargs) -> tuple[CarryT, OutputT_co]:
+        ...
+
+
+class VmapFunction(Protocol[M_contra, P, OutputT_co]):
+    def __call__(self, module: M_contra, *args: P.args, **kwargs: P.kwargs) -> OutputT_co:
+        ...
 
 
 class ModuleInit(Protocol[M_co]):
@@ -27,19 +49,25 @@ class ModuleInit(Protocol[M_co]):
 
 
 class BlockFoldable(Protocol[M]):
-    """
-    A superclass for [haliax.nn.Stacked][] and [haliax.nn.BlockSeq][] that exposes the fold and scan methods, as
-    well as a few other methods that are useful for these modules.
+    """Common interface for :class:`~haliax.nn.Stacked` and :class:`~haliax.nn.BlockSeq`.
 
-    This is a protocol, so you can use it as a type hint for a function that takes a Stacked or BlockSeq.
-    Equinox modules can't directly inherit from Protocols, but you can use it as a type hint.
+    The interface exposes the :py:meth:`fold` and :py:meth:`scan` methods along with the helper
+    methods :py:meth:`fold_via`, :py:meth:`scan_via`, and :py:meth:`vmap_via`.
+
+    This is a protocol, so you can use it as a type hint for a function that takes a ``Stacked`` or ``BlockSeq``.
+    Equinox modules can't directly inherit from ``Protocol`` classes, but you can use it as a type hint.
     """
 
     Block: Axis
 
     @classmethod
     def init(
-        cls: Type[S], Block: Axis, module: Type[M], *, gradient_checkpointing: bool = False, prevent_cse: bool = False
+        cls: Type[S],
+        Block: Axis,
+        module: Type[M],
+        *,
+        gradient_checkpointing: ScanCheckpointSpec = False,
+        prevent_cse: bool = False,
     ) -> ModuleInit[S]:
         ...
 
@@ -47,6 +75,39 @@ class BlockFoldable(Protocol[M]):
         ...
 
     def fold(self, init: T, *args, **kwargs) -> T:
+        ...
+
+    @overload
+    def fold_via(self, fn: FoldFunction[M, P, CarryT]) -> Callable[Concatenate[CarryT, P], CarryT]:
+        ...
+
+    @overload
+    def fold_via(self, fn: Callable[[M, CarryT], CarryT]) -> Callable[[CarryT], CarryT]:
+        ...
+
+    def fold_via(self, fn: Callable[..., CarryT]) -> Callable[Concatenate[CarryT, P], CarryT]:
+        ...
+
+    @overload
+    def scan_via(self, fn: ScanFunction[M, CarryT, P, OutputT_co]) -> Callable[Concatenate[CarryT, P], tuple[CarryT, OutputT_co]]:
+        ...
+
+    @overload
+    def scan_via(self, fn: Callable[[M, CarryT], tuple[CarryT, OutputT_co]]) -> Callable[[CarryT], tuple[CarryT, OutputT_co]]:
+        ...
+
+    def scan_via(self, fn: Callable[..., tuple[CarryT, OutputT_co]]) -> Callable[P, tuple[CarryT, OutputT_co]]:
+        ...
+
+    @overload
+    def vmap_via(self, fn: VmapFunction[M, P, OutputT_co]) -> Callable[P, OutputT_co]:
+        ...
+
+    @overload
+    def vmap_via(self, fn: Callable[[M], OutputT_co]) -> Callable[[], OutputT_co]:
+        ...
+
+    def vmap_via(self, fn: Callable[..., OutputT_co]) -> Callable[..., OutputT_co]:
         ...
 
     def unstacked(self) -> Sequence[M]:
@@ -69,24 +130,38 @@ class BlockSeq(ModuleWithStateDictSerialization, Generic[M]):
     """
 
     blocks: Sequence[M]
-    Block: Axis = eqx.static_field()
-    gradient_checkpointing: bool = eqx.static_field()
+    Block: Axis = eqx.field(static=True)
+    gradient_checkpointing: ScanCheckpointPolicy = eqx.field(static=True)
 
     @classmethod
     def init(
-        cls: Type[S], Block: Axis, module: Type[M], *, gradient_checkpointing: bool = False, prevent_cse: bool = False
+        cls: Type[S],
+        Block: Axis,
+        module: Type[M],
+        *,
+        gradient_checkpointing: ScanCheckpointSpec = False,
+        prevent_cse: bool | None = None,
     ) -> ModuleInit[S]:
         """
         This is a curried init method that takes the Block and module and returns a function that takes
         the arguments to the module's init method. Any NamedArrays in the arguments will be sliced along the
         Block axis (if it exists). JAX arrays will be sliced along the first axis.
         """
-        del prevent_cse  # not needed, but kept for compat with Stacked
+
+        gradient_checkpointing = ScanCheckpointPolicy._mk(gradient_checkpointing)
+
+        if prevent_cse is not None:
+            warnings.warn(
+                "The prevent_cse argument is deprecated and will be removed in a future version of Haliax. Use the"
+                " ScanCheckpointPolicy instead.",
+                DeprecationWarning,
+            )
+            gradient_checkpointing = dataclasses.replace(gradient_checkpointing, prevent_cse=prevent_cse)
 
         @functools.wraps(module)
         def fn(*args, **kwargs):
             # The only complexity here is that the args and kwargs might have a Block axis in them,
-            # in which case we need to loop over them them to slice them out.
+            # in which case we need to loop over them to slice them out.
 
             def init_block(i):
                 (block_args, block_kwargs) = haliax.tree_util.tree_map(
@@ -101,45 +176,134 @@ class BlockSeq(ModuleWithStateDictSerialization, Generic[M]):
         return fn
 
     def scan(self, init: T, *extra_args, **extra_kwargs):
-        out = []
-        carry = init
+        def do_scan(init, *extra_args, **extra_kwargs):
+            out = []
+            carry = init
 
-        for i, block in enumerate(self.blocks):
-            if self.gradient_checkpointing:
-                block = filter_checkpoint(block)
-            (block_args, block_kwargs) = haliax.tree_util.tree_map(
-                functools.partial(BlockSeq._slice_out, self.Block, i), (extra_args, extra_kwargs)
-            )
-            block_result = block(carry, *block_args, **block_kwargs)
-            if not isinstance(block_result, (tuple, list)) or len(block_result) != 2:
-                raise ValueError(
-                    f"BlockSeq.scan expects the block to return a pair of (carry, extra), got {block_result}"
+            for i, block in enumerate(self.blocks):
+
+                (block_args, block_kwargs) = haliax.tree_util.tree_map(
+                    functools.partial(BlockSeq._slice_out, self.Block, i), (extra_args, extra_kwargs)
                 )
 
-            carry, extra = block_result
+                block_result = block(carry, *block_args, **block_kwargs)
 
-            out.append(extra)
+                if not isinstance(block_result, (tuple, list)) or len(block_result) != 2:
+                    raise ValueError(
+                        f"BlockSeq.scan expects the block to return a pair of (carry, extra), got {block_result}"
+                    )
 
-        # TODO: do we want to stack the outputs?
-        return carry, out
+                carry, extra = block_result
+
+                carry = tree_checkpoint_name(carry, self._carry_ckpt_name)
+                extra = tree_checkpoint_name(extra, self._output_ckpt_name)
+
+                out.append(extra)
+
+            return carry, haliax.tree_util.tree_map(lambda *x: haliax.stack(self.Block, x), *out)
+
+        return do_scan(init, *extra_args, **extra_kwargs)
 
     def fold(self, init: T, *args, **kwargs) -> T:
-        carry = init
-        for i, block in enumerate(self.blocks):
-            if self.gradient_checkpointing:
-                block = filter_checkpoint(block)
-            (block_args, block_kwargs) = haliax.tree_util.tree_map(
-                functools.partial(BlockSeq._slice_out, self.Block, i), (args, kwargs)
-            )
-            carry = block(carry, *block_args, **block_kwargs)
-        return carry
+        def do_fold(init, *args, **kwargs):
+            carry = init
+            for i, block in enumerate(self.blocks):
+                (block_args, block_kwargs) = haliax.tree_util.tree_map(
+                    functools.partial(BlockSeq._slice_out, self.Block, i), (args, kwargs)
+                )
+                carry = block(carry, *block_args, **block_kwargs)
+                carry = tree_checkpoint_name(carry, self._carry_ckpt_name)
+            return carry
+
+        return do_fold(init, *args, **kwargs)
+
+    @overload
+    def fold_via(self, fn: FoldFunction[M, P, CarryT]) -> Callable[Concatenate[CarryT, P], CarryT]:
+        ...
+
+    @overload
+    def fold_via(self, fn: Callable[[M, CarryT], CarryT]) -> Callable[[CarryT], CarryT]:
+        ...
+
+    def fold_via(self, fn: Callable[..., CarryT]):
+        """Return a function that folds over the sequence using ``fn``.
+
+        ``fn`` should take a block and a carry and return a new carry. The
+        returned function mirrors :func:`haliax.fold` over the block axis.
+        """
+
+        def do_fold(init: CarryT, *args, **kwargs) -> CarryT:
+            carry = init
+            for block in self.blocks:
+                carry = fn(block, carry, *args, **kwargs)
+                carry = tree_checkpoint_name(carry, self._carry_ckpt_name)
+            return carry
+
+        return do_fold
+
+    @overload
+    def scan_via(self, fn: ScanFunction[M, CarryT, P, OutputT_co]) -> Callable[Concatenate[CarryT, P], tuple[CarryT, OutputT_co]]:
+        ...
+
+    @overload
+    def scan_via(self, fn: Callable[[M, CarryT], tuple[CarryT, OutputT_co]]) -> Callable[[CarryT], tuple[CarryT, OutputT_co]]:
+        ...
+
+    def scan_via(self, fn: Callable[..., tuple[CarryT, OutputT_co]]):
+        """Return a function that scans over the sequence using ``fn``.
+
+        ``fn`` should take a block and a carry and return ``(carry, output)``.
+        Semantics match :func:`haliax.scan` over the block axis.
+        """
+
+        def do_scan(init: CarryT, *args, **kwargs) -> tuple[CarryT, OutputT_co]:
+            out = []
+            carry = init
+            for block in self.blocks:
+                carry, extra = fn(block, carry, *args, **kwargs)
+                carry = tree_checkpoint_name(carry, self._carry_ckpt_name)
+                extra = tree_checkpoint_name(extra, self._output_ckpt_name)
+                out.append(extra)
+
+            stacked_out = haliax.tree_util.tree_map(lambda *x: haliax.stack(self.Block, x), *out)
+            return carry, stacked_out
+
+        return do_scan
+
+    @overload
+    def vmap_via(self, fn: VmapFunction[M, P, OutputT_co]) -> Callable[P, OutputT_co]:
+        ...
+
+    @overload
+    def vmap_via(self, fn: Callable[[M], OutputT_co]) -> Callable[[], OutputT_co]:
+        ...
+
+    def vmap_via(self, fn: Callable[..., OutputT_co]) -> Callable[..., OutputT_co]:
+        """Return a function that applies each block independently using ``fn``.
+
+        ``fn`` should take a block and a carry and return an output. The
+        returned function mirrors :func:`haliax.vmap` over the block axis.
+        """
+
+        def do_vmap(init: CarryT, *args, **kwargs) -> OutputT_co:
+            # Apply fn to each block independently
+            outputs = []
+            for block in self.blocks:
+                output = fn(block, init, *args, **kwargs)
+                outputs.append(output)
+
+            # Stack the outputs
+            stacked_out = haliax.tree_util.tree_map(lambda *x: haliax.stack(self.Block, x), *outputs)
+            return stacked_out
+
+        return do_vmap
 
     def unstacked(self) -> Sequence[M]:
         return self.blocks
 
     @staticmethod
     def _slice_out(Block, i, x):
-        if haliax.is_named_array(x):
+        if isinstance(x, haliax.core.NamedArray):
             if haliax.selects_axis(x.axes, Block):
                 return x[Block, i]
             else:
@@ -174,6 +338,14 @@ class BlockSeq(ModuleWithStateDictSerialization, Generic[M]):
 
         return state_dict
 
+    @property
+    def _output_ckpt_name(self):
+        return f"BlockSeq[{self.Block}, {self.blocks[0].__class__.__name__}].outputs"
+
+    @property
+    def _carry_ckpt_name(self):
+        return f"BlockSeq[{self.Block}, {self.blocks[0].__class__.__name__}].carry"
+
 
 class Stacked(ModuleWithStateDictSerialization, Generic[M]):
     """
@@ -192,12 +364,14 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
     that the function has the same control flow for every element of the stack.
 
     Stacked supports both "fold" and "scan" semantics. "fold" is the same as a for loop that accumulates a single
-    output, while "scan" is the same as a for loop that accumulates a list of intermediates as well as the final output.
+    output, while "scan" is the same as a for loop that accumulates a list of outputs as well as the final output.
 
     Stacked also supports gradient checkpointing, which is useful for very large models that don't fit in memory.
+    If your blocks are independent of each other you can instead use :py:meth:`Stacked.vmap`
+    to apply every block in parallel.
 
     Typically only one of "fold" or "scan" can be used with a given Stacked module, depending on the what the module
-    returns: if the module returns a single output, use "fold"; if the module returns a sequence of intermediates and
+    returns: if the module returns a single output, use "fold"; if the module returns a sequence of outputs and
     an output to be passed to the next layer, use "scan". More concretely, for a transformer, you would use "scan" if
     you wanted to return a kv cache (or the attention matrix) as well as the output of the transformer. If you just
     wanted the output of the transformer, you would use "fold".
@@ -226,49 +400,66 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
     # TODO: we can probably make this module support pipeline parallelism, but that's a whole project in itself
 
     stacked: M
-    Block: Axis = eqx.static_field()
-    # TODO: support fancier gradient checkpointing
-    gradient_checkpointing: bool = eqx.static_field()
-    prevent_cse: bool = eqx.static_field()
+    Block: Axis = eqx.field(static=True)
+    gradient_checkpointing: ScanCheckpointPolicy = eqx.field(static=True)
 
     @classmethod
     def init(
-        cls, Block: Axis, module: Type[M], *, gradient_checkpointing: bool = False, prevent_cse: bool = False
+        cls,
+        Block: Axis,
+        module: Type[M],
+        *,
+        gradient_checkpointing: ScanCheckpointSpec = False,
+        prevent_cse: bool | None = None,
     ) -> ModuleInit["Stacked[M]"]:
         """
         Initialize a Stacked module. This method is curried: you can pass in the Block and module, and it will return
         a function that takes (batched) arguments to the vmapped module's init method.
-        :param Block:
-        :param module:
-        :param gradient_checkpointing:
-        :param prevent_cse:
-        :return:
+
+        Args:
+            Block: The axis that will be stacked over. This is typically a "layer" axis, but could be any axis.
+            module: The module that will be stacked. This module must take a batched input and return a batched output.
+            gradient_checkpointing: Whether to use gradient checkpointing. If True, uses the default policy. If a string,
+                uses the policy specified by the string. If a ScanCheckpointPolicy, uses that policy.
+            prevent_cse: Whether to prevent common subexpression elimination in the checkpointed function. This is useful
+                for debugging, but may slow down the function.
         """
+
+        gradient_checkpointing = ScanCheckpointPolicy._mk(gradient_checkpointing)
+
+        if prevent_cse is not None:
+            warnings.warn(
+                "The prevent_cse argument is deprecated and will be removed in a future version of Haliax. Use the"
+                " ScanCheckpointPolicy instead.",
+                DeprecationWarning,
+            )
+
+            gradient_checkpointing = dataclasses.replace(gradient_checkpointing, prevent_cse=prevent_cse)
 
         @functools.wraps(module)
         def fn(*args, **kwargs):
             stacked = haliax.vmap(module.init, Block)(*args, **kwargs)
-            return Stacked(stacked, Block, gradient_checkpointing, prevent_cse)
+            return Stacked(stacked, Block, gradient_checkpointing)
 
         return fn
 
     def scan(self, init, *extra_args, **extra_kwargs):
         """
         Scan over the stacked module. This is the same as a for loop that applies each instance of the module in sequence
-        to the input, passing the output of one instance to the next instance. It returns a stack of intermediates as
+        to the input, passing the output of one instance to the next instance. It returns a stack of outputs as
         well as the final output.
 
         That is, it behaves similarly to the following Python code:
 
         ```python
         carry = init
-        intermediates = []
+        outputs = []
 
         for block in self.stacked:
             carry, extra = block(carry)
-            intermediates.append(extra)
+            outputs.append(extra)
 
-        return carry, hax.stack(Block, intermediates)
+        return carry, hax.stack(Block, outputs)
         ```
 
         Args:
@@ -279,11 +470,18 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
         Returns:
 
         """
-        if self.gradient_checkpointing:
-            do_block = filter_checkpoint(self._do_block, prevent_cse=self.prevent_cse)
-        else:
-            do_block = self._do_block
-        return haliax.scan(do_block, self.Block)(init, self.stacked, *extra_args, **extra_kwargs)
+
+        def do_block(carry, block, *args, **kwargs):
+            carry, out = block(carry, *args, **kwargs)
+            return carry, out
+
+        def do_scan(init, *extra_args, **extra_kwargs):
+            carry, out = haliax.scan(do_block, self.Block, remat=self.gradient_checkpointing)(
+                init, self.stacked, *extra_args, **extra_kwargs
+            )
+            return carry, out
+
+        return do_scan(init, *extra_args, **extra_kwargs)
 
     def fold(self, init, *args, **kwargs):
         """
@@ -300,19 +498,105 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
         ```
 
         Args:
-            init:
-            *args:
-            **kwargs:
+            init: The initial value of carry to pass to the first block
+            *args: Extra arguments to pass to the blocks. These are passed directly to the blocks
+            **kwargs: Extra keyword arguments to pass to the blocks. These are passed directly to the blocks
 
         Returns:
 
         """
-        if self.gradient_checkpointing:
-            do_block = filter_checkpoint(self._do_block, prevent_cse=self.prevent_cse)
-        else:
-            do_block = self._do_block
 
-        return haliax.fold(do_block, self.Block)(init, self.stacked, *args, **kwargs)
+        def do_block(carry, block, *args, **kwargs):
+            carry = block(carry, *args, **kwargs)
+            return carry
+
+        def do_fold(init, *extra_args, **extra_kwargs):
+            carry = haliax.fold(do_block, self.Block, remat=self.gradient_checkpointing)(
+                init, self.stacked, *extra_args, **extra_kwargs
+            )
+            return carry
+
+        return do_fold(init, *args, **kwargs)
+
+    @overload
+    def fold_via(self, fn: FoldFunction[M, P, CarryT]) -> Callable[Concatenate[CarryT, P], CarryT]:
+        ...
+
+    @overload
+    def fold_via(self, fn: Callable[[M, CarryT], CarryT]) -> Callable[[CarryT], CarryT]:
+        ...
+
+    def fold_via(self, fn: Callable[..., CarryT]):
+        """Return a function that folds over the stack using ``fn``.
+
+        ``fn`` should take a block and a carry and return a new carry.  The
+        returned function mirrors :func:`haliax.fold` over the block axis.
+        """
+
+        def do_block(carry: CarryT, block: M, *args, **kwargs) -> CarryT:
+            return fn(block, carry, *args, **kwargs)
+
+        def do_fold(init: CarryT, *args, **kwargs) -> CarryT:
+            return haliax.fold(do_block, self.Block, remat=self.gradient_checkpointing)(init, self.stacked, *args, **kwargs)
+
+        return do_fold
+
+    @overload
+    def scan_via(self, fn: ScanFunction[M, CarryT, P, OutputT_co]) -> Callable[Concatenate[CarryT, P], tuple[CarryT, OutputT_co]]:
+        ...
+
+    @overload
+    def scan_via(self, fn: Callable[[M, CarryT], tuple[CarryT, OutputT_co]]) -> Callable[[CarryT], tuple[CarryT, OutputT_co]]:
+        ...
+
+    def scan_via(self, fn: Callable[..., tuple[CarryT, OutputT_co]]):
+        """Return a function that scans over the stack using ``fn``.
+
+        ``fn`` should take a block and a carry and return ``(carry, output)``.
+        Semantics match :func:`haliax.scan` over the block axis.
+        """
+
+        def do_block(carry: CarryT, block: M, *args, **kwargs) -> tuple[CarryT, OutputT_co]:
+            carry, output = fn(block, carry, *args, **kwargs)
+            return carry, output
+
+
+        def do_scan(init: CarryT, *args, **kwargs) -> tuple[CarryT, OutputT_co]:
+            return haliax.scan(do_block, self.Block, remat=self.gradient_checkpointing)(init, self.stacked, *args, **kwargs)
+
+        return do_scan
+
+    @overload
+    def vmap_via(self, fn: VmapFunction[M, P, OutputT_co]) -> Callable[P, OutputT_co]:
+        ...
+
+    @overload
+    def vmap_via(self, fn: Callable[[M], OutputT_co]) -> Callable[[], OutputT_co]:
+        ...
+
+    def vmap_via(self, fn: Callable[..., OutputT_co]) -> Callable[..., OutputT_co]:
+        """Return a function that applies each block independently using ``fn``.
+
+        ``fn`` should take a block and a carry and return an output. The
+        returned function mirrors :func:`haliax.vmap` over the block axis.
+        """
+
+        def do_vmap(*args, **kwargs) -> OutputT_co:
+            # Create a function that captures the additional arguments
+            def do_block_with_args(block: M, *args, **kwargs) -> OutputT_co:
+                return fn(block, *args, **kwargs)
+
+            return haliax.vmap(do_block_with_args, self.Block)(self.stacked, *args, **kwargs)
+
+        return do_vmap
+
+    def vmap(self, *extra_args, **extra_kwargs):
+        """Apply each block independently using :func:`haliax.vmap`.
+
+        Returns the stacked outputs of each block.
+        """
+
+        return haliax.vmap(type(self.stacked).__call__, self.Block)(self.stacked, *extra_args, **extra_kwargs)
 
     @staticmethod
     def _do_block(carry, block, *extra_args, **extra_kwargs):
@@ -343,7 +627,7 @@ class Stacked(ModuleWithStateDictSerialization, Generic[M]):
             else:
                 return tuple(x for _ in range(self.Block.size))
 
-        leaves, structure = jax.tree_util.tree_flatten(self.stacked, is_leaf=haliax.is_named_array)
+        leaves, structure = jax.tree_util.tree_flatten(self.stacked, is_leaf=haliax.util.is_named_array)
         unstacked_leaves = tuple(map(unbatch_leaf, leaves))
         # now we need to transpose the leaves
         unstacked_leaves = tuple(zip(*unstacked_leaves))

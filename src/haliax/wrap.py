@@ -1,14 +1,11 @@
-import typing
 from typing import Optional, Protocol
 
 import jax
-import jax.numpy as jnp
 
 from haliax.core import NamedArray, _broadcast_order, broadcast_to
-from haliax.jax_utils import is_scalarish
-from haliax.util import ensure_tuple
 
-from .axis import AxisSelection, AxisSelector, selects_axis
+from .axis import AxisSelection, AxisSelector, axis_spec_to_shape_dict, eliminate_axes
+from .jax_utils import is_scalarish
 
 
 def wrap_elemwise_unary(f, a, *args, **kwargs):
@@ -49,13 +46,14 @@ def wrap_reduction_call(
                 result = fn(a.array, axis=None, **kwargs)
                 return NamedArray(result, ())
             else:
-                axis = ensure_tuple(axis)
+                axis = axis_spec_to_shape_dict(axis)
                 if single_axis_only and len(axis) > 1:
                     raise ValueError(f"{fn.__name__} only supports a single axis")
-                indices = a._lookup_indices(axis)
+                indices = a.axis_indices(axis)
                 if indices is None or any(x is None for x in indices):
                     raise ValueError(f"axis {axis} is not in {a.axes}")
-                new_axes = [ax for ax in a.axes if not selects_axis(axis, ax)]
+                new_axes = eliminate_axes(a.axes, axis)
+
                 if single_axis_only:
                     result = fn(a.array, axis=indices[0], **kwargs)
                 else:
@@ -74,9 +72,10 @@ def wrap_axiswise_call(fn, a, axis: Optional[AxisSelection], *, single_axis_only
         if axis is None:
             return fn(a.array, axis=None, **kwargs)
         else:
-            indices = ensure_tuple(a._lookup_indices(axis))
+            axis = axis_spec_to_shape_dict(axis)
+            indices = a.axis_indices(axis)
             if any(x is None for x in indices):
-                raise ValueError(f"axis {axis} is not in {a.axes}")
+                raise ValueError(f"Axis {axis} not in {a.axes}")
             if len(indices) == 1:
                 return NamedArray(fn(a.array, axis=indices[0], **kwargs), a.axes)
             elif single_axis_only:
@@ -96,8 +95,33 @@ def wrap_elemwise_binary(op):
             b = broadcast_to(b, axes)
             return NamedArray(op(a.array, b.array), axes)
         elif isinstance(a, NamedArray):
+            # b isn't named.
+            if not is_scalarish(a):
+                if not is_scalarish(b):
+                    raise ValueError(
+                        f"Cannot apply {op.__name__} to a NamedArray and a non-scalar {type(b)}. "
+                        "Either both must be NamedArrays or b must be a scalar."
+                    )
+            else:
+                if is_scalarish(b):
+                    return NamedArray(op(a.array, b), a.axes)
+                a = a.scalar()
+                return op(a, b)
+
             return NamedArray(op(a.array, b), a.axes)
         elif isinstance(b, NamedArray):
+            if not is_scalarish(b):
+                if not is_scalarish(a):
+                    raise ValueError(
+                        f"Cannot apply {op.__name__} to a non-scalar {type(a)} and a NamedArray. "
+                        "Either both must be NamedArrays or a must be a scalar."
+                    )
+            else:
+                if is_scalarish(a):
+                    return NamedArray(op(a, b.array), b.axes)
+                b = b.scalar()
+                return op(a, b)
+
             return NamedArray(op(a, b.array), b.axes)
         else:
             return op(a, b)

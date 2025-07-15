@@ -34,9 +34,9 @@ plugins:
   - mkdocstrings:
       handlers:
         python:
-          setup_commands:
-              - import pytkdocs_tweaks
-              - pytkdocs_tweaks.main()
+#          setup_commands:
+#              - import pytkdocs_tweaks
+#              - pytkdocs_tweaks.main()
           paths: [src]
           import:
             - https://docs.python.org/3/objects.inv
@@ -46,22 +46,28 @@ plugins:
           options:
             docstring_options:
               ignore_init_summary: true
-              docstring_style: sphinx
             show_source: false
-            docstring_section_style: list
-            heading_level: 5
+            filters:
+              - "!^_"
+            heading_level: 4
             inherited_members: true
+            members_order: source
             merge_init_into_class: true
+            parameter_headings: true
+            separate_signature: false
             load_external_modules: true
             preload_modules: [haliax, haliax.core]
-#            separate_signature: true
+            show_if_no_docstring: true
             show_root_heading: true
             show_root_full_path: false
-#            show_signature_annotations: true
-            show_symbol_type_heading: false
+            show_signature_annotations: true
+            docstring_section_style: list
+            show_symbol_type_heading: true
             show_symbol_type_toc: false
             signature_crossrefs: true
             line_length: 100
+            summary: true
+
   - include-markdown
 extra_css:
   - css/material.css
@@ -84,9 +90,12 @@ nav:
     - Indexing and Slicing: 'indexing.md'
     - Rearrange: 'rearrange.md'
     - Matrix Multiplication: 'matmul.md'
+    - Type Annotations: 'typing.md'
+  - Higher Order Functions:
+    - Scan and Fold: 'scan.md'
+    - Vectorization: 'vmap.md'
   - Neural Networks: 'nn.md'
   - Partitioning: 'partitioning.md'
-  - Higher Order Functions: 'hof.md'
   - FP8: 'fp8.md'
   - Serialization: 'state-dict.md'
   - API Reference: 'api.md'

@@ -10,14 +10,14 @@
 <a href="">
 <img alt="License" src="https://img.shields.io/github/license/stanford-crfm/haliax?color=blue" />
 </a>
-<a href="https://https://pypi.org/project/haliax/">
+<a href="https://pypi.org/project/haliax/">
     <img alt="PyPI" src="https://img.shields.io/pypi/v/haliax?color=blue" />
 </a>
 
 > *Though you don’t seem to be much for listening, it’s best to be careful. If you managed to catch hold of even just a piece of my name, you’d have all manner of power over me.*<br/>
 > — Patrick Rothfuss, *The Name of the Wind*
 
-Haliax is a [JAX](https:://github.com/google/jax) library for building neural networks with named tensors, in the tradition of Alexander Rush's [Tensor Considered Harmful](https://nlp.seas.harvard.edu/NamedTensor).
+Haliax is a [JAX](https://github.com/google/jax) library for building neural networks with named tensors, in the tradition of Alexander Rush's [Tensor Considered Harmful](https://nlp.seas.harvard.edu/NamedTensor).
 Named tensors improve the **legibility** and **compositionality** of tensor programs by using named axes instead of positional indices
 as typically used in NumPy, PyTorch, etc.
 
@@ -25,8 +25,8 @@ Despite the focus on legibility, Haliax
 is also **fast**, typically about as fast as "pure" JAX code.
 Haliax is also built to be **scalable**: it
 can support [Fully-Sharded Data Parallelism (FSDP)](https://engineering.fb.com/2021/07/15/open-source/fsdp/) and Tensor Parallelism with [just a few lines of code](https://colab.research.google.com/drive/1QX4yH3zRFF3Xiibf1aahETcSQ5nbcUMz). Haliax powers [Levanter](https://github.com/stanford-crfm/levanter),
-our companion library for training large language models and other foundation models, with scale proven up to 20B parameters
-and up to a TPU v3-256 pod slice.
+our companion library for training large language models and other foundation models, with scale proven up to 70B parameters
+and up to TPU v4-2048.
 
 ## Example: Attention
 

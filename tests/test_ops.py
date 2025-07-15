@@ -150,7 +150,9 @@ def test_where(use_jit):
     Volume = hax.Axis("Volume", Height.size * Width.size * Depth.size)
     named7 = hax.random.uniform(PRNGKey(0), (Height, Width, Depth))
     named8, named9, named10 = hax_where(named7 > 0.5, fill_value=-1, new_axis=Volume)
-    assert jnp.all((named7[{"Height": named8, "Width": named9, "Depth": named10}] > 0.5).array)
+    unnamed_7 = named7.array
+    unnamed_8, unnamed_9, unnamed_10 = jnp.where(unnamed_7 > 0.5, size=Volume.size, fill_value=-1)
+    assert jnp.all(unnamed_8 == named8.array)
 
 
 def test_clip():
@@ -213,14 +215,14 @@ def test_mean_respects_where():
     named1 = hax.random.uniform(PRNGKey(0), (Height, Width))
     where = hax.random.uniform(PRNGKey(1), (Height, Width)) > 0.5
 
-    assert not jnp.all(jnp.isclose(hax.mean(named1), hax.mean(named1, where=where)))
-    assert jnp.all(jnp.isclose(hax.mean(named1, where=where), jnp.mean(named1.array, where=where.array)))
+    assert not hax.all(hax.isclose(hax.mean(named1), hax.mean(named1, where=where)))
+    assert jnp.all(jnp.isclose(hax.mean(named1, where=where).array, jnp.mean(named1.array, where=where.array)))
 
     # check broadcasting
     where = hax.random.uniform(PRNGKey(2), (Height,)) > 0.5
-    assert not jnp.all(jnp.isclose(hax.mean(named1), hax.mean(named1, where=where)))
+    assert not jnp.all(jnp.isclose(hax.mean(named1).array, hax.mean(named1, where=where).array))
     assert jnp.all(
-        jnp.isclose(hax.mean(named1, where=where), jnp.mean(named1.array, where=where.array.reshape((-1, 1))))
+        jnp.isclose(hax.mean(named1, where=where).array, jnp.mean(named1.array, where=where.array.reshape((-1, 1))))
     )
 
 
@@ -235,6 +237,19 @@ def test_reductions_produce_scalar_named_arrays_when_None_axis():
     # But if we specify axes, we always get a NamedArray, even if it's a scalar
     assert isinstance(hax.mean(named1, axis=("Height", "Width")), NamedArray)
     assert hax.mean(named1, axis=("Height", "Width")).axes == ()
+
+
+def test_pad():
+    Height = Axis("Height", 3)
+    Width = Axis("Width", 2)
+
+    arr = hax.arange((Height, Width))
+    padded = hax.pad(arr, {Height: (1, 2), Width: (0, 1)}, mode="constant", constant_values=0)
+
+    expected = jnp.pad(arr.array, [(1, 2), (0, 1)], mode="constant", constant_values=0)
+    assert padded.axes[0].size == Height.size + 3
+    assert padded.axes[1].size == Width.size + 1
+    assert jnp.all(expected == padded.array)
 
 
 def test_unique():

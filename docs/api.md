@@ -35,7 +35,6 @@ Occasionally, an axis size can be inferred in some circumstances but not others.
 ::: haliax.axis.eliminate_axes
 ::: haliax.axis.without_axes
 ::: haliax.axis.selects_axis
-::: haliax.axis.overlapping_axes
 ::: haliax.axis.is_axis_compatible
 
 
@@ -55,11 +54,11 @@ Occasionally, an axis size can be inferred in some circumstances but not others.
 
 ### Combining Arrays
 
-We don't include `hstack` or `vstack` because we prefer semantic axes.
 
 ::: haliax.concatenate
 ::: haliax.stack
 
+(We don't include `hstack` or `vstack` because they are subsumed by `stack`.)
 
 ## Array Manipulation
 
@@ -259,6 +258,7 @@ These are all more or less directly from JAX's NumPy API.
 
 ::: haliax.clip
 ::: haliax.isclose
+::: haliax.pad
 ::: haliax.top_k
 ::: haliax.trace
 ::: haliax.tril
@@ -288,6 +288,16 @@ See also the section on [Partitioning](partitioning.md).
 ::: haliax.partitioning.physical_axis_name
 ::: haliax.partitioning.physical_axis_size
 ::: haliax.partitioning.sharding_for_axis
+
+
+## Gradient Checkpointing
+
+Haliax mainly just defers to JAX and [equinox.filter_checkpoint][] for gradient checkpointing. However,
+we provide a few utilities to make it easier to use.
+
+See also [haliax.nn.ScanCheckpointPolicy][].
+
+::: haliax.tree_checkpoint_name
 
 ### Old API
 

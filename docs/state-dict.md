@@ -97,6 +97,7 @@ and use `_state_dict_key_map` to rename keys. For instance, the `Gpt2Transformer
 from typing import Optional
 from haliax.state_dict import ModuleWithStateDictSerialization
 
+
 class Gpt2Transformer(ModuleWithStateDictSerialization):
     ...
 
@@ -155,6 +156,84 @@ to join the prefix to the keys of the state dict.
 
 ```
 
+#### Flattening and Unflattening
+
+Haliax differs from many NN frameworks, and PyTorch in particular, in supporting multiple axes as inputs and outputs
+for linear transformations and layer norms. This means that a Linear layer's weight might have shape `(Heads, Dim, Out)`
+rather than just `(In, Out)` (where `In = Heads * Dim`). To facilitate compatibility with PyTorch, we provide
+two functions, `flatten_modules_for_export` and `unflatten_modules_from_export`, that can be used to convert
+modules to and from a format that is compatible with PyTorch. These functions are used internally by
+`to_torch_compatible_state_dict` and `from_torch_compatible_state_dict` and we expose them for advanced users.
+
+If you are adding a new module, you can plug into this system by inheriting from [haliax.state_dict.ModuleWithStateDictSerialization][]
+and overriding the `flatten_for_export` and `unflatten_from_export` methods. Here is an example from [haliax.nn.LayerNorm][]:
+
+```python
+Mod = TypeVar("Mod")
+
+class LayerNormBase(ModuleWithStateDictSerialization):
+    def flatten_for_export(self: Mod) -> Mod:
+        if isinstance(self.axis, hax.Axis):
+            return self
+
+        if self.weight is not None:
+            weight = self.weight.flatten("__OUT")
+        else:
+            weight = None
+
+        if self.bias is not None:
+            bias = self.bias.flatten("__OUT")
+        else:
+            bias = None
+
+        return dataclasses.replace(
+            self, weight=weight, bias=bias, axis=hax.flatten_axes(self.axis, "__OUT")
+        )
+
+    def unflatten_from_export(self: Mod, template: Mod) -> Mod:
+        if template.axis == self.axis:
+            return self
+
+        if self.weight is not None:
+            assert isinstance(self.axis, hax.Axis), "Cannot unflatten weight with non-axis axis"
+            weight = hax.unflatten_axis(self.weight, self.axis, template.axis)
+        else:
+            weight = None
+
+        if self.bias is not None:
+            assert isinstance(self.axis, hax.Axis), "Cannot unflatten weight with non-axis axis"
+            bias = hax.unflatten_axis(self.bias, self.axis, template.axis)
+
+        else:
+            bias = None
+
+        return dataclasses.replace(
+            self, weight=weight, bias=bias, axis=template.axis
+        )
+```
+
+The code is a bit boilerplate-y but the idea is to find articulated axes in arrays and flatten them, while updating
+any Axis members to match the new shape.
+
 ## API Reference
 
-::: haliax.state_dict
+### Types
+
+::: haliax.state_dict.StateDict
+::: haliax.state_dict.ModuleWithStateDictSerialization
+
+### Saving and Loading State Dicts
+::: haliax.state_dict.save_state_dict
+::: haliax.state_dict.load_state_dict
+
+### Converting between State Dicts and Modules
+
+::: haliax.state_dict.from_state_dict
+::: haliax.state_dict.to_state_dict
+
+### Torch Compatibility
+
+::: haliax.state_dict.from_torch_compatible_state_dict
+::: haliax.state_dict.to_torch_compatible_state_dict
+::: haliax.state_dict.flatten_modules_for_export
+::: haliax.state_dict.unflatten_modules_from_export

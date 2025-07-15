@@ -26,18 +26,27 @@ dependencies = [
     "equinox>=0.10.6",
     "jaxtyping>=0.2.20",
     "jmp>=0.0.4",
-    "safetensors>=0.4.3"
+    "safetensors>=0.4.3",
+    "aqtp>=0.8.2",
 ]
 dynamic =[ "version" ]
 
-[project.optional-dependencies]
-dev=["pytest >= 7.4.0", "mypy >= 0.910", "mkdocs >= 1.4.3", "mkdocs-material >= 7.3.3", "mkdocstrings >= 0.22.0",
-    "mkdocs-literate-nav >= 0.6.0", "mkdocs-macros-plugin >= 0.7.0", "mkdocstrings-python >= 1.1.2",
+
+[dependency-groups]
+dev = [
+    "pytest >= 7.4.0",
+    "mypy >= 0.910",
+    "mkdocs >= 1.4.3",
+    "mkdocs-material >= 7.3.3",
+    "mkdocstrings >= 0.22.0",
+    "mkdocs-literate-nav >= 0.6.0",
+    "mkdocs-macros-plugin >= 0.7.0",
+    "mkdocstrings-python >= 1.1.2",
     "mkdocs-include-markdown-plugin",
     "pymdown-extensions",
     "pygments",
-    "pymdown-extensions",
-    "chex>=0.1.86"
+    "chex>=0.1.86",
+    "pre-commit",
 ]
 
 
@@ -70,3 +79,24 @@ src_paths = ["src", "tests"]
 "Homepage" = "https://github.com/stanford-crfm/haliax"
 "Bug Tracker" = "https://github.com/stanford-crfm/haliax/issues/"
 "Documentation" = "https://haliax.readthedocs.io/en/latest/"
+
+[tool.ruff.lint]
+ignore = [ "E203", "E501", "W605", "F821", "E266", "F722", "E731", "E741" ]
+
+[tool.setuptools.package-data]
+"haliax" = ["*.pyi"]
+
+[tool.coverage.report]
+exclude_also = [
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+    "[.][.][.]"
+    ]

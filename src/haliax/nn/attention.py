@@ -8,10 +8,9 @@ from jaxtyping import PRNGKeyArray
 
 import haliax
 import haliax.random as hrandom
-from haliax.axis import Axis, AxisSelection, AxisSelector, AxisSpec, axis_name
+from haliax.axis import Axis, AxisSelection, AxisSelector, AxisSpec, axis_name, axis_spec_to_shape_dict
 from haliax.core import NamedArray
 from haliax.types import PrecisionLike
-from haliax.util import ensure_tuple
 
 
 # With attention, we usually distinguish between the mask and the bias, though the former is just a special case of the
@@ -33,6 +32,7 @@ def dot_product_attention_weights(
     bias: Optional[NamedArray] = None,
     attention_dtype: Optional[jnp.dtype] = None,
     precision: PrecisionLike = None,
+    scaling_factor: Optional[float] = None,
 ) -> NamedArray:
     """
     NamedArray version of dot product attention. Computes the logits for the attention weights. Note that the
@@ -46,12 +46,16 @@ def dot_product_attention_weights(
     :param bias: Optional[NamedArray] broadcast compatible with (KeySize, QPos, KPos). Should be float
     :param attention_dtype: Optional dtype to use for attention
     :param precision: PrecisionLike for dot product. See precision argument to jax.lax.dot_general
+    :param scaling_factor: Optional float as scaling factor for attention score. Default to 1/sqrt(D)
     :return: NamedArray of shape (QPos, KPos)
     """
     # cf https://github.com/google/flax/blob/509bf97ea272e130d932920f45307ac98947d994/flax/linen/attention.py#L40
 
     orig_dtype = query.dtype
-    query = query / jnp.sqrt(query.axis_size(Key))
+    if scaling_factor is None:
+        scaling_factor = 1.0 / jnp.sqrt(query.axis_size(Key))
+
+    query = query * scaling_factor
 
     if attention_dtype is not None:
         query = query.astype(attention_dtype)
@@ -103,10 +107,11 @@ def dot_product_attention(
             f"query must be a NamedArray, got {type(query)}. Probably you are still using the old signature"
             "of dot_product_attention. It no longer takes a QPos argument."
         )
-    KPos = ensure_tuple(key.resolve_axis(KPos))
+    KPos = axis_spec_to_shape_dict(KPos)
+    KPos = key.resolve_axis(KPos)
     # any axis in KPos that's in query is a problem
     for axis in KPos:
-        if axis in query.axes:
+        if query.has_axis(axis):
             raise ValueError(
                 f"Axis {axis} in KPos is also in query. Attended-to axes must be distinct from query axis"
             )
@@ -116,56 +121,6 @@ def dot_product_attention(
     )
 
     return haliax.dot(weights, value, axis=KPos)
-
-
-def self_attention(
-    Pos: AxisSelection,
-    Key: AxisSelector,
-    query: NamedArray,
-    key: NamedArray,
-    value: NamedArray,
-    is_causal: bool,  # make people be explicit about this
-    mask: Optional[NamedArray] = None,
-    bias: Optional[NamedArray] = None,
-    attention_dtype: Optional[jnp.dtype] = None,
-    precision: PrecisionLike = None,
-) -> NamedArray:
-    """
-    Convenience function for self attention. This is just a wrapper around dot_product_attention that makes sure
-    the query and key axes are distinct. This is a common mistake and it's better to catch it early.
-
-    Note that mask and bias's Pos axis/axes should be key axes, not query axes. You can't use
-    query axes in a mask/bias with this method. Use dot_product_attention directly if you need to do that.
-    As an exception, if is_causal is True, then we create a causal mask for you.
-
-    Args:
-        Pos: Axis of sequence length
-        Key: Axis of head dimension
-        query: NamedArray of shape {..., Pos, KeySize}
-        key: NamedArray of shape {..., Pos, KeySize}
-        value: NamedArray of shape {..., Pos, KeySize}
-        is_causal: whether to use a causal mask
-        mask: Optional[NamedArray] broadcast compatible with (KeySize, Pos, Pos). Should be boolean
-        bias: Optional[NamedArray] broadcast compatible with (KeySize, Pos, Pos). Should be float
-        attention_dtype: Optional dtype to use for attention
-        precision: PrecisionLike for dot product. See precision argument to jax.lax.dot_general
-    """
-    Pos = ensure_tuple(key.resolve_axis(Pos))
-
-    # rename key/value length axes if necessary
-    QPos, renames = _get_query_pos_renames(Pos)
-
-    query = query.rename(renames)
-
-    if is_causal:
-        # require that QPos is a single axis
-        if len(Pos) != 1:
-            raise ValueError("QPos must be a single axis for causal self attention")
-        mask = causal_mask(QPos[0], Pos[0])
-
-    out = dot_product_attention(Pos, Key, query, key, value, mask, bias, attention_dtype, precision)
-    # now rename back
-    return out.rename({v: k for k, v in renames.items()})
 
 
 def _get_query_pos_renames(Pos):
@@ -200,7 +155,7 @@ def combine_masks_or(mask1: Optional[NamedArray], mask2: Optional[NamedArray]) -
     return mask1 | mask2.broadcast_axis(mask1.axes)
 
 
-def causal_mask(QPos: Axis, KPos: Axis, q_start: int = 0, k_start: int = 0) -> NamedArray:
+def causal_mask(QPos: Axis, KPos: Axis, q_start: int | NamedArray = 0, k_start: int  | NamedArray= 0) -> NamedArray:
     """
     Creates a materialized causal mask for attention.
 
@@ -208,7 +163,18 @@ def causal_mask(QPos: Axis, KPos: Axis, q_start: int = 0, k_start: int = 0) -> N
     :param KPos: Axis of key sequence length
     :return: NamedArray of shape (QPos, KPos)
     """
-    return haliax.arange(QPos, start=q_start) >= haliax.arange(KPos, start=k_start).broadcast_axis(QPos)
+    # if q_start is a named array, we vmap the arange
+    if isinstance(q_start, NamedArray):
+        q_range = haliax.vmap(haliax.arange, q_start.axes)(QPos, start=q_start)
+    else:
+        q_range = haliax.arange(QPos, start=q_start)
+
+    if isinstance(k_start, NamedArray):
+        k_range = haliax.vmap(haliax.arange, k_start.axes)(KPos, start=k_start)
+    else:
+        k_range = haliax.arange(KPos, start=k_start)
+
+    return q_range >= k_range.broadcast_axis(QPos)
 
 
 def prefix_lm_mask(QSeqLen: Axis, KSeqLen: Axis, prefix_len: int, q_start: int = 0, k_start: int = 0) -> NamedArray:

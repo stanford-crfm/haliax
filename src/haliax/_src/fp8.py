@@ -1,4 +1,3 @@
-import warnings
 from functools import partial
 
 from jax import custom_jvp, custom_vjp, lax

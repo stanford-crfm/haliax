@@ -1,5 +1,5 @@
 import typing
-from typing import Optional, Union
+from typing import Mapping, Optional, Union
 
 import jax
 import jax.numpy as jnp
@@ -7,15 +7,15 @@ from jaxtyping import ArrayLike
 
 import haliax
 
-from .axis import Axis, AxisSelector
+from .axis import Axis, AxisSelector, axis_name
 from .core import NamedArray, NamedOrNumeric, broadcast_arrays, broadcast_arrays_and_return_axes, named
 from .jax_utils import is_scalarish
 
 
 def trace(array: NamedArray, axis1: AxisSelector, axis2: AxisSelector, offset=0, dtype=None) -> NamedArray:
     """Compute the trace of an array along two named axes."""
-    a1_index = array._lookup_indices(axis1)
-    a2_index = array._lookup_indices(axis2)
+    a1_index = array.axis_indices(axis1)
+    a2_index = array.axis_indices(axis2)
 
     if a1_index is None:
         raise ValueError(f"Axis {axis1} not found in array. Available axes: {array.axes}")
@@ -88,6 +88,8 @@ def where(
                 raise ValueError("x must be a NamedArray or scalar if y is a NamedArray")
             x = named(x, ())
         x, y = broadcast_arrays(x, y)
+        if isinstance(condition, NamedArray):
+            condition = condition.scalar()
         return jax.lax.cond(condition, lambda _: x, lambda _: y, None)
 
     condition, x, y = broadcast_arrays(condition, x, y)  # type: ignore
@@ -142,7 +144,7 @@ def pad_left(array: NamedArray, axis: Axis, new_axis: Axis, value=0) -> NamedArr
     if amount_to_pad_to < 0:
         raise ValueError(f"Cannot pad {axis} to {new_axis}")
 
-    idx = array._lookup_indices(axis)
+    idx = array.axis_indices(axis)
 
     padding = [(0, 0)] * array.ndim
     if idx is None:
@@ -151,6 +153,44 @@ def pad_left(array: NamedArray, axis: Axis, new_axis: Axis, value=0) -> NamedArr
 
     padded = jnp.pad(array.array, padding, constant_values=value)
     return NamedArray(padded, array.axes[:idx] + (new_axis,) + array.axes[idx + 1 :])
+
+
+def pad(
+    array: NamedArray,
+    pad_width: Mapping[AxisSelector, tuple[int, int]],
+    *,
+    mode: str = "constant",
+    constant_values: NamedOrNumeric = 0,
+    **kwargs,
+) -> NamedArray:
+    """Version of ``jax.numpy.pad`` that works with ``NamedArray``.
+
+    ``pad_width`` should be a mapping from axis (or axis name) to a ``(before, after)``
+    tuple specifying how much padding to add on each side of that axis. Any axis
+    not present in ``pad_width`` will not be padded.
+    """
+
+    padding = []
+    new_axes = []
+    for ax in array.axes:
+        left_right = pad_width.get(ax)
+        if left_right is None:
+            left_right = pad_width.get(axis_name(ax))  # type: ignore[arg-type]
+        if left_right is None:
+            left_right = (0, 0)
+        left, right = left_right
+        padding.append((left, right))
+        new_axes.append(ax.resize(ax.size + left + right))
+
+    result = jnp.pad(
+        array.array,
+        padding,
+        mode=mode,
+        constant_values=raw_array_or_scalar(constant_values),
+        **kwargs,
+    )
+
+    return NamedArray(result, tuple(new_axes))
 
 
 def raw_array_or_scalar(x: NamedOrNumeric):
@@ -302,4 +342,4 @@ def unique(
     return tuple(ret)
 
 
-__all__ = ["trace", "where", "tril", "triu", "isclose", "pad_left", "clip", "unique"]
+__all__ = ["trace", "where", "tril", "triu", "isclose", "pad_left", "pad", "clip", "unique"]
