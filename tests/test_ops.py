@@ -252,7 +252,7 @@ def test_pad():
     assert padded.axes[1].size == Width.size + 1
     assert jnp.all(expected == padded.array)
 
-
+    
 def test_norm():
     H, W, D = hax.make_axes(H=3, W=4, D=5)
 
@@ -276,6 +276,7 @@ def test_norm():
 
     with pytest.raises(ValueError):
         _ = hax.norm(arr, axis=H, keepdims=True)
+
 
 def test_unique():
     # named version of this test:
