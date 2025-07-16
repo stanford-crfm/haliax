@@ -1,4 +1,5 @@
 from typing import Callable
+import typing
 
 import jax.numpy as jnp
 import pytest
@@ -275,3 +276,158 @@ def test_norm():
 
     with pytest.raises(ValueError):
         _ = hax.norm(arr, axis=H, keepdims=True)
+
+def test_unique():
+    # named version of this test:
+    # >>> M = jnp.array([[1, 2],
+    # ...                [2, 3],
+    # ...                [1, 2]])
+    # >>> jnp.unique(M)
+    # Array([1, 2, 3], dtype=int32)
+
+    Height = Axis("Height", 3)
+    Width = Axis("Width", 2)
+
+    named1 = hax.named([[1, 2], [2, 3], [1, 2]], (Height, Width))
+
+    U = Axis("U", 3)
+
+    named2 = hax.unique(named1, U)
+
+    assert jnp.all(jnp.equal(named2.array, jnp.array([1, 2, 3])))
+
+    #     If you pass an ``axis`` keyword, you can find unique *slices* of the array along
+    #     that axis:
+    #
+    #     >>> jnp.unique(M, axis=0)
+    #     Array([[1, 2],
+    #            [2, 3]], dtype=int32)
+
+    U2 = Axis("U2", 2)
+    named3 = hax.unique(named1, U2, axis=Height)
+    assert jnp.all(jnp.equal(named3.array, jnp.array([[1, 2], [2, 3]])))
+
+    #     >>> x = jnp.array([3, 4, 1, 3, 1])
+    #     >>> values, indices = jnp.unique(x, return_index=True)
+    #     >>> print(values)
+    #     [1 3 4]
+    #     >>> print(indices)
+    #     [2 0 1]
+    #     >>> jnp.all(values == x[indices])
+    #     Array(True, dtype=bool)
+
+    x = hax.named([3, 4, 1, 3, 1], ("Height",))
+    U3 = Axis("U3", 3)
+    values, indices = hax.unique(x, U3, return_index=True)
+
+    assert jnp.all(jnp.equal(values.array, jnp.array([1, 3, 4])))
+    assert jnp.all(jnp.equal(indices.array, jnp.array([2, 0, 1])))
+
+    assert jnp.all(jnp.equal(values.array, x[{"Height": indices}].array))
+
+    #   If you set ``return_inverse=True``, then ``unique`` returns the indices within the
+    #     unique values for every entry in the input array:
+    #
+    #     >>> x = jnp.array([3, 4, 1, 3, 1])
+    #     >>> values, inverse = jnp.unique(x, return_inverse=True)
+    #     >>> print(values)
+    #     [1 3 4]
+    #     >>> print(inverse)
+    #     [1 2 0 1 0]
+    #     >>> jnp.all(values[inverse] == x)
+    #     Array(True, dtype=bool)
+
+    values, inverse = hax.unique(x, U3, return_inverse=True)
+
+    assert jnp.all(jnp.equal(values.array, jnp.array([1, 3, 4])))
+    assert jnp.all(jnp.equal(inverse.array, jnp.array([1, 2, 0, 1, 0])))
+
+    #     In multiple dimensions, the input can be reconstructed using
+    #     :func:`jax.numpy.take`:
+    #
+    #     >>> values, inverse = jnp.unique(M, axis=0, return_inverse=True)
+    #     >>> jnp.all(jnp.take(values, inverse, axis=0) == M)
+    #     Array(True, dtype=bool)
+    #
+
+    values, inverse = hax.unique(named1, U3, axis=Height, return_inverse=True)
+
+    assert jnp.all((values[{"U3": inverse}] == named1).array)
+
+    #     **Returning counts**
+    #  If you set ``return_counts=True``, then ``unique`` returns the number of occurrences
+    #     within the input for every unique value:
+    #
+    #     >>> x = jnp.array([3, 4, 1, 3, 1])
+    #     >>> values, counts = jnp.unique(x, return_counts=True)
+    #     >>> print(values)
+    #     [1 3 4]
+    #     >>> print(counts)
+    #     [2 2 1]
+    #
+    #     For multi-dimensional arrays, this also returns a 1D array of counts
+    #     indicating number of occurrences along the specified axis:
+    #
+    #     >>> values, counts = jnp.unique(M, axis=0, return_counts=True)
+    #     >>> print(values)
+    #     [[1 2]
+    #      [2 3]]
+    #     >>> print(counts)
+    #     [2 1]
+
+    values, counts = hax.unique(x, U3, return_counts=True)
+
+    assert jnp.all(jnp.equal(values.array, jnp.array([1, 3, 4])))
+    assert jnp.all(jnp.equal(counts.array, jnp.array([2, 2, 1])))
+
+    values, counts = hax.unique(named1, U2, axis=Height, return_counts=True)
+
+    assert jnp.all(jnp.equal(values.array, jnp.array([[1, 2], [2, 3]])))
+    assert jnp.all(jnp.equal(counts.array, jnp.array([2, 1])))
+
+
+def test_unique_shortcuts():
+    Height = Axis("Height", 3)
+    Width = Axis("Width", 2)
+
+    arr2d = hax.named([[1, 2], [2, 3], [1, 2]], (Height, Width))
+    U = Axis("U", 3)
+
+    # unique_values
+    uv = hax.unique_values(arr2d, U)
+    uv_expected = hax.unique(arr2d, U)
+    assert jnp.all(uv.array == uv_expected.array)
+
+    # unique_counts
+    vc, cc = hax.unique_counts(arr2d, U)
+    vc_exp, cc_exp = hax.unique(arr2d, U, return_counts=True)
+    assert jnp.all(vc.array == vc_exp.array)
+    assert jnp.all(cc.array == cc_exp.array)
+
+    # unique_inverse
+    Height1 = Axis("Height1", 5)
+    arr1d = hax.named([3, 4, 1, 3, 1], (Height1,))
+    U2 = Axis("U2", 3)
+    vi, ii = hax.unique_inverse(arr1d, U2)
+    vi_exp, ii_exp = hax.unique(arr1d, U2, return_inverse=True)
+    assert jnp.all(vi.array == vi_exp.array)
+    assert jnp.all(ii.array == ii_exp.array)
+
+    # unique_all
+    U3 = Axis("U3", 2)
+    va, ia, ina, ca = hax.unique_all(arr2d, U3, axis=Height)
+    va_exp, ia_exp, ina_exp, ca_exp = typing.cast(
+        tuple[NamedArray, NamedArray, NamedArray, NamedArray],
+        hax.unique(
+            arr2d,
+            U3,
+            axis=Height,
+            return_index=True,
+            return_inverse=True,
+            return_counts=True,
+        ),
+    )
+    assert jnp.all(va.array == va_exp.array)
+    assert jnp.all(ia.array == ia_exp.array)
+    assert jnp.all(ina.array == ina_exp.array)
+    assert jnp.all(ca.array == ca_exp.array)
