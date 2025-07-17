@@ -1,11 +1,14 @@
 import dataclasses
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, Sequence
 
 import equinox as eqx
+import jax
 import jax.numpy as jnp
 import jax.tree_util as jtu
 
+
 from haliax.core import NamedArray
+from haliax.axis import Axis
 from haliax.util import is_jax_or_hax_array_like
 
 from ._src.util import IdentityMap
@@ -117,3 +120,70 @@ def _check_for_static_arrays(problems, module):
 
     if static_arrays:
         problems.static_arrays.extend(static_arrays)
+
+
+def _pspec_parts(spec_part) -> str:
+    if spec_part is None:
+        return "unsharded"
+    elif isinstance(spec_part, (tuple, list)):
+        return "+".join(str(p) for p in spec_part)
+    else:
+        return str(spec_part)
+
+
+def visualize_named_sharding(axes: Sequence[Axis], sharding: jax.sharding.Sharding) -> None:
+    """Visualize the sharding for a set of named axes.
+
+    This extends :func:`jax.debug.visualize_sharding` to handle arrays with more
+    than two dimensions by falling back to a textual description when necessary.
+    """
+
+    try:
+        pspec = sharding.spec  # type: ignore[attr-defined]
+    except Exception:
+        pspec = (None,) * len(axes)
+
+    parts = [_pspec_parts(p) for p in pspec]
+    num_sharded = sum(p != "unsharded" for p in parts)
+
+    if num_sharded <= 2:
+        try:
+            jax.debug.visualize_sharding([ax.size for ax in axes], sharding)
+        except Exception:
+            pass
+
+    mapping = ", ".join(f"{ax.name}->{part}" for ax, part in zip(axes, parts))
+    print(mapping)
+
+
+def visualize_shardings(tree) -> None:
+    """Print the sharding for each array-like leaf in ``tree``.
+
+    Both :class:`NamedArray` and regular JAX arrays are supported. NamedArrays
+    will show the mapping from logical axis names to physical axes. Plain arrays
+    will fall back to :func:`jax.debug.visualize_sharding`.
+    """
+
+    import haliax.tree_util as htu
+
+    def _show(x):
+        if isinstance(x, NamedArray):
+            arr = x.array
+            axes = x.axes
+        else:
+            arr = x
+            axes = None
+
+        def cb(sh):
+            if axes is not None:
+                visualize_named_sharding(axes, sh)
+            else:
+                try:
+                    jax.debug.visualize_sharding(arr.shape, sh)
+                except Exception:
+                    pass
+
+        jax.debug.inspect_array_sharding(arr, callback=cb)
+        return x
+
+    htu.tree_map(_show, tree, is_leaf=is_jax_or_hax_array_like)
