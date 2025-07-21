@@ -149,7 +149,7 @@ def einops_rearrange(array: NamedArray, expression: str, **bindings: AxisSelecto
     return auto_sharded(NamedArray(finished_array, plan.final_axes))
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class _Plan:
     intermediate_axes: tuple[Axis, ...]
     transpose: Optional[tuple[int, ...]]
