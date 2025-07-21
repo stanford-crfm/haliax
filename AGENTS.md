@@ -17,7 +17,7 @@ repository. Follow these notes when implementing new features or fixing bugs.
 ## Playbook
 
 - Adding Haliax-style tensor typing annotations are described in @.playbooks/add-types.md
-- Wrapping standard JAX functions so they operate on `NamedArray` is explained in @.playbooks/wrap-non-named.md
+- [Wrapping standard JAX functions](.playbooks/wrap-non-named.md) so they operate on `NamedArray`
 
 ## Code Style
 
@@ -58,15 +58,14 @@ repository. Follow these notes when implementing new features or fixing bugs.
 
 * **Generic code**: many utilities are written with Python generics and dataclasses. Where possible,
   write reusable functions or classes that operate over TypeVars instead of hard coding concrete types.
-* **Configurations**: configuration files are dataclasses loaded via `draccus`. Keep configs
-  declarative and typed.
-* **Reproducibility**: Levanter aims for deterministic training where possible. Avoid sources of
+* **Reproducibility**: Haliax aims for determinism where possible. Avoid sources of
   nondeterminism unless explicitly required.
 * Prefer Stacked with fold or scan over writing custom loops, for better compile times and gradient checkpointing support
+* For configuration, we prefer frozen dataclasses over dictionaries.
 
 ## Library conventions
-- Haliax revolves around `NamedArray` and explicit `Axis` objects. Prefer APIs that accept
-  axes or axis names rather than hard‑coding positional dimensions.
+- Haliax revolves around `NamedArray` and named shapes, either via Axis objects or "shape dicts" (e.g. `{"batch": 42, "embed": 16}).
+  Prefer APIs that accept axes or axis names rather than hard‑coding positional dimensions. In particular, use AxisSpec and AxisSelection where possible.
 - Utilities should be written so they work with arbitrary axis names. Avoid relying on
   fixed axis orders when possible.
 - Use the provided modules in `haliax.nn` or Equinox when building neural network layers.
@@ -74,5 +73,4 @@ repository. Follow these notes when implementing new features or fixing bugs.
   for a float32 array with a "batch" axis, or `ht.Float[NamedArray, "batch"]` for any floating point dtype.
 
 ## Documentation
-- Public functions and modules require docstrings. If behavior is non‑obvious,
-  add examples in `docs/`.
+- Public functions and modules require docstrings. If behavior is non‑obvious, add examples in `docs/`.
