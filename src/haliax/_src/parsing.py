@@ -5,7 +5,7 @@ from typing import Mapping, NoReturn, Optional, Sequence
 from haliax.axis import Axis, AxisSelector
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class _AxisCapture:
     binding: Optional[str] = None
     axes: tuple[str, ...] = ()
@@ -16,7 +16,7 @@ class _AxisCapture:
             raise ValueError("Empty axes not allowed")
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class Expression:
     captures: Sequence[_AxisCapture | EllipsisType]
     is_ordered: bool
