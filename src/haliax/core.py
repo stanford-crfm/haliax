@@ -32,6 +32,7 @@ from .axis import (
     dslice,
     eliminate_axes,
     selects_axis,
+    _check_size_consistency,
 )
 from .types import GatherScatterModeStr, IntScalar, PrecisionLike, Scalar
 
@@ -1649,39 +1650,62 @@ def _broadcast_axes(
 def broadcast_to(
     a: NamedOrNumeric, axes: AxisSpec, ensure_order: bool = True, enforce_no_extra_axes: bool = True
 ) -> NamedArray:
-    """
-    Broadcasts a so that it has the given axes.
-     If ensure_order is True (default), then the returned array will have the same axes in the same order as the given
-     axes. Otherwise, the axes may not be moved if they are already in the array. The axes may not be contiguous however
+    """Broadcast ``a`` so that it has the given axes.
 
-    If enforce_no_extra_axes is True and the array has axes that are not in axes, then a ValueError is raised.
+    If ``ensure_order`` is ``True`` (default) then the returned array's axes are
+    arranged in the same order as ``axes``. Otherwise existing axes may remain in
+    their current order, though they may still be moved to the front if new axes
+    are added.
+
+    If ``enforce_no_extra_axes`` is ``True`` and ``a`` has axes that are not in
+    ``axes`` then a ``ValueError`` is raised.
     """
-    axes = axis_spec_to_tuple(axes)
+
+    axes_dict = axis_spec_to_shape_dict(axes)
+    axes_tuple = axis_spec_to_tuple(axes)
 
     if not isinstance(a, NamedArray):
         a = named(jnp.asarray(a), ())
 
     assert isinstance(a, NamedArray)  # mypy gets confused
 
-    if a.axes == axes:
-        return a
+    a_axes_dict = axis_spec_to_shape_dict(a.axes)
 
-    to_add = tuple(ax for ax in axes if ax not in a.axes)
+    # fill in missing sizes and check for mismatches
+    for name, sz in list(axes_dict.items()):
+        if sz is None:
+            if name not in a_axes_dict:
+                raise ValueError(
+                    f"Cannot broadcast: size for axis '{name}' is unspecified and it does not exist in array"
+                )
+            axes_dict[name] = a_axes_dict[name]
+        elif name in a_axes_dict:
+            _check_size_consistency(axes, a.axes, name, sz, a_axes_dict[name])
+
+    extra_axis_names = [ax.name for ax in a.axes if ax.name not in axes_dict]
+    if enforce_no_extra_axes and extra_axis_names:
+        raise ValueError(
+            f"Cannot broadcast {a.shape} to {axes_dict}: extra axes present {extra_axis_names}"
+        )
+
+    axes_names_in_a = {ax.name for ax in a.axes}
+    to_add = tuple(
+        Axis(axis_name(ax), axes_dict[axis_name(ax)])
+        for ax in axes_tuple
+        if axis_name(ax) not in axes_names_in_a
+    )
 
     all_axes = to_add + a.axes
 
-    if enforce_no_extra_axes and len(all_axes) != len(axes):
-        raise ValueError(f"Cannot broadcast {a.shape} to {axis_spec_to_shape_dict(axes)}: extra axes present")
+    extra_axes = tuple(ax for ax in a.axes if ax.name not in axes_dict)
 
-    extra_axes = tuple(ax for ax in a.axes if ax not in axes)
-
-    # broadcast whatever we need to the front and reorder
     a_array = jnp.broadcast_to(a.array, [ax.size for ax in all_axes])
     a = NamedArray(a_array, all_axes)
 
-    # if the new axes are already in the right order, then we're done
-    if ensure_order and not _is_subsequence(axes, all_axes):
-        a = a.rearrange(axes + extra_axes)
+    axes_tuple_complete = tuple(Axis(axis_name(ax), axes_dict[axis_name(ax)]) for ax in axes_tuple)
+
+    if ensure_order and not _is_subsequence(axes_tuple_complete, all_axes):
+        a = a.rearrange(axes_tuple_complete + extra_axes)
 
     return typing.cast(NamedArray, a)
 
