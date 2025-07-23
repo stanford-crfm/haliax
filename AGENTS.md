@@ -74,3 +74,4 @@ repository. Follow these notes when implementing new features or fixing bugs.
 
 ## Documentation
 - Public functions and modules require docstrings. If behavior is non‑obvious, add examples in `docs/`.
+- For a concise overview of Haliax aimed at LLM agents, see [docs/primer.md](docs/primer.md).

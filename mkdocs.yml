@@ -100,3 +100,5 @@ nav:
   - Serialization: 'state-dict.md'
   - API Reference: 'api.md'
   - FAQ: 'faq.md'
+  - LLMs:
+      - "LLM Primer": 'primer.md'
