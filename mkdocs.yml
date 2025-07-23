@@ -79,6 +79,7 @@ watch:
   - docs
 nav:
   - Home: 'index.md'
+  - Primer: 'primer.md'
   - Tutorials:
       - "Introduction to Haliax": https://colab.research.google.com/drive/1TiTcQQ4V5mopbgCu1SVl-oqJtXn7rFnC
       - "Distributed Training and FSDP": https://colab.research.google.com/drive/1QX4yH3zRFF3Xiibf1aahETcSQ5nbcUMz
