@@ -11,7 +11,7 @@ more suitable for expressing a particular contraction In general:
 See also the API reference for [haliax.dot][] and [haliax.einsum][] and the
 [cheat sheet section](cheatsheet.md#matrix-multiplication).
 
-### `haliax.dot`
+### [`haliax.dot`][haliax.dot]
 
 With [haliax.dot][], you specify the axes to contract over, without needing to write out the
 axes you want to keep (though you can if you want):
@@ -57,7 +57,7 @@ y = hax.dot(x, w, c, axis=())  # shape is (H, W, D, C), equivalent to np.einsum(
 y = hax.dot(x, w, c, axis=(), out_axes=(D, ..., H))  # shape is (D, W, C, H), equivalent to np.einsum("hwdc,dc,c->dwch", x, w, c)
 ```
 
-### `haliax.einsum`
+### [`haliax.einsum`][haliax.einsum]
 
 [haliax.einsum][] is at its best when you want to express a more complex tensor contraction.
 It is similar to [numpy.einsum](https://numpy.org/doc/stable/reference/generated/numpy.einsum.html)

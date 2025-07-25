@@ -80,7 +80,7 @@ with hax.axis_mapping({"batch": "data"}):
 ```
 
 Unlike in JAX, which has separate APIs for partitioning arrays inside and outside of `jit`, Haliax has a single API:
-`hax.shard` work inside and outside of `jit`. Haliax automatically
+[haliax.shard][] works inside and outside of `jit`. Haliax automatically
 chooses which JAX function to use based on context.
 
 

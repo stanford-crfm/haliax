@@ -17,11 +17,11 @@ def scan(f, init, xs, length=None):
   return carry, np.stack(ys)
 ```
 
-Haliax provides two versions of this pattern: [haliax.fold][] and [haliax.scan][]. haliax.scan works much like JAX's scan,
-except it is curried and it works with NamedArrays. haliax.fold is a more restricted version of scan that is easier to
+Haliax provides two versions of this pattern: [haliax.fold][] and [haliax.scan][]. [haliax.scan][] works much like JAX's scan,
+except it is curried and it works with NamedArrays. [haliax.fold][] is a more restricted version of scan that is easier to
 use if you don't need the full generality of scan. (It works with functions that only return `carry`, not `carry, output`.)
 
-## `haliax.scan`
+## [haliax.scan][haliax.scan]
 
 Unlike JAX's scan, Haliax's scan is curried - it takes the function and configuration first, then the initial carry and scan arguments as a separate call: `scan(f, axis)(init, xs)`.
 
@@ -32,7 +32,7 @@ Unlike JAX's scan, Haliax's scan is curried - it takes the function and configur
 
 ### Basic Example
 
-Here's a practical example of using `haliax.scan` to sum values along an axis while keeping track of intermediates:
+Here's a practical example of using [haliax.scan][] to sum values along an axis while keeping track of intermediates:
 
 ```python
 Time = Axis("Time", 100)
@@ -89,9 +89,9 @@ final_state, path = hax.scan(simulate_brownian_motion, Time)(init_state, None)
 
 More commonly, you might use this for an RNN or Transformer model. (See [haliax.nn.Stacked][].)
 
-## `haliax.fold`
+## [haliax.fold][haliax.fold]
 
-`haliax.fold` is a simpler version of `haliax.scan` that is easier to use when you don't need the full generality of `scan`.
+[haliax.fold][] is a simpler version of [haliax.scan][] that is easier to use when you don't need the full generality of `scan`.
 Specifically, `fold` is for functions that only return a `carry`, not a `carry, output`.
 
 Morally, `fold` is like this Python code:
@@ -138,10 +138,10 @@ init_state = (
 final_state = hax.fold(running_stats, Time)(init_state, data)
 ```
 
-## `haliax.map`
+## [haliax.map][haliax.map]
 
-`haliax.map` is a convenience function that applies a function to each element of an axis. It is similar
-to [jax.lax.map][] but works with NamedArrays, providing a similar interface to `haliax.scan` and `haliax.fold`.
+[haliax.map][] is a convenience function that applies a function to each element of an axis. It is similar
+to [jax.lax.map][] but works with NamedArrays, providing a similar interface to [haliax.scan][] and [haliax.fold][].
 
 ```python
 
@@ -155,13 +155,13 @@ def my_fn(x):
 result = hax.map(my_fn, Time)(data)
 ```
 
-You should generally prefer to use [haliax.vmap][] instead of `haliax.map`, but it's there if you need it.
-(It uses less memory than `haliax.vmap` but is slower.)
+You should generally prefer to use [haliax.vmap][] instead of [haliax.map][], but it's there if you need it.
+(It uses less memory than [haliax.vmap][] but is slower.)
 
 
 ## Gradient Checkpointing / Rematerialization
 
-Both `haliax.scan` and `haliax.fold` support gradient checkpointing, which can be useful for deep models.
+Both [haliax.scan][] and [haliax.fold][] support gradient checkpointing, which can be useful for deep models.
 Typically, you'd use this as part of [haliax.nn.Stacked][] or [haliax.nn.BlockSeq][] but you can also use it directly.
 
 Gradient checkpointing is a technique for reducing memory usage during backpropagation by recomputing some
@@ -409,7 +409,7 @@ JAX array will have its first axis vmapped over.
 
 Sometimes you may want to apply each block independently, without feeding the
 output of one block into the next.  `Stacked.vmap` does exactly that: it uses
-[`haliax.vmap`][] to broadcast the initial value to every block and evaluates
+[haliax.vmap][] to broadcast the initial value to every block and evaluates
 them in parallel, returning the stack of outputs.
 
 ```python

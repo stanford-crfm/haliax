@@ -115,7 +115,7 @@ module = hax.quantization.apply_updates(module, updates, grads)
 ```
 
 That's it! Just a few lines of code to enable FP8. The `quantize_linear_layers` function will transform your module to use
-quantization-aware training for linear layers (or a subset if you want), and the combo of `partition_for_grad_overwrite` and `apply_updates` function will apply the updates to the module
+quantization-aware training for linear layers (or a subset if you want), and the combo of [haliax.quantization.partition_for_grad_overwrite][] and [haliax.quantization.apply_updates][] function will apply the updates to the module
 in a way that is compatible with FP8.
 
 ## How FP8 works
@@ -140,7 +140,7 @@ depend on the gradients.)
 The way this happens is by "hijacking" the gradient computation. When you call `eqx.filter_grad(loss_fn)(module, data)`,
 you will get the gradient computation as normal, but you'll also get the updated state of the FP8 `dot_general` module.
 This updated state needs to directly replace the state in the module (rather than be used for a gradient step), which is
-why you need to use the `partition_for_grad_overwrite`
+why you need to use the [haliax.quantization.partition_for_grad_overwrite][]
 
 The FP8 `dot_general` module is implemented in [haliax.quantization.Fp8DotGeneralOp][]. It's actually not that complicated:
 
