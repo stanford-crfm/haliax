@@ -101,7 +101,7 @@ two solutions: [haliax.slice][] and dynamic slices ([haliax.dslice][] a.k.a. [ha
 
 ## Dynamic Slices
 
-[haliax.slice][] is a convenience function that wraps `jax.lax.dynamic_slice` and allows you to slice an array with a
+[haliax.slice][] is a convenience function that wraps [jax.lax.dynamic_slice][] and allows you to slice an array with a
 dynamic start and size. This is useful for situations where you need to slice an array in a way that can't be determined
 at compile time. For example, the above example can be written as follows:
 
@@ -124,7 +124,7 @@ def f(x, slice_size: int):
 
 In light of the requirement that all array sizes be known at compile time, Haliax provides both a simple [haliax.slice][]
 function, as well as [haliax.dslice][], which can be used with `[]`. The simple slice function is just a wrapper
-around [jax.lax.dynamic_slice][]] and not worth discussing here.
+around [jax.lax.dynamic_slice][] and not worth discussing here.
 
 `dslice` is a trick borrowed from the new experimental [jax.experimental.pallas][] module. It's essentially a slice,
 except that instead of a start and an end (and maybe a stride), it takes a start and a size. The size must be
