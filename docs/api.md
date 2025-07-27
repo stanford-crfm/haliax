@@ -256,6 +256,7 @@ These are all more or less directly from JAX's NumPy API.
 
 ### Other Operations
 
+::: haliax.bincount
 ::: haliax.clip
 ::: haliax.isclose
 ::: haliax.pad
