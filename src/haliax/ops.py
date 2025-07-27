@@ -430,6 +430,33 @@ def unique_all(
     return values, indices, inverse, counts
 
 
+def bincount(
+    x: NamedArray,
+    Counts: Axis,
+    *,
+    weights: NamedArray | ArrayLike | None = None,
+    minlength: int = 0,
+) -> NamedArray:
+    """Named version of `jax.numpy.bincount`.
+
+    The output axis is specified by ``Counts``.
+    """
+
+    if x.ndim != 1:
+        raise ValueError("bincount only supports 1D arrays")
+
+    w_array = None
+    if weights is not None:
+        if isinstance(weights, NamedArray):
+            weights = haliax.broadcast_to(weights, x.axes)
+            w_array = weights.array
+        else:
+            w_array = jnp.asarray(weights)
+
+    result = jnp.bincount(x.array, weights=w_array, minlength=minlength, length=Counts.size)
+    return NamedArray(result, (Counts,))
+
+
 __all__ = [
     "trace",
     "where",
@@ -444,4 +471,5 @@ __all__ = [
     "unique_counts",
     "unique_inverse",
     "unique_all",
+    "bincount",
 ]
