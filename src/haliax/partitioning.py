@@ -8,6 +8,9 @@ from typing import Callable, ContextManager, Mapping, Optional, ParamSpec, Seque
 
 import equinox as eqx
 import jax
+import jax.numpy as jnp
+import jax.tree_util as jtu
+from jax.experimental.shard_map import shard_map as jax_shard_map
 from equinox import is_array, module_update_wrapper
 from jax.lax import with_sharding_constraint
 from jax.sharding import (
@@ -33,7 +36,7 @@ from jaxtyping import PyTree
 import haliax.tree_util as htu
 from haliax._src.compile_utils import compile_cache
 
-from .axis import Axis, AxisSelection, AxisSelector, axis_spec_to_shape_dict
+from .axis import Axis, AxisSelection, AxisSelector, axis_spec_to_shape_dict, to_jax_shape
 from .core import NamedArray
 from .jax_utils import Static, is_in_jit, is_jax_array_like, is_on_mac_metal
 from .tree_util import hashable_combine, hashable_partition
@@ -645,6 +648,114 @@ def _get_mesh() -> Mesh | AbstractMesh:
     return thread_resources.env.physical_mesh
 
 
+def shard_map(
+    f: Callable,
+    *,
+    in_specs,
+    out_specs=None,
+    mesh: Optional[Mesh] = None,
+    axis_mapping: Optional[ResourceMapping] = None,
+    check_rep: bool = False,
+    **kwargs,
+):
+    """A NamedArray-friendly wrapper around :func:`jax.experimental.shard_map.shard_map`."""
+
+    mesh = mesh or _get_mesh()
+
+    def _axes(spec):
+        if isinstance(spec, NamedArray):
+            return spec.axes
+        elif isinstance(spec, Axis):
+            return spec
+        elif isinstance(spec, Sequence) and all(isinstance(ax, Axis) for ax in spec):
+            return tuple(spec)
+        else:
+            return None
+
+    def _pspec(spec):
+        if isinstance(spec, (PartitionSpec, NamedSharding)) or spec is None:
+            return spec
+        axes = _axes(spec)
+        if axes is None:
+            return spec
+        return pspec_for_axis(axes, axis_mapping)
+
+    def _leaf(x):
+        return isinstance(x, NamedArray) or (
+            isinstance(x, Sequence) and all(isinstance(ax, Axis) for ax in x)
+        )
+
+    arg_axes = jtu.tree_map(_axes, in_specs, is_leaf=_leaf)
+    part_in_specs = jtu.tree_map(_pspec, in_specs, is_leaf=_leaf)
+
+    if out_specs is None:
+        def dummy(spec):
+            ax = _axes(spec)
+            if ax is None:
+                return spec
+            shape = to_jax_shape(ax)
+            arr = jnp.zeros(shape)
+            return NamedArray(arr, ax if isinstance(ax, tuple) else (ax,))
+
+        dummy_args = jtu.tree_map(dummy, in_specs, is_leaf=_leaf)
+
+        out_shape = _cached_filter_eval_shape(f, dummy_args)
+        out_axes = jtu.tree_map(_axes, out_shape, is_leaf=_leaf)
+        part_out_specs = jtu.tree_map(_pspec, out_shape, is_leaf=_leaf)
+    else:
+        out_axes = jtu.tree_map(_axes, out_specs, is_leaf=_leaf)
+        part_out_specs = jtu.tree_map(_pspec, out_specs, is_leaf=_leaf)
+
+    def inner(*arrays):
+        arr_flat, arr_tree = jtu.tree_flatten(arrays)
+        ax_flat, _ = jtu.tree_flatten(arg_axes, is_leaf=_leaf)
+
+        def wrap_arg(a, ax):
+            if ax is None:
+                return a
+            axes = ax if isinstance(ax, tuple) else (ax,)
+            return NamedArray(a, axes)
+
+        named_args_flat = [wrap_arg(a, ax) for a, ax in zip(arr_flat, ax_flat)]
+        named_args = jtu.tree_unflatten(arr_tree, named_args_flat)
+        result = f(*named_args)
+        return jtu.tree_map(
+            lambda r: r.array if isinstance(r, NamedArray) else r,
+            result,
+            is_leaf=lambda x: isinstance(x, NamedArray),
+        )
+
+    sm_fn = jax_shard_map(
+        inner,
+        mesh=mesh,
+        in_specs=part_in_specs,
+        out_specs=part_out_specs,
+        check_rep=check_rep,
+        **kwargs,
+    )
+
+    def wrapper(*args):
+        arrays = jtu.tree_map(
+            lambda a: a.array if isinstance(a, NamedArray) else a,
+            args,
+            is_leaf=lambda x: isinstance(x, NamedArray),
+        )
+        out = sm_fn(*arrays)
+        out_flat, out_tree = jtu.tree_flatten(out)
+        ax_out_flat, _ = jtu.tree_flatten(out_axes, is_leaf=_leaf)
+
+        def wrap_out(a, ax):
+            if ax is None:
+                return a
+            axes = ax if isinstance(ax, tuple) else (ax,)
+            return NamedArray(a, axes)
+
+        wrapped_out = [wrap_out(a, ax) for a, ax in zip(out_flat, ax_out_flat)]
+        return jtu.tree_unflatten(out_tree, wrapped_out)
+
+    return wrapper
+
+
 def _is_jit_tracer(x) -> bool:
     if isinstance(x, NamedArray):
         x = x.array
@@ -659,6 +770,7 @@ __all__ = [
     "auto_sharded",
     "shard",
     "shard_with_axis_mapping",
+    "shard_map",
     "infer_resource_partitions",
     "named_jit",
     "fsdp",
