@@ -658,7 +658,29 @@ def shard_map(
     check_rep: bool = False,
     **kwargs,
 ):
-    """A NamedArray-friendly wrapper around :func:`jax.experimental.shard_map.shard_map`."""
+    """A NamedArray-friendly wrapper around :func:`jax.experimental.shard_map.shard_map`.
+
+    Args:
+        f: The function to apply with ``shard_map``.
+        in_specs: PyTree describing the input sharding. Each leaf can be a
+            :class:`NamedArray`, :class:`Axis`, or a sequence of ``Axis`` objects,
+            or a :class:`PartitionSpec`. ``NamedArray`` and ``Axis`` leaves will be
+            converted to ``PartitionSpec`` using :func:`pspec_for_axis` and the
+            provided ``axis_mapping``.
+        out_specs: Like ``in_specs`` but for the output. If ``None`` the output
+            specifications are inferred by evaluating ``f`` on dummy inputs and
+            using the returned axis names.
+        mesh: The mesh to run the computation on. Defaults to the current mesh
+            returned by :func:`_get_mesh`.
+        axis_mapping: Optional mapping from logical axis names to mesh axis names
+            used when converting ``Axis`` objects to ``PartitionSpec``.
+        check_rep: Passed through to ``jax.shard_map``.
+        **kwargs: Additional arguments forwarded to ``jax.shard_map``.
+
+        Returns:
+            A wrapped function that accepts and returns ``NamedArray`` objects
+            according to the provided specifications.
+    """
 
     mesh = mesh or _get_mesh()
 
