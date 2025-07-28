@@ -407,3 +407,19 @@ def test_unique_shortcuts():
     assert jnp.all(ia.array == ia_exp.array)
     assert jnp.all(ina.array == ina_exp.array)
     assert jnp.all(ca.array == ca_exp.array)
+
+
+def test_bincount():
+    X = Axis("X", 6)
+    x = hax.named([0, 1, 1, 2, 3, 1], (X,))
+    B = Axis("B", 5)
+
+    out = hax.bincount(x, B)
+    expected = jnp.bincount(x.array, length=B.size)
+    assert out.axes == (B,)
+    assert jnp.all(out.array == expected)
+
+    w = hax.arange((X,), dtype=jnp.float32)
+    out_w = hax.bincount(x, B, weights=w)
+    expected_w = jnp.bincount(x.array, weights=w.array, length=B.size)
+    assert jnp.allclose(out_w.array, expected_w)

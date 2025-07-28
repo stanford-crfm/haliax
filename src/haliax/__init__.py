@@ -79,6 +79,7 @@ from .ops import (
     unique_counts,
     unique_inverse,
     unique_all,
+    bincount,
     where,
 )
 from .partitioning import auto_sharded, axis_mapping, fsdp, named_jit, shard, shard_with_axis_mapping
@@ -1053,6 +1054,7 @@ __all__ = [
     "unique_counts",
     "unique_inverse",
     "unique_all",
+    "bincount",
     "clip",
     "tril",
     "triu",

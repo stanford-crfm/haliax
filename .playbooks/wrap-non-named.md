@@ -47,3 +47,6 @@ Some functions need bespoke handling. For example `jnp.unique` returns several a
 
 ## Testing
 Add tests to ensure that named and unnamed calls produce the same results and that axis names are preserved or removed correctly.
+
+## Documentation
+Once your wrapper works, document it. Add `::: haliax.your_function` (replacing the name) to `docs/api.md` so users can find the new API.
