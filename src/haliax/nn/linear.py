@@ -7,7 +7,7 @@ import equinox as eqx
 import jax
 import jax.numpy as jnp
 from jax.experimental.pallas.ops.tpu.megablox import gmm
-from jax.experimental.shard_map import shard_map
+from ..partitioning import shard_map
 from jax.random import PRNGKey
 
 import haliax as hax
