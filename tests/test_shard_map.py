@@ -81,3 +81,22 @@ def test_shard_map_pytree_multidim_output():
     expected_expanded = jnp.broadcast_to(x.array, (D.size, B.size, C.size))
     assert jnp.allclose(out["expanded"].array, expected_expanded)
     assert jnp.allclose(out["twice"].array, x.array * 2)
+
+
+@skip_if_not_enough_devices(2)
+def test_shard_map_infer_in_specs_multiple_args():
+    mesh = Mesh(np.array(jax.devices()), (ResourceAxis.DATA,))
+
+    def fn(a, b):
+        return a + b
+
+    spec_a = hax.ones(Dim)
+    spec_b = hax.ones(Dim)
+    sm = hax.shard_map(fn, in_specs=(spec_a, spec_b), out_specs=Dim, mesh=mesh, check_rep=False)
+    x = hax.ones(Dim)
+    y = hax.arange(Dim)
+    with axis_mapping({"dim": ResourceAxis.DATA}), mesh:
+        out = sm(x.array, y.array)
+
+    assert out.axes == (Dim,)
+    assert jnp.allclose(out.array, x.array + y.array)
