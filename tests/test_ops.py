@@ -423,3 +423,17 @@ def test_bincount():
     out_w = hax.bincount(x, B, weights=w)
     expected_w = jnp.bincount(x.array, weights=w.array, length=B.size)
     assert jnp.allclose(out_w.array, expected_w)
+
+
+def test_roll_scalar_named_shift():
+    H = Axis("H", 4)
+    W = Axis("W", 3)
+
+    arr = hax.arange((H, W))
+    shift = hax.named(jnp.array(1), ())
+
+    rolled = hax.roll(arr, shift, H)
+    expected = jnp.roll(arr.array, shift.array, axis=0)
+
+    assert rolled.axes == arr.axes
+    assert jnp.all(rolled.array == expected)
