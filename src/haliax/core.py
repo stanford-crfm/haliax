@@ -15,7 +15,7 @@ import numpy as np
 
 import haliax
 import haliax.axis
-from haliax.jax_utils import is_jax_array_like, is_pallas_dslice
+from haliax.jax_utils import ensure_scalar, is_jax_array_like, is_pallas_dslice
 from haliax.util import ensure_tuple
 
 from ._src.util import index_where, py_slice, slice_t
@@ -1115,9 +1115,7 @@ def updated_slice(
         if axis_index is None:
             raise ValueError(f"axis {axis} not found in {array}")
         if isinstance(s, NamedArray):  # this can happen in the vmap case
-            if s.ndim != 0:
-                raise ValueError(f"NamedArray {s} must be a scalar for axis {axis} in updated_slice")
-            s = s.scalar()
+            s = ensure_scalar(s, name=str(axis))
 
         array_slice_indices[axis_index] = s
         total_length = array.axes[axis_index].size
@@ -1376,10 +1374,7 @@ def roll(
     if axis_indices is None:
         raise ValueError(f"axis {axis} not found in {array}")
 
-    if isinstance(shift, NamedArray):
-        if shift.ndim != 0:
-            raise TypeError("shift must be a scalar NamedArray")
-        shift = shift.array
+    shift = ensure_scalar(shift, name="shift")
 
     return NamedArray(jnp.roll(array.array, shift, axis_indices), array.axes)
 

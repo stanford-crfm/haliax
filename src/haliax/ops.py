@@ -9,7 +9,7 @@ import haliax
 
 from .axis import Axis, AxisSelector, axis_name
 from .core import NamedArray, NamedOrNumeric, broadcast_arrays, broadcast_arrays_and_return_axes, named
-from .jax_utils import is_scalarish
+from .jax_utils import ensure_scalar, is_scalarish
 
 
 def trace(array: NamedArray, axis1: AxisSelector, axis2: AxisSelector, offset=0, dtype=None) -> NamedArray:
@@ -89,7 +89,7 @@ def where(
             x = named(x, ())
         x, y = broadcast_arrays(x, y)
         if isinstance(condition, NamedArray):
-            condition = condition.scalar()
+            condition = ensure_scalar(condition, name="condition")
         return jax.lax.cond(condition, lambda _: x, lambda _: y, None)
 
     condition, x, y = broadcast_arrays(condition, x, y)  # type: ignore

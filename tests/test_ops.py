@@ -437,3 +437,14 @@ def test_roll_scalar_named_shift():
 
     assert rolled.axes == arr.axes
     assert jnp.all(rolled.array == expected)
+
+
+def test_roll_bad_named_shift():
+    H = Axis("H", 4)
+    W = Axis("W", 3)
+
+    arr = hax.arange((H, W))
+    shift = hax.arange((Axis("dummy", 2),))
+
+    with pytest.raises(TypeError):
+        hax.roll(arr, shift, H)
