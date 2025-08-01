@@ -1361,13 +1361,26 @@ def unbind(array: NamedArray, axis: AxisSelector) -> List[NamedArray]:
     return [haliax.auto_sharded(NamedArray(a, new_axes)) for a in arrays]
 
 
-def roll(array: NamedArray, shift: Union[int, Tuple[int, ...]], axis: AxisSelection) -> NamedArray:
+def roll(
+    array: NamedArray,
+    shift: Union[IntScalar, Tuple[int, ...], "NamedArray"],
+    axis: AxisSelection,
+) -> NamedArray:
+    """Roll an array along an axis or axes.
+
+    ``shift`` may be a scalar ``NamedArray`` in addition to an ``int`` or tuple of
+    integers.
     """
-    Roll an array along an axis or axes. Analogous to np.roll
-    """
+
     axis_indices = array.axis_indices(axis)
     if axis_indices is None:
         raise ValueError(f"axis {axis} not found in {array}")
+
+    if isinstance(shift, NamedArray):
+        if shift.ndim != 0:
+            raise TypeError("shift must be a scalar NamedArray")
+        shift = shift.array
+
     return NamedArray(jnp.roll(array.array, shift, axis_indices), array.axes)
 
 
