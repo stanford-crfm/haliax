@@ -1,6 +1,5 @@
 import dataclasses
 import math
-from functools import partial
 from typing import Optional
 
 import equinox as eqx
@@ -241,24 +240,15 @@ class MoELinear(eqx.Module):
 
 
 def _gmm(lhs, rhs, group_sizes, out_axes, sharded=False, ar=False):
+    def gmm_impl(lhs, rhs, group_sizes):
+        out = gmm_sharded(lhs.array, rhs.array, group_sizes.array, ar=ar)
+        return hax.NamedArray(out, axes=out_axes)
+
     if sharded:
-        gmm_fn = gmm_sharded
-    else:
-        gmm_fn = shard_map(
-            partial(gmm_sharded, ar=ar),
-            mesh=hax.partitioning._get_mesh(),
-            in_specs=(
-                hax.partitioning.pspec_for_axis(lhs.axes),
-                hax.partitioning.pspec_for_axis(rhs.axes),
-                hax.partitioning.pspec_for_axis(group_sizes.axes),
-            ),
-            out_specs=hax.partitioning.pspec_for_axis(out_axes),
-            check_rep=False,
-        )
+        return gmm_impl(lhs, rhs, group_sizes)
 
-    out = gmm_fn(lhs.array, rhs.array, group_sizes.array)
-
-    return hax.NamedArray(out, axes=out_axes)
+    gmm_fn = shard_map(gmm_impl, check_rep=False)
+    return gmm_fn(lhs, rhs, group_sizes)
 
 
 def gmm_sharded(lhs_: jnp.ndarray, rhs_: jnp.ndarray, group_sizes_: jnp.ndarray, ar: bool = False) -> jnp.ndarray:
