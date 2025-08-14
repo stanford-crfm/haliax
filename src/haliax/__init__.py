@@ -17,6 +17,7 @@ import haliax.random as random
 import haliax.state_dict as state_dict
 import haliax.tree_util as tree_util
 import haliax.util as util
+from .field import field
 
 from ._src.dot import dot
 from ._src.einsum import einsum
@@ -932,6 +933,7 @@ __all__ = [
     "tree_util",
     "nn",
     "state_dict",
+    "field",
     "Axis",
     "AxisSpec",
     "AxisSelection",
