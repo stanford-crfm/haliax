@@ -59,6 +59,34 @@ def test_pspec_for_named_axes():
         assert specs.unnamed1 == PartitionSpec(None)
 
 
+class ArrayModule(eqx.Module):
+    arr: Array = hax.field(axis_names=("dim2", "dim3"))
+
+
+def test_pspec_for_plain_array_axis_names():
+    mesh = Mesh(np.array(jax.devices()).reshape(-1, 1), (ResourceAxis.DATA, ResourceAxis.MODEL))
+    with axis_mapping(resource_map), mesh:
+        mod = ArrayModule(jnp.ones((Dim2.size, Dim3.size)))
+
+        specs: ArrayModule = pspec_for(mod, preserve_existing_shardings=False)
+
+        assert specs.arr == PartitionSpec(ResourceAxis.DATA, ResourceAxis.MODEL)
+
+
+class NestedArrayModule(eqx.Module):
+    inner: ArrayModule
+
+
+def test_pspec_for_plain_array_axis_names_nested_module():
+    mesh = Mesh(np.array(jax.devices()).reshape(-1, 1), (ResourceAxis.DATA, ResourceAxis.MODEL))
+    with axis_mapping(resource_map), mesh:
+        mod = NestedArrayModule(ArrayModule(jnp.ones((Dim2.size, Dim3.size))))
+
+        specs: NestedArrayModule = pspec_for(mod, preserve_existing_shardings=False)
+
+        assert specs.inner.arr == PartitionSpec(ResourceAxis.DATA, ResourceAxis.MODEL)
+
+
 class MyModuleInit(eqx.Module):
     named: NamedArray
     unnamed1: Array
