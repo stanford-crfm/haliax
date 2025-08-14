@@ -177,6 +177,64 @@ def shard_with_axis_mapping(x: T, mapping: ResourceMapping, mesh: Optional[Mesh]
     return shard(x, mapping, mesh)
 
 
+def pspec_for(
+    tree: PyTree,
+    resource_mapping: Optional[ResourceMapping] = None,
+    preserve_existing_shardings: bool = True,
+    use_auto_sharding: bool = True,
+) -> PyTree:
+    """Infer the :class:`PartitionSpec` for a module.
+
+    This behaves like :func:`infer_resource_partitions` but returns ``PartitionSpec``
+    objects instead of :class:`~jax.sharding.NamedSharding`. It is primarily a helper
+    for :func:`infer_resource_partitions` but may be useful when only the partition
+    specification is required.
+
+    If ``preserve_existing_shardings`` is ``True``, then arrays that already have a
+    sharding are left untouched and ``None`` is returned for those leaves.
+    """
+    if resource_mapping is None:
+        resource_mapping = current_thread_local_mapping()
+
+    if resource_mapping is None:
+        raise ValueError("No resource mapping found")
+
+    def partition_spec(node: typing.Any):
+        if isinstance(node, NamedArray):
+            # If our NamedArray doesn't have an array (or a shapedtypestruct), we can't shard it
+            if not is_jax_array_like(node.array):
+                return None
+
+            current_sharding = getattr(node.array, "sharding", None) if preserve_existing_shardings else None
+            if current_sharding is not None:
+                return None
+            else:
+                return pspec_for_axis(node.axes, resource_mapping)
+        elif is_jax_array_like(node):
+            sharding = getattr(node, "sharding", None)
+            # TODO: these are usually replicated. Is there a better way to tell?
+            if node.shape == ():
+                return PartitionSpec()
+            elif isinstance(sharding, SingleDeviceSharding):
+                return PartitionSpec(None)
+            elif sharding is not None and preserve_existing_shardings:
+                return None
+            # elif use_auto_sharding:
+            # TODO: auto doesn't seem to really work reliably yet
+            #     compat between 0.4.10 and 0.4.11
+            # if isinstance(AUTO, typing.Callable):  # type: ignore
+            #     return AUTO(mesh)
+            # else:
+            #     return AUTO
+            return PartitionSpec(None)
+        elif isinstance(node, (bool, float, complex, int)):
+            return PartitionSpec()
+        else:
+            return None
+
+    return htu.tree_map(partition_spec, tree)
+
+
 def infer_resource_partitions(
     tree: PyTree,
     resource_mapping: Optional[ResourceMapping] = None,
@@ -185,66 +243,35 @@ def infer_resource_partitions(
     mesh: Optional[Mesh] = None,
 ) -> PyTree:
     """
-    Infer the sharding for a module, to be used with named_jit.
-    The basic idea is to tree all NamedArrays as leaves for the purposes of this function,
-    and to create NamedShardings from those names plus the resource_mapping.
-    If preserve_existing_shardings is True, then NamedArrays that are already sharded are left alone.
+    Infer the sharding for a module, to be used with ``named_jit``.
 
-    If resource_mapping is not provided, this function attempts to use the global resource mapping.
-
-    If use_auto_sharding is True, then we use the new experimental AUTO-sharding feature, which is not yet
-    fully supported by JAX. If it is False, then we will guess fully replicated for any unnamed arrays that
-    don't have a sharding.
+    This first calls :func:`pspec_for` to compute ``PartitionSpec`` objects and then
+    wraps them in :class:`~jax.sharding.NamedSharding` using the provided mesh. If
+    ``preserve_existing_shardings`` is ``True``, then arrays that are already sharded
+    retain their current sharding.
     """
-    if resource_mapping is None:
-        resource_mapping = current_thread_local_mapping()
-
-    if resource_mapping is None:
-        raise ValueError("No resource mapping found")
+    pspecs = pspec_for(
+        tree,
+        resource_mapping=resource_mapping,
+        preserve_existing_shardings=preserve_existing_shardings,
+        use_auto_sharding=use_auto_sharding,
+    )
 
     mesh = mesh or _get_mesh()
     assert not isinstance(mesh, dict)
 
-    def partition_spec(node: typing.Any):
-        if isinstance(node, NamedArray):
-            # If our NamedArray doesn't have an array (or a shapedtypestruct), we can't shard it
-            # so better to not try
-            if not is_jax_array_like(node.array):
+    def to_sharding(node: typing.Any, spec: typing.Any):
+        if spec is None:
+            if isinstance(node, NamedArray):
+                return getattr(node.array, "sharding", None)
+            elif is_jax_array_like(node):
+                return getattr(node, "sharding", None)
+            else:
                 return None
-
-            if preserve_existing_shardings:
-                current_sharding = getattr(node.array, "sharding", None)
-            else:
-                current_sharding = None
-
-            if current_sharding is not None:
-                return current_sharding
-            else:
-                sharding = NamedSharding(mesh, pspec_for_axis(node.axes, resource_mapping))
-                return sharding
-        elif is_jax_array_like(node):
-            sharding = getattr(node, "sharding", None)
-            # TODO: these are usually replicated. Is there a better way to tell?
-            if node.shape == ():
-                return NamedSharding(mesh, PartitionSpec())
-            elif isinstance(sharding, SingleDeviceSharding):
-                return NamedSharding(mesh, PartitionSpec(None))
-            elif sharding is not None:
-                return sharding
-            # elif use_auto_sharding:
-            # TODO: auto doesn't seem to really work reliably yet
-            #     compat between 0.4.10 and 0.4.11
-            # if isinstance(AUTO, typing.Callable):  # type: ignore
-            #     return AUTO(mesh)
-            # else:
-            #     return AUTO
-            return NamedSharding(mesh, PartitionSpec(None))
-        elif isinstance(node, (bool, float, complex, int)):
-            return NamedSharding(mesh, PartitionSpec())
         else:
-            return None
+            return NamedSharding(mesh, spec)
 
-    return htu.tree_map(partition_spec, tree)
+    return htu.tree_map(to_sharding, tree, pspecs)
 
 
 class WrappedCallable(typing.Protocol[Args, R]):
@@ -659,6 +686,7 @@ __all__ = [
     "auto_sharded",
     "shard",
     "shard_with_axis_mapping",
+    "pspec_for",
     "infer_resource_partitions",
     "named_jit",
     "fsdp",
