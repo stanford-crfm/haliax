@@ -1,4 +1,5 @@
 import contextlib
+import dataclasses
 import functools
 import threading
 import typing
@@ -210,6 +211,37 @@ def pspec_for(
                 return None
             else:
                 return pspec_for_axis(node.axes, resource_mapping)
+        elif isinstance(node, eqx.Module):
+            # handle eqx.Module explicitly so that we can look at axis_names metadata
+            updates: dict[str, typing.Any] = {}
+            for field in dataclasses.fields(node):
+                if field.metadata.get("static", False):
+                    continue
+
+                value = getattr(node, field.name)
+                axis_names = field.metadata.get("axis_names") if field.metadata is not None else None
+                if axis_names is not None and is_jax_array_like(value):
+                    current_sharding = (
+                        getattr(value, "sharding", None) if preserve_existing_shardings else None
+                    )
+                    if current_sharding is not None:
+                        updates[field.name] = None
+                    else:
+                        updates[field.name] = pspec_for_axis(axis_names, resource_mapping)
+                else:
+                    updates[field.name] = htu.tree_map(
+                        partition_spec, value, is_leaf=lambda x: isinstance(x, eqx.Module)
+                    )
+
+            new_node = object.__new__(type(node))
+            for field in dataclasses.fields(node):
+                object.__setattr__(
+                    new_node,
+                    field.name,
+                    updates.get(field.name, getattr(node, field.name)),
+                )
+
+            return new_node
         elif is_jax_array_like(node):
             sharding = getattr(node, "sharding", None)
             # TODO: these are usually replicated. Is there a better way to tell?
@@ -232,7 +264,7 @@ def pspec_for(
         else:
             return None
 
-    return htu.tree_map(partition_spec, tree)
+    return htu.tree_map(partition_spec, tree, is_leaf=lambda x: isinstance(x, eqx.Module))
 
 
 def infer_resource_partitions(
