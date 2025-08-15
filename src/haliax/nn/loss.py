@@ -1,6 +1,5 @@
 import typing
 import warnings
-from typing import Optional
 
 from jax import numpy as jnp
 
@@ -16,8 +15,8 @@ def cross_entropy_loss(
     logits: NamedArray,
     Label: AxisSelector,
     targets: NamedArray,
-    reduction: Optional[ReductionFunction] | Unspecified = UNSPECIFIED,
-    where: Optional[NamedArray] = None,
+    reduction: ReductionFunction | None | Unspecified = UNSPECIFIED,
+    where: NamedArray | None = None,
     reduction_axis: None = None,
 ) -> jnp.ndarray | NamedArray:
     ...
@@ -28,8 +27,8 @@ def cross_entropy_loss(
     logits: NamedArray,
     Label: AxisSelector,
     targets: NamedArray,
-    reduction: Optional[ReductionFunction] | Unspecified = UNSPECIFIED,
-    where: Optional[NamedArray] = None,
+    reduction: ReductionFunction | None | Unspecified = UNSPECIFIED,
+    where: NamedArray | None = None,
     reduction_axis: AxisSelection = ...,
 ) -> NamedArray:
     ...
@@ -39,9 +38,9 @@ def cross_entropy_loss(
     logits: NamedArray,
     Label: AxisSelector,
     targets: NamedArray,
-    reduction: Optional[ReductionFunction] | Unspecified = UNSPECIFIED,
-    where: Optional[NamedArray] = None,
-    reduction_axis: Optional[AxisSelection] = None,
+    reduction: ReductionFunction | None | Unspecified = UNSPECIFIED,
+    where: NamedArray | None = None,
+    reduction_axis: AxisSelection | None = None,
 ) -> jnp.ndarray | NamedArray:
     loss, _ = cross_entropy_loss_and_log_normalizers(logits, Label, targets)
 
@@ -60,8 +59,8 @@ def cross_entropy_loss(
 def binary_cross_entropy_loss(
     logits: NamedArray,
     targets: NamedArray,
-    reduction: Optional[ReductionFunction] | Unspecified = UNSPECIFIED,
-    where: Optional[NamedArray] = None,
+    reduction: ReductionFunction | None | Unspecified = UNSPECIFIED,
+    where: NamedArray | None = None,
     reduction_axis: None = None,
 ) -> jnp.ndarray | NamedArray:
     ...
@@ -71,8 +70,8 @@ def binary_cross_entropy_loss(
 def binary_cross_entropy_loss(
     logits: NamedArray,
     targets: NamedArray,
-    reduction: Optional[ReductionFunction] | Unspecified = UNSPECIFIED,
-    where: Optional[NamedArray] = None,
+    reduction: ReductionFunction | None | Unspecified = UNSPECIFIED,
+    where: NamedArray | None = None,
     reduction_axis: AxisSelection = ...,
 ) -> NamedArray:
     ...
@@ -81,9 +80,9 @@ def binary_cross_entropy_loss(
 def binary_cross_entropy_loss(
     logits: NamedArray,
     targets: NamedArray,
-    reduction: Optional[ReductionFunction] | Unspecified = UNSPECIFIED,
-    where: Optional[NamedArray] = None,
-    reduction_axis: Optional[AxisSelection] = None,
+    reduction: ReductionFunction | None | Unspecified = UNSPECIFIED,
+    where: NamedArray | None = None,
+    reduction_axis: AxisSelection | None = None,
 ) -> jnp.ndarray | NamedArray:
     log_p = hax.nn.log_sigmoid(logits)
     log_not_p = hax.nn.log_sigmoid(-logits)  # == log(1-sigmoid(x))
@@ -96,9 +95,9 @@ def binary_cross_entropy_loss(
 
 def reduce_loss(
     arr,
-    reduction: Optional[ReductionFunction] | Unspecified = UNSPECIFIED,
-    reduction_axis: Optional[AxisSelection] = None,
-    where: Optional[NamedArray] = None,
+    reduction: ReductionFunction | None | Unspecified = UNSPECIFIED,
+    reduction_axis: AxisSelection | None = None,
+    where: NamedArray | None = None,
 ):
     """
     Reduce a loss array according to the given reduction and reduction axis.
@@ -111,9 +110,9 @@ def reduce_loss(
 
 def maybe_reduce_loss(
     arr,
-    reduction: Optional[ReductionFunction] | Unspecified,
-    reduction_axis: Optional[AxisSelection],
-    where: Optional[NamedArray],
+    reduction: ReductionFunction | None | Unspecified,
+    reduction_axis: AxisSelection | None,
+    where: NamedArray | None,
 ):
     if reduction is not None and reduction_axis != ():
         if reduction is UNSPECIFIED:

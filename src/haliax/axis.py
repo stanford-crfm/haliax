@@ -2,7 +2,7 @@ import typing
 from dataclasses import dataclass
 from math import prod
 from types import EllipsisType
-from typing import List, Mapping, Optional, Sequence, Union, overload
+from typing import Mapping, Sequence, overload
 
 import equinox as eqx
 
@@ -41,17 +41,17 @@ def make_axes(**kwargs: int) -> tuple[Axis, ...]:
     return tuple(Axis(name, size) for name, size in kwargs.items())
 
 
-AxisSelector = Union[Axis, str]
+AxisSelector = Axis | str
 """AxisSelector is a type that can be used to select a single axis from an array. str or Axis"""
 ShapeDict = Mapping[str, int]
 """ShapeDict is a type that can be used to specify the axes of an array, usually for creation or adding a new axis"""
-PartialShapeDict = Mapping[str, Optional[int]]
+PartialShapeDict = Mapping[str, int | None]
 """Similar to a AxisSelection, in dict form."""
 
-AxisSelection = Union[AxisSelector, Sequence[AxisSelector], PartialShapeDict]
+AxisSelection = AxisSelector | Sequence[AxisSelector] | PartialShapeDict
 """AxisSelection is a type that can be used to select multiple axes from an array. str, Axis, or sequence of mixed
 str and Axis"""
-AxisSpec = Union[Axis, Sequence[Axis], ShapeDict]
+AxisSpec = Axis | Sequence[Axis] | ShapeDict
 """AxisSpec is a type that can be used to specify the axes of an array, usually for creation or adding a new axis
  whose size can't be determined another way. Axis or sequence of Axis"""
 
@@ -111,11 +111,11 @@ def axis_spec_to_shape_dict(axis_spec: AxisSpec) -> dict[str, int]:  # type: ign
 
 
 @overload
-def axis_spec_to_shape_dict(axis_spec: AxisSelection) -> dict[str, Optional[int]]:  # type: ignore
+def axis_spec_to_shape_dict(axis_spec: AxisSelection) -> dict[str, int | None]:  # type: ignore
     ...
 
 
-def axis_spec_to_shape_dict(axis_spec: AxisSelection) -> dict[str, Optional[int]]:  # type: ignore
+def axis_spec_to_shape_dict(axis_spec: AxisSelection) -> dict[str, int | None]:  # type: ignore
     if isinstance(axis_spec, Axis):
         return {axis_name(axis_spec): axis_spec.size}
 
@@ -127,7 +127,7 @@ def axis_spec_to_shape_dict(axis_spec: AxisSelection) -> dict[str, Optional[int]
 
     spec = ensure_tuple(axis_spec)  # type: ignore
 
-    shape_dict: dict[str, Optional[int]] = {}
+    shape_dict: dict[str, int | None] = {}
     for ax in spec:
         if isinstance(ax, Axis):
             shape_dict[ax.name] = ax.size
@@ -391,7 +391,7 @@ def unsize_axes(axis_spec: AxisSelection) -> AxisSelection:
     ...
 
 
-def unsize_axes(axis_spec: AxisSelection, to_unsize: Optional[AxisSelection] = None) -> AxisSelection:
+def unsize_axes(axis_spec: AxisSelection, to_unsize: AxisSelection | None = None) -> AxisSelection:
     """
     This function is used to remove the sizes of axes in an axis spec.
     There are two overloads:
@@ -410,7 +410,7 @@ def unsize_axes(axis_spec: AxisSelection, to_unsize: Optional[AxisSelection] = N
     was_dict = isinstance(axis_spec, Mapping)
 
     to_unsize = axis_spec_to_shape_dict(to_unsize)
-    axis_spec_dict: dict[str, Optional[int]] = axis_spec_to_shape_dict(axis_spec)  # type: ignore
+    axis_spec_dict: dict[str, int | None] = axis_spec_to_shape_dict(axis_spec)  # type: ignore
     for ax in to_unsize:
         name = axis_name(ax)
         if name not in axis_spec_dict:
@@ -490,7 +490,7 @@ def intersect_axes(ax1: AxisSelection, ax2: AxisSelection) -> AxisSelection:
     The returned order is the same as ax1.
     """
     ax2_dict = axis_spec_to_shape_dict(ax2)
-    out: List[AxisSelector] = []
+    out: list[AxisSelector] = []
     was_dict = isinstance(ax1, Mapping)
     ax1_dict = axis_spec_to_shape_dict(ax1)
 
@@ -519,7 +519,7 @@ def axis_name(ax: Sequence[AxisSelector]) -> tuple[str, ...]:  # type: ignore
     ...
 
 
-def axis_name(ax: AxisSelection) -> Union[str, tuple[str, ...]]:
+def axis_name(ax: AxisSelection) -> str | tuple[str, ...]:
     """
     Returns the name of the axis. If ax is a string, returns ax. If ax is an Axis, returns ax.name
     """
@@ -619,7 +619,7 @@ class dslice(eqx.Module):
     def to_slice(self) -> slice:
         return slice(self.start, self.start + self.size)
 
-    def __init__(self, start: int, length: Union[int, Axis]):
+    def __init__(self, start: int, length: int | Axis):
         """
         As a convenience, if length is an Axis, it will be converted to `length.size`
         Args:
@@ -736,7 +736,7 @@ def replace_missing_with_ellipsis(ax1: AxisSelection, ax2: AxisSelection) -> Par
     Raises if ax1 and ax2 have any axes with the same name but different sizes
     """
     ax2_dict = axis_spec_to_shape_dict(ax2)
-    out: List[AxisSelector | EllipsisType] = []
+    out: list[AxisSelector | EllipsisType] = []
     ax1_dict = axis_spec_to_shape_dict(ax1)
 
     for ax, size in ax1_dict.items():

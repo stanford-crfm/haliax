@@ -1,6 +1,5 @@
 import dataclasses
 import warnings
-from typing import Optional
 
 import equinox as eqx
 from jaxtyping import PRNGKeyArray
@@ -21,7 +20,7 @@ class Embedding(eqx.Module):
     Embed: AxisSpec = eqx.field(static=True)
 
     @staticmethod
-    def init(Vocab: Axis, Embed: AxisSpec, *, init_scale: float = 1, key, initializer_range: Optional[float] = None):
+    def init(Vocab: Axis, Embed: AxisSpec, *, init_scale: float = 1, key, initializer_range: float | None = None):
         """
         Initialize an Embedding module.
 
@@ -45,7 +44,7 @@ class Embedding(eqx.Module):
         weight = hax.random.truncated_normal(key, all_axes, -3, 3) * (init_scale / output_size)
         return Embedding(weight=weight, Vocab=Vocab, Embed=Embed)
 
-    def __call__(self, input_ids: NamedArray, *, key: Optional[PRNGKeyArray] = None):
+    def __call__(self, input_ids: NamedArray, *, key: PRNGKeyArray | None = None):
         """Alias for `embed`. key is ignored."""
         return self.embed(input_ids)
 
@@ -66,7 +65,7 @@ class Embedding(eqx.Module):
         """
         return input_embeds.dot(self.weight, axis=self.Embed)
 
-    def resize_embeddings(self, new_size: int, key: Optional[PRNGKeyArray] = None):
+    def resize_embeddings(self, new_size: int, key: PRNGKeyArray | None = None):
         """
         Resize the embedding layer to a new size.
         Args:

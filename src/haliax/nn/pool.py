@@ -1,6 +1,6 @@
 # Pooling operations, inspired by Flax
 from functools import reduce
-from typing import Callable, Literal, Optional
+from typing import Callable, Literal
 
 import jax
 
@@ -25,7 +25,7 @@ def pool(
     inputs: NamedArray,
     init: Scalar,
     reduce_fn: Callable[[Scalar, Scalar], Scalar],
-    stride: Optional[int | tuple[int, ...]] = None,
+    stride: int | tuple[int, ...] | None = None,
     padding: Padding = DEFAULT_PADDING,
     use_ceil: bool = False,
 ) -> NamedArray:
@@ -143,7 +143,7 @@ def _patch_up_reduce_fn(reduce_fn):
 def max_pool(
     Window: AxisSpec,
     inputs: NamedArray,
-    stride: Optional[int | tuple[int, ...]] = None,
+    stride: int | tuple[int, ...] | None = None,
     padding: Padding = DEFAULT_PADDING,
     use_ceil: bool = False,
 ) -> NamedArray:
@@ -167,7 +167,7 @@ def max_pool(
 def min_pool(
     Window: AxisSpec,
     inputs: NamedArray,
-    stride: Optional[int | tuple[int, ...]] = None,
+    stride: int | tuple[int, ...] | None = None,
     padding: Padding = DEFAULT_PADDING,
     use_ceil: bool = False,
 ) -> NamedArray:
@@ -192,7 +192,7 @@ def min_pool(
 def mean_pool(
     Window: AxisSpec,
     inputs: NamedArray,
-    stride: Optional[int | tuple[int, ...]] = None,
+    stride: int | tuple[int, ...] | None = None,
     padding: Padding = DEFAULT_PADDING,
     *,
     use_ceil: bool = False,
