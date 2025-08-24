@@ -79,7 +79,7 @@ def test_scan_doesnt_scan_scalars():
     named1 = hax.random.uniform(PRNGKey(0), (Height,))
 
     def scan_fun(acc, z, x):
-        return acc + z * x, x * z
+        return (acc + z * x).scalar(), x * z
 
     total, selected = hax.scan(scan_fun, Height)(0.0, 4.0, named1)
 
@@ -321,3 +321,22 @@ def test_vmap_error_for_incorrectly_specified_args():
     Width = Axis("Width", 3)
 
     hax.vmap(lambda a: Module(a), Batch)(Width)
+
+
+def test_vmap_multiple_axes():
+    Batch1 = Axis("Batch1", 4)
+    Batch2 = Axis("Batch2", 3)
+    Width = Axis("Width", 2)
+    Depth = Axis("Depth", 5)
+
+    named = hax.random.uniform(PRNGKey(0), (Batch1, Batch2, Width, Depth))
+
+    def vmap_fun(x):
+        return x.sum(Width)
+
+    selected = hax.vmap(vmap_fun, (Batch1, Batch2))(named)
+
+    expected = jnp.sum(named.array, axis=2)
+
+    assert jnp.allclose(selected.array, expected)
+    assert selected.axes == (Batch1, Batch2, Depth)

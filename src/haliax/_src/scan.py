@@ -33,7 +33,7 @@ class ScanFn(Protocol[Carry, Args, Y]):
         ...
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class ScanCheckpointPolicy:
     """
     A class that represents a gradient checkpoint policy for blocks in a Stacked module. This is used to control

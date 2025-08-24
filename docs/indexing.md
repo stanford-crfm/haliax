@@ -1,7 +1,7 @@
 # Indexing and Slicing
 
 Haliax supports Numpy-style indexing, including so-called [Advanced Indexing](https://numpy.org/doc/stable/user/basics.indexing.html#advanced-indexing),
-though the syntax is necessarily different. Most forms of indexing are supporting, except we don't support indexing with
+though the syntax is necessarily different. Most forms of indexing are supported, except we don't support indexing with
 booleans right now. (JAX doesn't support indexing with non-constant bool arrays anyway,
 so I don't think it's worth the effort to implement it in Haliax.)
 
@@ -101,7 +101,7 @@ two solutions: [haliax.slice][] and dynamic slices ([haliax.dslice][] a.k.a. [ha
 
 ## Dynamic Slices
 
-[haliax.slice][] is a convenience function that wraps `jax.lax.dynamic_slice` and allows you to slice an array with a
+[haliax.slice][] is a convenience function that wraps [jax.lax.dynamic_slice][] and allows you to slice an array with a
 dynamic start and size. This is useful for situations where you need to slice an array in a way that can't be determined
 at compile time. For example, the above example can be written as follows:
 
@@ -124,7 +124,7 @@ def f(x, slice_size: int):
 
 In light of the requirement that all array sizes be known at compile time, Haliax provides both a simple [haliax.slice][]
 function, as well as [haliax.dslice][], which can be used with `[]`. The simple slice function is just a wrapper
-around [jax.lax.dynamic_slice][]] and not worth discussing here.
+around [jax.lax.dynamic_slice][] and not worth discussing here.
 
 `dslice` is a trick borrowed from the new experimental [jax.experimental.pallas][] module. It's essentially a slice,
 except that instead of a start and an end (and maybe a stride), it takes a start and a size. The size must be
@@ -146,6 +146,11 @@ def f(x, slice_size: int):
 
 f(q, 2)
 ```
+
+When indexing with ``dslice`` the slice is gathered starting at ``start`` for
+``size`` elements.  Reads beyond the end of the array return the ``fill_value``
+(0 by default).  When used with ``at`` updates, any writes outside the bounds of
+the array are dropped.  These semantics match JAX's scatter/gather behavior.
 
 For convenience/brevity, `dslice` is aliased as `ds`. In addition, we also expose `dblock`, which is a convenience
 function for computing the start and size of a slice given a block index and the size of the slice. Thus, the above
@@ -287,3 +292,42 @@ operation more effectively.)
 
     It's worth emphasizing that these functions are typically compiled to scatter-add and friends (as appropriate).
     This is the preferred way to do scatter/gather operations in JAX, as well as in Haliax.
+
+## Scatter/Gather
+
+Haliax supports scatter/gather semantics in its indexing operations. When an axis
+is indexed by another NamedArray (or a 1-D JAX array), the values of that axis
+are gathered according to the index array and the axes of the indexer are
+inserted into the result.
+
+```python
+import haliax as hax
+import jax.numpy as jnp
+
+B, S, V = Axis("batch", 4), Axis("seq", 3), Axis("vocab", 7)
+x = hax.arange((B, S, V))
+idx = hax.arange((B, S), dtype=jnp.int32) % V.size
+
+out = x["vocab", idx]
+```
+
+Here `out` has axes `(B, S)` and its values match `jax.numpy.take_along_axis`
+on the underlying ndarray.
+
+For scatter-style updates where each batch writes to a different position, use
+[`updated_slice`][haliax.updated_slice]:
+
+```python
+Batch = hax.Axis("batch", 2)
+Seq = hax.Axis("seq", 5)
+New = hax.Axis("seq", 2)
+
+cache = hax.zeros((Batch, Seq), dtype=int)
+lengths = hax.named([1, 3], axis=Batch)
+kv = hax.named([[1, 2], [3, 4]], axis=(Batch, New))
+
+result = updated_slice(cache, {"seq": lengths}, kv)
+```
+
+This inserts `[1, 2]` starting at position `1` in batch `0` and `[3, 4]` starting
+at position `3` in batch `1`.

@@ -6,7 +6,7 @@
 Haliax provides a small number of neural network modules that are compatible with Equinox, though
 they naturally all use [haliax.NamedArray][]. (We welcome PRs for more modules! Nothing too exotic though.)
 
-The most interesting of these modules is [haliax.nn.Stacked][], which allows you to create homogenous "stacks"
+The most interesting of these modules is [haliax.nn.Stacked][], which allows you to create homogeneous "stacks"
 of the same module (e.g. transformer blocks), which is a common pattern in deep learning.
 
 ### Linear
@@ -55,7 +55,6 @@ We don't provide an explicit attention module, but we do provide an attention fu
 
 :::haliax.nn.attention.dot_product_attention
 :::haliax.nn.attention.dot_product_attention_weights
-:::haliax.nn.attention.self_attention
 
 ### Masks
 ::: haliax.nn.attention.causal_mask

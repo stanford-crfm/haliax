@@ -1,4 +1,5 @@
 from typing import Callable
+import typing
 
 import jax.numpy as jnp
 import pytest
@@ -215,14 +216,14 @@ def test_mean_respects_where():
     named1 = hax.random.uniform(PRNGKey(0), (Height, Width))
     where = hax.random.uniform(PRNGKey(1), (Height, Width)) > 0.5
 
-    assert not jnp.all(jnp.isclose(hax.mean(named1), hax.mean(named1, where=where)))
-    assert jnp.all(jnp.isclose(hax.mean(named1, where=where), jnp.mean(named1.array, where=where.array)))
+    assert not hax.all(hax.isclose(hax.mean(named1), hax.mean(named1, where=where)))
+    assert jnp.all(jnp.isclose(hax.mean(named1, where=where).array, jnp.mean(named1.array, where=where.array)))
 
     # check broadcasting
     where = hax.random.uniform(PRNGKey(2), (Height,)) > 0.5
-    assert not jnp.all(jnp.isclose(hax.mean(named1), hax.mean(named1, where=where)))
+    assert not jnp.all(jnp.isclose(hax.mean(named1).array, hax.mean(named1, where=where).array))
     assert jnp.all(
-        jnp.isclose(hax.mean(named1, where=where), jnp.mean(named1.array, where=where.array.reshape((-1, 1))))
+        jnp.isclose(hax.mean(named1, where=where).array, jnp.mean(named1.array, where=where.array.reshape((-1, 1))))
     )
 
 
@@ -237,3 +238,213 @@ def test_reductions_produce_scalar_named_arrays_when_None_axis():
     # But if we specify axes, we always get a NamedArray, even if it's a scalar
     assert isinstance(hax.mean(named1, axis=("Height", "Width")), NamedArray)
     assert hax.mean(named1, axis=("Height", "Width")).axes == ()
+
+
+def test_pad():
+    Height = Axis("Height", 3)
+    Width = Axis("Width", 2)
+
+    arr = hax.arange((Height, Width))
+    padded = hax.pad(arr, {Height: (1, 2), Width: (0, 1)}, mode="constant", constant_values=0)
+
+    expected = jnp.pad(arr.array, [(1, 2), (0, 1)], mode="constant", constant_values=0)
+    assert padded.axes[0].size == Height.size + 3
+    assert padded.axes[1].size == Width.size + 1
+    assert jnp.all(expected == padded.array)
+
+
+def test_unique():
+    # named version of this test:
+    # >>> M = jnp.array([[1, 2],
+    # ...                [2, 3],
+    # ...                [1, 2]])
+    # >>> jnp.unique(M)
+    # Array([1, 2, 3], dtype=int32)
+
+    Height = Axis("Height", 3)
+    Width = Axis("Width", 2)
+
+    named1 = hax.named([[1, 2], [2, 3], [1, 2]], (Height, Width))
+
+    U = Axis("U", 3)
+
+    named2 = hax.unique(named1, U)
+
+    assert jnp.all(jnp.equal(named2.array, jnp.array([1, 2, 3])))
+
+    #     If you pass an ``axis`` keyword, you can find unique *slices* of the array along
+    #     that axis:
+    #
+    #     >>> jnp.unique(M, axis=0)
+    #     Array([[1, 2],
+    #            [2, 3]], dtype=int32)
+
+    U2 = Axis("U2", 2)
+    named3 = hax.unique(named1, U2, axis=Height)
+    assert jnp.all(jnp.equal(named3.array, jnp.array([[1, 2], [2, 3]])))
+
+    #     >>> x = jnp.array([3, 4, 1, 3, 1])
+    #     >>> values, indices = jnp.unique(x, return_index=True)
+    #     >>> print(values)
+    #     [1 3 4]
+    #     >>> print(indices)
+    #     [2 0 1]
+    #     >>> jnp.all(values == x[indices])
+    #     Array(True, dtype=bool)
+
+    x = hax.named([3, 4, 1, 3, 1], ("Height",))
+    U3 = Axis("U3", 3)
+    values, indices = hax.unique(x, U3, return_index=True)
+
+    assert jnp.all(jnp.equal(values.array, jnp.array([1, 3, 4])))
+    assert jnp.all(jnp.equal(indices.array, jnp.array([2, 0, 1])))
+
+    assert jnp.all(jnp.equal(values.array, x[{"Height": indices}].array))
+
+    #   If you set ``return_inverse=True``, then ``unique`` returns the indices within the
+    #     unique values for every entry in the input array:
+    #
+    #     >>> x = jnp.array([3, 4, 1, 3, 1])
+    #     >>> values, inverse = jnp.unique(x, return_inverse=True)
+    #     >>> print(values)
+    #     [1 3 4]
+    #     >>> print(inverse)
+    #     [1 2 0 1 0]
+    #     >>> jnp.all(values[inverse] == x)
+    #     Array(True, dtype=bool)
+
+    values, inverse = hax.unique(x, U3, return_inverse=True)
+
+    assert jnp.all(jnp.equal(values.array, jnp.array([1, 3, 4])))
+    assert jnp.all(jnp.equal(inverse.array, jnp.array([1, 2, 0, 1, 0])))
+
+    #     In multiple dimensions, the input can be reconstructed using
+    #     :func:`jax.numpy.take`:
+    #
+    #     >>> values, inverse = jnp.unique(M, axis=0, return_inverse=True)
+    #     >>> jnp.all(jnp.take(values, inverse, axis=0) == M)
+    #     Array(True, dtype=bool)
+    #
+
+    values, inverse = hax.unique(named1, U3, axis=Height, return_inverse=True)
+
+    assert jnp.all((values[{"U3": inverse}] == named1).array)
+
+    #     **Returning counts**
+    #  If you set ``return_counts=True``, then ``unique`` returns the number of occurrences
+    #     within the input for every unique value:
+    #
+    #     >>> x = jnp.array([3, 4, 1, 3, 1])
+    #     >>> values, counts = jnp.unique(x, return_counts=True)
+    #     >>> print(values)
+    #     [1 3 4]
+    #     >>> print(counts)
+    #     [2 2 1]
+    #
+    #     For multi-dimensional arrays, this also returns a 1D array of counts
+    #     indicating number of occurrences along the specified axis:
+    #
+    #     >>> values, counts = jnp.unique(M, axis=0, return_counts=True)
+    #     >>> print(values)
+    #     [[1 2]
+    #      [2 3]]
+    #     >>> print(counts)
+    #     [2 1]
+
+    values, counts = hax.unique(x, U3, return_counts=True)
+
+    assert jnp.all(jnp.equal(values.array, jnp.array([1, 3, 4])))
+    assert jnp.all(jnp.equal(counts.array, jnp.array([2, 2, 1])))
+
+    values, counts = hax.unique(named1, U2, axis=Height, return_counts=True)
+
+    assert jnp.all(jnp.equal(values.array, jnp.array([[1, 2], [2, 3]])))
+    assert jnp.all(jnp.equal(counts.array, jnp.array([2, 1])))
+
+
+def test_unique_shortcuts():
+    Height = Axis("Height", 3)
+    Width = Axis("Width", 2)
+
+    arr2d = hax.named([[1, 2], [2, 3], [1, 2]], (Height, Width))
+    U = Axis("U", 3)
+
+    # unique_values
+    uv = hax.unique_values(arr2d, U)
+    uv_expected = hax.unique(arr2d, U)
+    assert jnp.all(uv.array == uv_expected.array)
+
+    # unique_counts
+    vc, cc = hax.unique_counts(arr2d, U)
+    vc_exp, cc_exp = hax.unique(arr2d, U, return_counts=True)
+    assert jnp.all(vc.array == vc_exp.array)
+    assert jnp.all(cc.array == cc_exp.array)
+
+    # unique_inverse
+    Height1 = Axis("Height1", 5)
+    arr1d = hax.named([3, 4, 1, 3, 1], (Height1,))
+    U2 = Axis("U2", 3)
+    vi, ii = hax.unique_inverse(arr1d, U2)
+    vi_exp, ii_exp = hax.unique(arr1d, U2, return_inverse=True)
+    assert jnp.all(vi.array == vi_exp.array)
+    assert jnp.all(ii.array == ii_exp.array)
+
+    # unique_all
+    U3 = Axis("U3", 2)
+    va, ia, ina, ca = hax.unique_all(arr2d, U3, axis=Height)
+    va_exp, ia_exp, ina_exp, ca_exp = typing.cast(
+        tuple[NamedArray, NamedArray, NamedArray, NamedArray],
+        hax.unique(
+            arr2d,
+            U3,
+            axis=Height,
+            return_index=True,
+            return_inverse=True,
+            return_counts=True,
+        ),
+    )
+    assert jnp.all(va.array == va_exp.array)
+    assert jnp.all(ia.array == ia_exp.array)
+    assert jnp.all(ina.array == ina_exp.array)
+    assert jnp.all(ca.array == ca_exp.array)
+
+
+def test_bincount():
+    X = Axis("X", 6)
+    x = hax.named([0, 1, 1, 2, 3, 1], (X,))
+    B = Axis("B", 5)
+
+    out = hax.bincount(x, B)
+    expected = jnp.bincount(x.array, length=B.size)
+    assert out.axes == (B,)
+    assert jnp.all(out.array == expected)
+
+    w = hax.arange((X,), dtype=jnp.float32)
+    out_w = hax.bincount(x, B, weights=w)
+    expected_w = jnp.bincount(x.array, weights=w.array, length=B.size)
+    assert jnp.allclose(out_w.array, expected_w)
+
+
+def test_roll_scalar_named_shift():
+    H = Axis("H", 4)
+    W = Axis("W", 3)
+
+    arr = hax.arange((H, W))
+    shift = hax.named(jnp.array(1), ())
+
+    rolled = hax.roll(arr, shift, H)
+    expected = jnp.roll(arr.array, shift.array, axis=0)
+
+    assert rolled.axes == arr.axes
+    assert jnp.all(rolled.array == expected)
+
+
+def test_roll_bad_named_shift():
+    H = Axis("H", 4)
+    W = Axis("W", 3)
+
+    arr = hax.arange((H, W))
+    shift = hax.arange((Axis("dummy", 2),))
+
+    with pytest.raises(TypeError):
+        hax.roll(arr, shift, H)

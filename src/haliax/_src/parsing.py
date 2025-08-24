@@ -5,7 +5,7 @@ from typing import Mapping, NoReturn, Optional, Sequence
 from haliax.axis import Axis, AxisSelector
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class _AxisCapture:
     """
     Represents a capture of axes from an einops-style haliax rearrangement string.
@@ -30,7 +30,7 @@ class _AxisCapture:
         return len(self.axes) == 0
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class Expression:
     captures: Sequence[_AxisCapture | EllipsisType]
     is_ordered: bool

@@ -20,10 +20,10 @@ A = TypeVar("A", Scalar, NamedArray, jnp.ndarray)
 
 
 class LayerNormBase(ModuleWithStateDictSerialization):
-    axis: AxisSpec = eqx.static_field()
+    axis: AxisSpec = eqx.field(static=True)
     weight: Optional[NamedArray]
     bias: Optional[NamedArray]
-    eps: float = eqx.static_field(default=1e-5)
+    eps: float = eqx.field(default=1e-5, static=True)
     dtype: Optional[jnp.dtype] = eqx.field(default=None, static=True)
 
     @abstractmethod
@@ -163,7 +163,7 @@ def standardize(
     """Analogous to [jax.nn.standardize][], but with support for NamedArrays."""
     x, mean, variance, where = haliax.broadcast_arrays(x, mean, variance, where)  # type: ignore
     raw_x, mean, variance, where = unwrap_namedarrays(x, mean, variance, where)
-    axis_indices = x._lookup_indices(axis)
+    axis_indices = x.axis_indices(axis)
 
     plain = jnn.standardize(raw_x, axis_indices, mean=mean, variance=variance, epsilon=epsilon, where=where)
     return NamedArray(plain, x.axes)

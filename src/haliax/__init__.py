@@ -1,4 +1,4 @@
-import typing
+import typing as t
 from typing import Optional, Sequence
 
 import jax
@@ -29,6 +29,7 @@ from .axis import (
     AxisSpec,
     axis_name,
     axis_size,
+    axis_spec_to_tuple,
     concat_axes,
     dblock,
     ds,
@@ -38,10 +39,11 @@ from .axis import (
     replace_axis,
     resolve_axis,
     selects_axis,
+    to_jax_shape,
 )
 from .core import (
     NamedArray,
-    NamedOrNumeric,
+    NamedArrayAxes, NamedArrayAxesSpec, NamedOrNumeric,
     are_shape_checks_enabled,
     broadcast_arrays,
     broadcast_axis,
@@ -61,9 +63,25 @@ from .core import (
     unflatten_axis,
     updated_slice,
 )
+from .haxtyping import Named
 from .hof import fold, map, scan, vmap
 from .jax_utils import tree_checkpoint_name
-from .ops import clip, isclose, pad_left, trace, tril, triu, where
+from .ops import (
+    clip,
+    isclose,
+    pad_left,
+    pad,
+    trace,
+    tril,
+    triu,
+    unique,
+    unique_values,
+    unique_counts,
+    unique_inverse,
+    unique_all,
+    bincount,
+    where,
+)
 from .partitioning import auto_sharded, axis_mapping, fsdp, named_jit, shard, shard_with_axis_mapping
 from .specialized_fns import top_k
 from .types import Scalar
@@ -78,8 +96,8 @@ from .wrap import (
 )
 
 
-T = typing.TypeVar("T")
-A = typing.TypeVar("A", Scalar, NamedArray, jnp.ndarray)
+T = t.TypeVar("T")
+A = t.TypeVar("A", Scalar, NamedArray, jnp.ndarray)
 
 
 # creation routines
@@ -102,8 +120,8 @@ def full(shape: AxisSpec, fill_value: T, dtype: Optional[DTypeLike] = None) -> N
     if isinstance(shape, Axis):
         return NamedArray(jnp.full(shape=shape.size, fill_value=fill_value, dtype=dtype), (shape,))
     else:
-        x_shape = tuple(x.size for x in shape)
-        return NamedArray(jnp.full(shape=x_shape, fill_value=fill_value, dtype=dtype), tuple(shape))
+        x_shape = to_jax_shape(shape)
+        return NamedArray(jnp.full(shape=x_shape, fill_value=fill_value, dtype=dtype), shape)
 
 
 def zeros_like(a: NamedArray, dtype=None) -> NamedArray:
@@ -143,16 +161,11 @@ def arange(axis: AxisSpec, *, start=0, step=1, dtype: Optional[DTypeLike] = None
     ```
 
     """
-    from haliax.jax_utils import to_jax_shape
-    from haliax.util import ensure_tuple
-
-    # if start is a tracer, we need to be a bit cleverer since arange doesn't support tracers
-    # return NamedArray(jnp.arange(start, stop, step, dtype=dtype), (axis,))
     size = axis_size(axis)
 
     arr = jax.lax.iota(dtype=dtype or jnp.result_type(start), size=size) * step + start
     arr = arr.reshape(to_jax_shape(axis))
-    return NamedArray(arr, ensure_tuple(axis))
+    return NamedArray(arr, axis_spec_to_tuple(axis))
 
 
 # TODO: add overrides for arraylike start/stop to linspace, logspace, geomspace
@@ -212,7 +225,7 @@ def repeat(
     a: NamedArray, repeats: int | jnp.ndarray, axis: AxisSelector, total_repeat_length: Optional[int] = None
 ) -> NamedArray:
     """Version of [jax.numpy.repeat][] that returns a NamedArray"""
-    index = a._lookup_indices(axis)
+    index = a.axis_indices(axis)
     if index is None:
         raise ValueError(f"Axis {axis} not found in array {a}")
 
@@ -235,7 +248,7 @@ def tile(a: NamedArray, reps: dict[AxisSelector, int]) -> NamedArray:
     new_dims = []
     dim_reps = [1] * len(a.axes)
     for ax, i in reps.items():
-        index = a._lookup_indices(ax)
+        index = a.axis_indices(ax)
         if index is None:
             new_dims.append(Axis(axis_name(ax), i))
         else:
@@ -265,11 +278,11 @@ def concatenate(axis: AxisSelector, arrays: Sequence[NamedArray]) -> NamedArray:
     if len(arrays) == 0:
         return zeros(axis)
 
-    axis_index = arrays[0]._lookup_indices(aname)
+    axis_index = arrays[0].axis_indices(aname)
     if axis_index is None:
         raise ValueError(f"Axis {aname} not found in 0th array {arrays[0]}")
 
-    axes: typing.Tuple[AxisSelector, ...] = arrays[0].axes
+    axes: tuple[AxisSelector, ...] = arrays[0].axes
     # we want to use the axis name for `axis`, because it's not uncommon for those to be different lengths in the arrays
     axes = axes[:axis_index] + (aname,) + axes[axis_index + 1 :]
     arrays = [a.rearrange(axes) for a in arrays]
@@ -1036,6 +1049,12 @@ __all__ = [
     "vmap",
     "trace",
     "where",
+    "unique",
+    "unique_values",
+    "unique_counts",
+    "unique_inverse",
+    "unique_all",
+    "bincount",
     "clip",
     "tril",
     "triu",
@@ -1084,6 +1103,7 @@ __all__ = [
     "are_shape_checks_enabled",
     "isclose",
     "pad_left",
+    "pad",
     "stack",
     "concatenate",
     "eliminate_axes",
@@ -1098,4 +1118,14 @@ __all__ = [
     "is_named_array",
     "tree_checkpoint_name",
     "ScanCheckpointPolicy",
+    "quantization",
+    "util",
+    "einsum",
+    "broadcast_arrays",
+    "unflatten_axis",
+    "ReductionFunction",
+    "SimpleReductionFunction",
+    "NamedArrayAxes",
+    "NamedArrayAxesSpec",
+    "Named",
 ]
