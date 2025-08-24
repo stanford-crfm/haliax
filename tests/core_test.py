@@ -570,6 +570,46 @@ def test_index_array_slices():
     assert named1[{"W": ind_1, "C": ind_2}].axes == (I1, I2, I3, H, D, Q)
 
 
+def test_selector_can_share_kept_axes():
+    """
+    A selector array that *shares* Batch/Seq axes with the source array
+    should broadcast/vmap correctly and return shape (Batch, Seq).
+    """
+    Batch = Axis("batch", 4)
+    Seq   = Axis("seq",   3)
+    Vocab = Axis("vocab", 5)
+
+    x   = hax.arange((Batch, Seq, Vocab))                  # [B,S,V]
+    idx = hax.arange((Batch, Seq), dtype=jnp.int32) % Vocab.size  # [B,S]
+
+    out = x["vocab", idx]                                  # expect [B,S]
+
+    # shape / axes checks
+    assert out.axes == (Batch, Seq)
+    # numerical check (take_along_axis reference)
+    expected = jnp.take_along_axis(x.array, idx.array[..., None], axis=2)[..., 0]
+    assert jnp.array_equal(out.array, expected)
+
+
+def test_selector_dup_axis_error_when_eliminated_and_not_key():
+    """
+    If an axis is *eliminated* (kept_axes=False) **and** duplicated inside a
+    selector array *without* appearing in the slice-dict keys, we still raise.
+    """
+    Batch = Axis("batch", 2)
+    Vocab = Axis("vocab", 4)
+    Extra = Axis("extra", 3)
+
+    x = hax.zeros((Batch, Vocab, Extra))                   # [B,V,E]
+
+    # selector for vocab carries *Extra* axis too
+    sel = hax.arange((Batch, Extra), dtype=jnp.int32) % Vocab.size  # [B,E]
+
+    # eliminate Extra with an int, so Extra is NOT in slice-dict keys
+    with pytest.raises(ValueError):
+        _ = x["vocab", sel, "extra", 0]
+
+
 def test_slice_nd_shorthand_syntax():
     # syntax like arr["X", 0:10, "Y", 0:10] is supported
 

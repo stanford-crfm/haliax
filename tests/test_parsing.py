@@ -7,6 +7,8 @@ def _simplify_captures(expr):
     def simplify_capture(capture):
         if capture == Ellipsis:
             return Ellipsis
+        elif capture.is_simple():
+            return capture.binding
         elif (capture.binding == capture.axes[0] or capture.binding is None) and len(capture.axes) == 1:
             return capture.axes[0]
         elif capture.binding is None:

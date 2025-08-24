@@ -217,7 +217,11 @@ def _determine_final_transpose_and_reshape(
 
         sz = 1
         first_axis = None
-        for ax_name in capture.axes:
+
+        axes_to_iterate = capture.axes if not capture.is_simple() else (capture.binding,)
+
+        for ax_name in axes_to_iterate:
+            assert ax_name is not None
             intermed_axis = aliases.dealias_binding(ax_name)
 
             if not isinstance(intermed_axis, Axis):
@@ -284,8 +288,6 @@ def _determine_initial_reshape(
     # the lhs all need to be bound to axes in the array, or synthesized as parts of axes.
     # In the lhs, bindings look like either a name, or a name and a list of (new) axes.
     # bindings can either be done by name, or by position, depending on if lhs.is_ordered
-    new_shapes: list[Optional[list[Axis]]] = [None] * len(array.axes)
-    used_new_names: set[str] = set()  # names can only be used once on a side
 
     # one subtle difference between the lhs and the rhs is the handling of binding in expressions like (a: b c)
     # in the lhs, this means that a is bound to an axis, and b and c are split out from a
@@ -293,110 +295,9 @@ def _determine_initial_reshape(
     # this makes sense in the same way that pattern matching works
 
     if lhs.is_ordered:
-        # if we start with an ellipsis, we bind from the right
-        # if we end with an ellipsis, we bind from the left
-        ellipsis_pos = None
-        axis_index_for_capture: list[Optional[int]] = [None] * len(lhs.captures)
-        covered_axes = set()
-        # bind from the left
-        axis_pos = 0
-        for cpos, capture in enumerate(lhs.captures):
-            if capture == Ellipsis:
-                if ellipsis_pos is not None:
-                    assert False, "should not be here"  # pragma: no cover
-                ellipsis_pos = cpos
-                break
-
-            assert not isinstance(capture, EllipsisType)
-
-            if axis_pos >= len(array.axes):
-                raise_parse_error("Too many axes in lhs", expression, capture.char_range)
-
-            axis_index_for_capture[cpos] = axis_pos
-            covered_axes.add(axis_pos)
-            axis_pos += 1
-
-        # bind from the right, take care to check second ellipsis
-        if ellipsis_pos is not None:
-            axis_pos = len(array.axes) - 1
-            for cpos in range(len(lhs.captures) - 1, ellipsis_pos, -1):
-                capture = lhs.captures[cpos]
-                if capture == Ellipsis:
-                    raise_parse_error("Only one ellipsis allowed", expression, None)
-
-                assert not isinstance(capture, EllipsisType)
-
-                axis_index_for_capture[cpos] = axis_pos
-                if axis_pos in covered_axes:
-                    raise_parse_error(
-                        f"Axis {array.axes[axis_pos]} is bound more than once",
-                        expression,
-                        capture.char_range,
-                    )
-                covered_axes.add(axis_pos)
-                axis_pos -= 1
-        else:
-            # no ellipsis, so we need to check that we covered all axes
-            if len(covered_axes) < len(array.axes):
-                raise_parse_error(
-                    "Not all axes are bound, use ... to skip missing axes", expression, len(expression) - 1
-                )  # type: ignore
-            elif len(covered_axes) > len(array.axes):
-                raise_parse_error("Too many axes are bound", expression, lhs.captures[-1].char_range)  # type: ignore
-
-        # now that we have the bindings, we can figure out the new shapes
-        for cpos, capture in enumerate(lhs.captures):
-            if capture == Ellipsis:
-                continue
-            assert not isinstance(capture, EllipsisType)
-
-            axis_index = axis_index_for_capture[cpos]
-            if axis_index is None:
-                raise_parse_error("Internal error", expression, capture.char_range)
-
-            axis = array.axes[axis_index]
-            if new_shapes[axis_index] is not None:
-                raise_parse_error(f"Axis {axis} is bound more than once", expression, capture.char_range)
-
-            new_axes = _solve_split_axes(axis, capture, aliases, used_new_names, expression)
-            new_shapes[axis_index] = new_axes  # type: ignore
-
+        new_shapes = _determine_initial_reshape_ordered(expression, lhs, array, aliases)
     else:
-        # we just need to bind the axes in the lhs to the axes in the array
-        for capture in lhs.captures:
-            # ellipses are ignored in unordered rearrangements
-            if capture == Ellipsis:
-                continue
-
-            assert not isinstance(capture, EllipsisType)
-
-            if capture.binding is None:
-                raise_parse_error(
-                    "Unordered axes must be bound by name, e.g. (a: b) or just a", expression, capture.char_range
-                )
-
-            # let's see if we're aliasing it in the bindings
-            maybe_alias = aliases.dealias_binding(capture.binding)
-            if maybe_alias is None:
-                maybe_alias = capture.binding
-            else:
-                maybe_alias = axis_name(maybe_alias)
-
-            try:
-                axis = array.resolve_axis(maybe_alias)
-                # aliases.bind_alias(capture.binding, axis, expression, capture.char_range)
-            except ValueError:
-                raise_parse_error(f"Could not resolve axis {maybe_alias}", expression, capture.char_range)
-
-            try:
-                axis_index = array.axes.index(axis)
-            except ValueError:
-                raise_parse_error(f"Axis {axis} is not in the array", expression, capture.char_range)
-            if new_shapes[axis_index] is not None:
-                raise_parse_error(f"Axis {axis} is bound more than once", expression, capture.char_range)
-
-            new_axes = _solve_split_axes(axis, capture, aliases, used_new_names, expression)
-            new_shapes[axis_index] = new_axes  # type: ignore
+        new_shapes = _determine_initial_reshape_unordered(expression, lhs, array, aliases)
 
     for i in range(len(array.axes)):
         if new_shapes[i] is None:
@@ -405,22 +306,212 @@ def _determine_initial_reshape(
     return new_shapes  # type: ignore
 
 
-def _solve_split_axes(axis, capture, aliases, used_new_names, expression):
+def _determine_initial_reshape_unordered(expression, lhs, array, aliases):
+    new_shapes: list[Optional[list[Axis]]] = [None] * len(array.axes)
+    used_new_names: set[str] = set()  # names can only be used once on a side
+    # we just need to bind the axes in the lhs to the axes in the array
+    for capture in lhs.captures:
+        # ellipses are ignored in unordered rearrangements
+        if capture == Ellipsis:
+            continue
+
+        assert not isinstance(capture, EllipsisType)
+
+        if capture.binding is None:
+            raise_parse_error(
+                "Unordered axes must be bound by name, e.g. (a: b) or just a", expression, capture.char_range
+            )
+
+        # let's see if we're aliasing it in the bindings
+        maybe_alias = aliases.dealias_binding(capture.binding)
+        if maybe_alias is None:
+            maybe_alias = capture.binding
+        else:
+            maybe_alias = axis_name(maybe_alias)
+
+        try:
+            axis = array.resolve_axis(maybe_alias)
+            # aliases.bind_alias(capture.binding, axis, expression, capture.char_range)
+        except ValueError:
+            raise_parse_error(f"Could not resolve axis {maybe_alias}", expression, capture.char_range)
+
+        try:
+            axis_index = array.axes.index(axis)
+        except ValueError:
+            raise_parse_error(f"Axis {axis} is not in the array", expression, capture.char_range)
+        if new_shapes[axis_index] is not None:
+            raise_parse_error(f"Axis {axis} is bound more than once", expression, capture.char_range)
+
+        new_axes = _solve_split_axes_unordered(axis, capture, aliases, used_new_names, expression)
+        new_shapes[axis_index] = new_axes  # type: ignore
+    return new_shapes
+
+
+def _determine_initial_reshape_ordered(expression, lhs, array, aliases):
+    new_shapes: list[Optional[list[Axis]]] = [None] * len(array.axes)
+    used_new_names: set[str] = set()  # names can only be used once on a side
+    # if we start with an ellipsis, we bind from the right
+    # if we end with an ellipsis, we bind from the left
+    ellipsis_pos = None
+    axis_index_for_capture: list[Optional[int]] = [None] * len(lhs.captures)
+    covered_axes = set()
+
+    # We start by binding from the left to right, until we get to an ellipsis (if any).
+    # if there's an ellipsis, we will bind from the right to left after the ellipsis.
+
+    # bind from the left
+    axis_pos = 0
+    for cpos, capture in enumerate(lhs.captures):
+        if capture == Ellipsis:
+            if ellipsis_pos is not None:
+                assert False, "should not be here"  # pragma: no cover
+            ellipsis_pos = cpos
+            break
+
+        assert not isinstance(capture, EllipsisType)
+
+        if axis_pos >= len(array.axes):
+            raise_parse_error("Too many axes in lhs", expression, capture.char_range)
+
+        axis_index_for_capture[cpos] = axis_pos
+        covered_axes.add(axis_pos)
+        axis_pos += 1
+
+    # Bind from the right, take care to check second ellipsis
+    if ellipsis_pos is not None:
+        axis_pos = len(array.axes) - 1
+        for cpos in range(len(lhs.captures) - 1, ellipsis_pos, -1):
+            capture = lhs.captures[cpos]
+            if capture == Ellipsis:
+                raise_parse_error("Only one ellipsis allowed", expression, None)
+
+            assert not isinstance(capture, EllipsisType)
+
+            axis_index_for_capture[cpos] = axis_pos
+            if axis_pos in covered_axes:
+                raise_parse_error(
+                    f"Axis {array.axes[axis_pos]} is bound more than once",
+                    expression,
+                    capture.char_range,
+                )
+            covered_axes.add(axis_pos)
+            axis_pos -= 1
+    else:
+        # no ellipsis, so we need to check that we covered all axes
+        if len(covered_axes) < len(array.axes):
+            raise_parse_error(
+                "Not all axes are bound, use ... to skip missing axes", expression, len(expression) - 1
+            )  # type: ignore
+        elif len(covered_axes) > len(array.axes):
+            raise_parse_error("Too many axes are bound", expression, lhs.captures[-1].char_range)  # type: ignore
+
+    # now that we have the bindings, we can figure out the new shapes
+    for cpos, capture in enumerate(lhs.captures):
+        if capture == Ellipsis:
+            continue
+        assert not isinstance(capture, EllipsisType)
+
+        axis_index = axis_index_for_capture[cpos]
+        if axis_index is None:
+            raise_parse_error("Internal error", expression, capture.char_range)
+
+        axis = array.axes[axis_index]
+        if new_shapes[axis_index] is not None:
+            raise_parse_error(f"Axis {axis} is bound more than once", expression, capture.char_range)
+
+        new_axes = _solve_split_axes_ordered(axis, capture, aliases, used_new_names, expression)
+        new_shapes[axis_index] = new_axes  # type: ignore
+    return new_shapes
+
+
+def _solve_split_axes_ordered(axis, capture, aliases, used_new_names, expression):
     """
     Given an axis and a capture of the form (a: b c) or (b c) on the lhs, solve for the new axes.
+
+    There are two cases to consider:
+
     """
     new_axes: list[Optional[Axis]] = []
     unsolved_axis_index: Optional[int] = None
 
     # easy case: 1 axis in capture
-    if len(capture.axes) == 1:
-        new_axis_name = capture.axes[0]
+    if capture.is_simple():
+        if capture.binding in used_new_names:
+            raise_parse_error(f"Capture {capture.binding} is assigned more than once", expression, capture.char_range)
+        used_new_names.add(capture.binding)
+
+        new_axes.append(axis)
+        aliases.bind_alias(capture.binding, axis, expression, capture.char_range)
+
+        return new_axes
+
+    remaining_size = axis.size
+
+    for new_axis_name in capture.axes:
+        if new_axis_name in used_new_names:
+            raise_parse_error(
+                f"Capture {new_axis_name} is assigned more than once in lhs", expression, capture.char_range
+            )
+
+        used_new_names.add(new_axis_name)
+
+        new_axis = aliases.dealias_binding(new_axis_name)
+        if new_axis is None:
+            new_axis = new_axis_name
+
+        if isinstance(new_axis, Axis):
+            new_axes.append(new_axis)
+            if remaining_size % new_axis.size:
+                raise_parse_error(f"Axes do not divide evenly into axis {axis}", expression, capture.char_range)
+            remaining_size //= new_axis.size
+        else:
+            if unsolved_axis_index is not None:
+                raise_parse_error(
+                    "Sizes for this split axis are ambiguous. You must provide a size as a kwarg.",
+                    expression,
+                    capture.char_range,
+                )
+            unsolved_axis_index = len(new_axes)
+            new_axes.append(None)
+
+    if unsolved_axis_index is not None:
+        # we need to solve for this axis
+        unsolved_alias = aliases.dealias_binding(capture.axes[unsolved_axis_index])
+        assert not isinstance(unsolved_alias, Axis)
+        if unsolved_alias is None:
+            unsolved_alias = capture.axes[unsolved_axis_index]
+        assert isinstance(unsolved_alias, str)
+
+        new_axis = Axis(unsolved_alias, remaining_size)
+        new_axes[unsolved_axis_index] = new_axis
+        aliases.bind_alias(capture.axes[unsolved_axis_index], new_axis, expression, capture.char_range)
+    return new_axes
+
+
+def _solve_split_axes_unordered(axis, capture, aliases, used_new_names, expression):
+    """
+    Given an axis and a capture of the form (a: b c) or (b c) on the lhs, solve for the new axes.
+
+    There are two cases to consider:
+
+    """
+    new_axes: list[Optional[Axis]] = []
+    unsolved_axis_index: Optional[int] = None
+
+    if capture.is_simple():
+        new_axis_selector = aliases.dealias_binding(capture.binding)
+        if new_axis_selector is None:
+            new_axis_name = capture.binding
+        else:
+            new_axis_name = axis_name(new_axis_selector)
+
         if new_axis_name in used_new_names:
             raise_parse_error(f"Capture {new_axis_name} is assigned more than once", expression, capture.char_range)
         used_new_names.add(new_axis_name)
 
-        new_axes.append(axis)
-        aliases.bind_alias(new_axis_name, axis, expression, capture.char_range)
+        new_axis = axis.alias(new_axis_name)
+        new_axes.append(new_axis)
+        aliases.bind_alias(new_axis_name, new_axis, expression, capture.char_range)
 
         return new_axes
 
