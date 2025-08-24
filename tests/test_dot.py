@@ -3,7 +3,7 @@ import pytest
 from jax import numpy as jnp
 
 import haliax as hax
-from haliax import Axis, NamedArray
+from haliax import Axis
 
 
 def test_dot():
@@ -31,7 +31,7 @@ def test_dot():
     # reduce to scalar
     assert jnp.all(
         jnp.equal(
-            hax.dot(m1, m2, axis=None),
+            hax.dot(m1, m2, axis=None).array,
             jnp.einsum("ijk,kji->", m1.array, m2.array),
         )
     )

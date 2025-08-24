@@ -153,6 +153,21 @@ def is_scalarish(x):
         return jnp.isscalar(x) or (getattr(x, "shape", None) == ())
 
 
+def ensure_scalar(x, *, name: str = "value"):
+    """Return ``x`` if it is not a :class:`NamedArray`, otherwise ensure it is a scalar.
+
+    This is useful for APIs that can accept either Python scalars or scalar
+    ``NamedArray`` objects (for example ``roll`` or ``updated_slice``).  If ``x``
+    is a ``NamedArray`` with rank greater than 0 a :class:`TypeError` is raised.
+    """
+
+    if isinstance(x, haliax.NamedArray):
+        if x.ndim != 0:
+            raise TypeError(f"{name} must be a scalar NamedArray")
+        return x.array
+    return x
+
+
 def is_on_mac_metal():
     return jax.devices()[0].platform.lower() == "metal"
 
@@ -263,3 +278,10 @@ def multilevel_scan(f, carry, xs, outer_size, length, reverse=False, unroll=1):
             return x
 
     return carry, jax.tree.map(_deshape, scanned)
+
+
+def to_jax_shape(shape):
+    from haliax.core import Axis, ensure_tuple
+
+    shape = ensure_tuple(shape)
+    return tuple(axis.size if isinstance(axis, Axis) else axis for axis in shape)

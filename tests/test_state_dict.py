@@ -175,3 +175,27 @@ def test_stacked_layer_norm():
     new_norms = unflatten_modules_from_export(norms_flat, norms2)
 
     assert norms == new_norms
+
+
+def test_linear_doesnt_read_bias_if_it_didnt_have_bias():
+    H = hax.Axis("H", 10)
+    W = hax.Axis("W", 20)
+    D = hax.Axis("D", 30)
+    B = hax.Axis("B", 40)
+
+    linear = hax.nn.Linear.init((H, W), (D, B), key=jax.random.PRNGKey(0), use_bias=False, out_first=True)
+
+    flat_linear = linear.flatten_for_export()
+
+    flat_state_dict = to_state_dict(flat_linear)
+
+    assert "bias" not in flat_state_dict
+    flat_state_dict["bias"] = jnp.zeros((D.size * B.size,))  # add a dummy bias
+
+    # now unflatten it
+    linear2 = Linear.init((H, W), (D, B), key=jax.random.PRNGKey(1), use_bias=False, out_first=True)
+    flinear2 = linear2.flatten_for_export()
+    flinear2 = from_state_dict(flinear2, flat_state_dict)
+    new_linear = flinear2.unflatten_from_export(linear2)
+
+    assert linear == new_linear

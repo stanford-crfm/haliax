@@ -17,11 +17,11 @@ def scan(f, init, xs, length=None):
   return carry, np.stack(ys)
 ```
 
-Haliax provides two versions of this pattern: [haliax.fold][] and [haliax.scan][]. haliax.scan works much like JAX's scan,
-except it is curried and it works with NamedArrays. haliax.fold is a more restricted version of scan that is easier to
+Haliax provides two versions of this pattern: [haliax.fold][] and [haliax.scan][]. [haliax.scan][] works much like JAX's scan,
+except it is curried and it works with NamedArrays. [haliax.fold][] is a more restricted version of scan that is easier to
 use if you don't need the full generality of scan. (It works with functions that only return `carry`, not `carry, output`.)
 
-## `haliax.scan`
+## [haliax.scan][haliax.scan]
 
 Unlike JAX's scan, Haliax's scan is curried - it takes the function and configuration first, then the initial carry and scan arguments as a separate call: `scan(f, axis)(init, xs)`.
 
@@ -32,7 +32,7 @@ Unlike JAX's scan, Haliax's scan is curried - it takes the function and configur
 
 ### Basic Example
 
-Here's a practical example of using `haliax.scan` to sum values along an axis while keeping track of intermediates:
+Here's a practical example of using [haliax.scan][] to sum values along an axis while keeping track of intermediates:
 
 ```python
 Time = Axis("Time", 100)
@@ -89,9 +89,9 @@ final_state, path = hax.scan(simulate_brownian_motion, Time)(init_state, None)
 
 More commonly, you might use this for an RNN or Transformer model. (See [haliax.nn.Stacked][].)
 
-## `haliax.fold`
+## [haliax.fold][haliax.fold]
 
-`haliax.fold` is a simpler version of `haliax.scan` that is easier to use when you don't need the full generality of `scan`.
+[haliax.fold][] is a simpler version of [haliax.scan][] that is easier to use when you don't need the full generality of `scan`.
 Specifically, `fold` is for functions that only return a `carry`, not a `carry, output`.
 
 Morally, `fold` is like this Python code:
@@ -138,10 +138,10 @@ init_state = (
 final_state = hax.fold(running_stats, Time)(init_state, data)
 ```
 
-## `haliax.map`
+## [haliax.map][haliax.map]
 
-`haliax.map` is a convenience function that applies a function to each element of an axis. It is similar
-to [jax.lax.map][] but works with NamedArrays, providing a similar interface to `haliax.scan` and `haliax.fold`.
+[haliax.map][] is a convenience function that applies a function to each element of an axis. It is similar
+to [jax.lax.map][] but works with NamedArrays, providing a similar interface to [haliax.scan][] and [haliax.fold][].
 
 ```python
 
@@ -155,13 +155,13 @@ def my_fn(x):
 result = hax.map(my_fn, Time)(data)
 ```
 
-You should generally prefer to use [haliax.vmap][] instead of `haliax.map`, but it's there if you need it.
-(It uses less memory than `haliax.vmap` but is slower.)
+You should generally prefer to use [haliax.vmap][] instead of [haliax.map][], but it's there if you need it.
+(It uses less memory than [haliax.vmap][] but is slower.)
 
 
 ## Gradient Checkpointing / Rematerialization
 
-Both `haliax.scan` and `haliax.fold` support gradient checkpointing, which can be useful for deep models.
+Both [haliax.scan][] and [haliax.fold][] support gradient checkpointing, which can be useful for deep models.
 Typically, you'd use this as part of [haliax.nn.Stacked][] or [haliax.nn.BlockSeq][] but you can also use it directly.
 
 Gradient checkpointing is a technique for reducing memory usage during backpropagation by recomputing some
@@ -289,6 +289,12 @@ which is double that required by the default policy, but it reduces the amount o
 Both `save_carries` and `save_inputs` can either be a boolean or the string "offload". If "offload", then the
 checkpointed values will be offloaded to the host during the forward pass, and reloaded during the backward pass.
 
+In addition, you can offload block internals by passing a list of strings to `offload_block_internals`:
+
+```
+policy = ScanCheckpointPolicy(save_carries=True, save_block_internals=["y"], offload_block_internals=["z"])
+```
+
 
 ### Summary of String and Boolean Aliases
 
@@ -399,6 +405,17 @@ blocks = Stacked.init(Layers, Gpt2Block)(
 Any NamedArray passed to the Stacked init will have its Layers axis (if present) vmapped over. Any
 JAX array will have its first axis vmapped over.
 
+#### Apply Blocks in Parallel with `vmap`
+
+Sometimes you may want to apply each block independently, without feeding the
+output of one block into the next.  `Stacked.vmap` does exactly that: it uses
+[haliax.vmap][] to broadcast the initial value to every block and evaluates
+them in parallel, returning the stack of outputs.
+
+```python
+y = stacked.vmap(x)
+```
+
 
 #### Fold Blocks vs Scan Blocks
 
@@ -441,7 +458,9 @@ We also provide a way to create a sequence of layers that can be applied to a se
 same interface as [haliax.nn.Stacked][], but with a different implementation. This is the [haliax.nn.BlockSeq][] module.
 BlockSeq implements those for loops directly, rather than using [haliax.fold][] or [haliax.scan][].
 
-[haliax.nn.scan.BlockFoldable][] is an interface that both [haliax.nn.Stacked][] and [haliax.nn.BlockSeq][] implement.
+[haliax.nn.scan.BlockFoldable][] is an interface that both [haliax.nn.Stacked][] and [haliax.nn.BlockSeq][] implement. It
+exposes the usual ``fold`` and ``scan`` methods as well as helpers ``fold_via`` and ``scan_via`` which return
+callables that perform the respective operations using a custom block function.
 
 ## API
 

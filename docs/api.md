@@ -35,7 +35,6 @@ Occasionally, an axis size can be inferred in some circumstances but not others.
 ::: haliax.axis.eliminate_axes
 ::: haliax.axis.without_axes
 ::: haliax.axis.selects_axis
-::: haliax.axis.overlapping_axes
 ::: haliax.axis.is_axis_compatible
 
 
@@ -257,8 +256,10 @@ These are all more or less directly from JAX's NumPy API.
 
 ### Other Operations
 
+::: haliax.bincount
 ::: haliax.clip
 ::: haliax.isclose
+::: haliax.pad
 ::: haliax.top_k
 ::: haliax.trace
 ::: haliax.tril

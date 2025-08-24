@@ -97,6 +97,7 @@ and use `_state_dict_key_map` to rename keys. For instance, the `Gpt2Transformer
 from typing import Optional
 from haliax.state_dict import ModuleWithStateDictSerialization
 
+
 class Gpt2Transformer(ModuleWithStateDictSerialization):
     ...
 
@@ -121,7 +122,6 @@ For implementation, there are a few helper methods from `haliax.state_dict` that
 For example, below is the implementation of `to_state_dict()` in [levanter.models.backpack.BackpackLMHeadModel][].
 In this class, we want to preserve HF compatibility by saving untied output embeddings. (We chose not to implement
 non-weight-tied embeddings.)
-
 
 ```python
 from typing import Optional
@@ -226,7 +226,7 @@ any Axis members to match the new shape.
 ::: haliax.state_dict.save_state_dict
 ::: haliax.state_dict.load_state_dict
 
-### Converting betweewn State Dicts and Modules
+### Converting between State Dicts and Modules
 
 ::: haliax.state_dict.from_state_dict
 ::: haliax.state_dict.to_state_dict

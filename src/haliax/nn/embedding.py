@@ -1,5 +1,4 @@
 import dataclasses
-import math
 import warnings
 from typing import Optional
 
@@ -8,19 +7,18 @@ from jaxtyping import PRNGKeyArray
 
 import haliax as hax
 
-from ..axis import Axis, AxisSpec
+from ..axis import Axis, AxisSpec, concat_axes
 from ..core import NamedArray
 from ..jax_utils import named_call
 from ..tree_util import resize_axis
-from ..util import ensure_tuple
 
 
 class Embedding(eqx.Module):
     weight: NamedArray
 
     # axes
-    Vocab: Axis = eqx.static_field()
-    Embed: AxisSpec = eqx.static_field()
+    Vocab: Axis = eqx.field(static=True)
+    Embed: AxisSpec = eqx.field(static=True)
 
     @staticmethod
     def init(Vocab: Axis, Embed: AxisSpec, *, init_scale: float = 1, key, initializer_range: Optional[float] = None):
@@ -42,7 +40,7 @@ class Embedding(eqx.Module):
             warnings.warn("initializer_range is deprecated. Use init_std instead.", DeprecationWarning)
             init_scale = initializer_range
 
-        all_axes = (Vocab,) + ensure_tuple(Embed)
+        all_axes = concat_axes(Vocab, Embed)
         output_size = hax.axis_size(Embed)
         weight = hax.random.truncated_normal(key, all_axes, -3, 3) * (init_scale / output_size)
         return Embedding(weight=weight, Vocab=Vocab, Embed=Embed)
