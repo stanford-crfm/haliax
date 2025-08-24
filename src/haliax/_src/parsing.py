@@ -7,13 +7,27 @@ from haliax.axis import Axis, AxisSelector
 
 @dataclasses.dataclass(frozen=True)
 class _AxisCapture:
-    binding: Optional[str] = None
-    axes: tuple[str, ...] = ()
+    """
+    Represents a capture of axes from an einops-style haliax rearrangement string.
+
+    In general, a capture looks like one of these:
+
+    * `a` -> captures a single axis named "a" -> _AxisCapture(None, ("a",), char_range)
+    * `(a b c)` -> captures multiple axes named "a", "b", and "c" --> _AxisCapture(None, ("a", "b", "c"), char_range)
+    * `(a: b c)` -> captures a binding "a" and multiple axes "b" and "c" --> _AxisCapture("a", ("b", "c"), char_range)
+    """
+
+    binding: str | None
+    axes: tuple[str, ...]
     char_range: Optional[tuple[int, int]] = None
 
     def __post_init__(self):
-        if len(self.axes) == 0:
-            raise ValueError("Empty axes not allowed")
+        assert (
+            self.binding is not None or len(self.axes) > 0
+        ), "An axis capture must have at least one axis or a binding"
+
+    def is_simple(self):
+        return len(self.axes) == 0
 
 
 @dataclasses.dataclass(frozen=True)
@@ -142,14 +156,14 @@ def _parse_group(expression, pos):
         axes.append(current_ident)
 
     if len(axes) == 0:
-        raise_parse_error("No axes found", expression, pos_in)
+        raise_parse_error("No axes found in group", expression, pos_in)
 
     # todo: should we allow anonymous/literal
     char_range = (pos_in, pos)
     return _AxisCapture(binding, tuple(axes), char_range), pos
 
 
-def _parse_expression(expression: str, pos) -> tuple[Expression, int]:
+def _parse_expression(expression: str, pos, comma_is_space: bool) -> tuple[Expression, int]:
     """Parse one side of an einops-style haliax rearrangement string."""
     captures = []
     is_ordered = True
@@ -196,20 +210,16 @@ def _parse_expression(expression: str, pos) -> tuple[Expression, int]:
                 raise_parse_error("Expected >", expression, pos)
             break
         elif expression[pos] == ",":
-            # this ends the current expression if we're not inside a group or unordered capture
-            if not is_ordered:
-                # treat as whitespace
+            if comma_is_space:
                 pos += 1
                 continue
-            if finished:
-                break
 
             break
         else:
             if finished:
                 raise_parse_error("Unexpected character after }", expression, pos)
             ident, new_pos = _parse_ident(expression, pos)
-            captures.append(_AxisCapture(binding=ident, axes=(ident,), char_range=(pos, new_pos)))
+            captures.append(_AxisCapture(binding=ident, axes=(), char_range=(pos, new_pos)))
             seen_char = True
             pos = new_pos
             continue
@@ -235,7 +245,11 @@ class AliasTable:
     def bind_alias(self, alias: str, axis: Axis, expr, char_range):
         if axis.name in self.bindings:
             if self.bindings[alias] != axis:
-                raise_parse_error(f"Alias {alias} is assigned to more than one axis", expr, char_range)
+                raise_parse_error(
+                    f"Alias {alias} is assigned to more than one axis.\n* {self.bindings[alias]}\n* {axis}",
+                    expr,
+                    char_range,
+                )
         elif alias in self.bindings:
             current = self.bindings[alias]
             if isinstance(current, Axis):
@@ -267,7 +281,7 @@ def _resolve_bindings(array, bindings: Mapping[str, Axis | str | int]) -> AliasT
 def parse_rearrangement(expression: str) -> tuple[Expression, Expression]:
     """Parse an einops-style haliax rearrangement string."""
     pos = 0
-    lhs, pos = _parse_expression(expression, pos)
+    lhs, pos = _parse_expression(expression, pos, comma_is_space=True)
 
     # consume the ->
     if pos + 2 >= len(expression):
@@ -276,7 +290,7 @@ def parse_rearrangement(expression: str) -> tuple[Expression, Expression]:
         raise_parse_error("Expected ->", expression, pos)
 
     pos += 2
-    rhs, pos = _parse_expression(expression, pos)
+    rhs, pos = _parse_expression(expression, pos, comma_is_space=True)
 
     # make sure we consumed the whole string
     if pos != len(expression):
@@ -293,7 +307,7 @@ def parse_einsum(expression: str) -> tuple[Sequence[Expression], Expression]:
     pos = 0
     lhses = []
     while pos < len(expression):
-        lhs, pos = _parse_expression(expression, pos)
+        lhs, pos = _parse_expression(expression, pos, comma_is_space=False)
         lhses.append(lhs)
         if pos >= len(expression):
             break
@@ -310,7 +324,7 @@ def parse_einsum(expression: str) -> tuple[Sequence[Expression], Expression]:
         else:
             raise_parse_error("Expected , or ->", expression, pos)
 
-    rhs, pos = _parse_expression(expression, pos)
+    rhs, pos = _parse_expression(expression, pos, comma_is_space=False)
 
     if any(x is None for x in lhses):
         if len(lhses) > 1:
