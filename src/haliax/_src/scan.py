@@ -4,6 +4,7 @@ from typing import Any, Callable, Literal, ParamSpec, Protocol, Sequence, Tuple,
 
 import equinox as eqx
 import jax
+import jax.tree_util as jtu
 from jaxtyping import PyTree
 
 import haliax
@@ -357,7 +358,26 @@ def scan(
             return carry, y
 
         true_axis = _infer_axis_size_from_tree(axis_first_xs, axis)
-        axis_size = _infer_axis_size_from_tree(axis_first_xs, axis).size
+        axis_size = true_axis.size
+
+        path_leaves, _ = jtu.tree_flatten_with_path(axis_first_xs, is_leaf=is_named_array)
+        mismatched = []
+        for path, leaf in path_leaves:
+            if isinstance(leaf, NamedArray):
+                lead_size = leaf.array.shape[0]
+            elif is_jax_array_like(leaf):
+                lead_size = leaf.shape[0]
+            else:
+                continue
+            if lead_size != axis_size:
+                mismatched.append((path, lead_size))
+        if mismatched:
+            details = ", ".join(
+                f"{_format_tree_path(p)} has leading dimension {s}" for p, s in mismatched
+            )
+            raise ValueError(
+                f"scan got `length` argument of {axis_size} but some inputs had different leading axis sizes: {details}"
+            )
 
         nested_scan = checkpoint.nested
         outer_block_size = nested_scan_outer_block(nested_scan, axis_size)
@@ -506,6 +526,22 @@ UnnamedAxisSpec = Union[ResolvedUnnamedAxisSpec, Callable[[Any], ResolvedUnnamed
 
 def _zero_if_array_else_none(x: Any) -> ResolvedUnnamedAxisSpec:
     return 0 if is_jax_array_like(x) else None
+
+
+def _format_tree_path(path: tuple[jtu.KeyEntry, ...]) -> str:
+    parts: list[str] = []
+    for p in path:
+        if isinstance(p, jtu.GetAttrKey):
+            parts.append("." + p.name)
+        elif isinstance(p, jtu.DictKey):
+            parts.append(f"[{p.key!r}]")
+        elif isinstance(p, jtu.SequenceKey):
+            parts.append(f"[{p.idx}]")
+        else:  # pragma: no cover - future-proofing
+            parts.append(str(p))
+    if parts and parts[0].startswith("."):
+        parts[0] = parts[0][1:]
+    return "".join(parts) or "<root>"
 
 
 def _infer_axis_size_from_tree(result, axis):
