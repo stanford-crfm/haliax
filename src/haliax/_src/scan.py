@@ -1,5 +1,6 @@
 import dataclasses
 import functools as ft
+import inspect
 from typing import Any, Callable, Literal, ParamSpec, Protocol, Sequence, Tuple, TypeVar, Union, overload
 
 import equinox as eqx
@@ -360,6 +361,26 @@ def scan(
         true_axis = _infer_axis_size_from_tree(axis_first_xs, axis)
         axis_size = true_axis.size
 
+        # build a mapping from positional argument indices to their names for friendlier error messages
+        sig = inspect.signature(f)
+        arg_pos_names: dict[int, str] = {}
+        params = list(sig.parameters.values())[1:]  # skip carry
+        pos_count = 0
+        var_pos_name: str | None = None
+        for param in params:
+            if param.kind in (
+                inspect.Parameter.POSITIONAL_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            ):
+                arg_pos_names[pos_count] = param.name
+                pos_count += 1
+            elif param.kind == inspect.Parameter.VAR_POSITIONAL:
+                var_pos_name = param.name
+                break
+        if var_pos_name is not None:
+            for i in range(pos_count, len(args)):
+                arg_pos_names[i] = f"{var_pos_name}[{i - pos_count}]"
+
         path_leaves, _ = jtu.tree_flatten_with_path(axis_first_xs, is_leaf=is_named_array)
         mismatched = []
         for path, leaf in path_leaves:
@@ -373,7 +394,7 @@ def scan(
                 mismatched.append((path, lead_size))
         if mismatched:
             details = ", ".join(
-                f"{_format_tree_path(p)} has leading dimension {s}" for p, s in mismatched
+                f"{_format_tree_path(p, arg_pos_names)} has leading dimension {s}" for p, s in mismatched
             )
             raise ValueError(
                 f"scan got `length` argument of {axis_size} but some inputs had different leading axis sizes: {details}"
@@ -528,9 +549,23 @@ def _zero_if_array_else_none(x: Any) -> ResolvedUnnamedAxisSpec:
     return 0 if is_jax_array_like(x) else None
 
 
-def _format_tree_path(path: tuple[jtu.KeyEntry, ...]) -> str:
+def _format_tree_path(
+    path: tuple[jtu.KeyEntry, ...], arg_pos_names: dict[int, str] | None = None
+) -> str:
     parts: list[str] = []
-    for p in path:
+    i = 0
+    if len(path) >= 2 and isinstance(path[0], jtu.SequenceKey):
+        if path[0].idx == 0 and isinstance(path[1], jtu.SequenceKey):
+            name = (arg_pos_names or {}).get(path[1].idx)
+            if name is not None:
+                parts.append(name)
+            else:
+                parts.append(f"[{path[1].idx}]")
+            i = 2
+        elif path[0].idx == 1 and isinstance(path[1], jtu.DictKey):
+            parts.append(str(path[1].key))
+            i = 2
+    for p in path[i:]:
         if isinstance(p, jtu.GetAttrKey):
             parts.append("." + p.name)
         elif isinstance(p, jtu.DictKey):

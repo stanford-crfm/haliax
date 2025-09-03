@@ -147,9 +147,9 @@ def test_scan_reports_mismatched_unnamed_array():
     bad = jnp.zeros((Height.size - 1, 3))
 
     with pytest.raises(ValueError) as e:
-        hax.scan(f, Height)(0, good, bad)
+        hax.scan(f, Height)(0, good, y=bad)
 
-    assert "[0][1]" in str(e.value)
+    assert "y has leading dimension" in str(e.value)
 
 
 def test_scan_reports_eqx_module_field_path():
@@ -166,7 +166,7 @@ def test_scan_reports_eqx_module_field_path():
     with pytest.raises(ValueError) as e:
         hax.scan(f, Height)(0, foo)
 
-    assert "[0][0].my_array" in str(e.value)
+    assert "foo.my_array" in str(e.value)
 
 
 def test_fold():
