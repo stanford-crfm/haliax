@@ -80,6 +80,7 @@ from .ops import (
     unique_counts,
     unique_inverse,
     unique_all,
+    searchsorted,
     bincount,
     where,
 )
@@ -1056,6 +1057,7 @@ __all__ = [
     "unique_counts",
     "unique_inverse",
     "unique_all",
+    "searchsorted",
     "bincount",
     "clip",
     "tril",

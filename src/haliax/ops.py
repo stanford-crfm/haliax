@@ -430,6 +430,34 @@ def unique_all(
     return values, indices, inverse, counts
 
 
+def searchsorted(
+    a: NamedArray,
+    v: NamedArray | ArrayLike,
+    *,
+    side: str = "left",
+    sorter: NamedArray | ArrayLike | None = None,
+    method: str = "scan",
+) -> NamedArray:
+    """Named version of `jax.numpy.searchsorted`.
+
+    ``a`` and ``sorter`` (if provided) must be one-dimensional.
+    The returned array has the same axes as ``v``.
+    """
+
+    if a.ndim != 1:
+        raise ValueError("searchsorted only supports 1D 'a'")
+
+    if not isinstance(v, NamedArray):
+        v = haliax.named(v, ())
+
+    sorter_arr = None
+    if sorter is not None:
+        sorter_arr = sorter.array if isinstance(sorter, NamedArray) else jnp.asarray(sorter)
+
+    result = jnp.searchsorted(a.array, v.array, side=side, sorter=sorter_arr, method=method)
+    return NamedArray(result, v.axes)
+
+
 def bincount(
     x: NamedArray,
     Counts: Axis,
@@ -471,5 +499,6 @@ __all__ = [
     "unique_counts",
     "unique_inverse",
     "unique_all",
+    "searchsorted",
     "bincount",
 ]
