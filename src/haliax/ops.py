@@ -1,3 +1,8 @@
+# Copyright 2025 The Levanter Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+
 import typing
 from typing import Mapping, Optional, Union
 
@@ -36,8 +41,7 @@ def where(
     condition: NamedOrNumeric | bool,
     x: NamedOrNumeric,
     y: NamedOrNumeric,
-) -> NamedArray:
-    ...
+) -> NamedArray: ...
 
 
 @typing.overload
@@ -46,8 +50,7 @@ def where(
     *,
     fill_value: int,
     new_axis: Axis,
-) -> tuple[NamedArray, ...]:
-    ...
+) -> tuple[NamedArray, ...]: ...
 
 
 def where(
@@ -225,8 +228,7 @@ def raw_array_or_scalar(x: NamedOrNumeric):
 @typing.overload
 def unique(
     array: NamedArray, Unique: Axis, *, axis: AxisSelector | None = None, fill_value: ArrayLike | None = None
-) -> NamedArray:
-    ...
+) -> NamedArray: ...
 
 
 @typing.overload
@@ -237,8 +239,7 @@ def unique(
     return_index: typing.Literal[True],
     axis: AxisSelector | None = None,
     fill_value: ArrayLike | None = None,
-) -> tuple[NamedArray, NamedArray]:
-    ...
+) -> tuple[NamedArray, NamedArray]: ...
 
 
 @typing.overload
@@ -249,8 +250,7 @@ def unique(
     return_inverse: typing.Literal[True],
     axis: AxisSelector | None = None,
     fill_value: ArrayLike | None = None,
-) -> tuple[NamedArray, NamedArray]:
-    ...
+) -> tuple[NamedArray, NamedArray]: ...
 
 
 @typing.overload
@@ -261,8 +261,7 @@ def unique(
     return_counts: typing.Literal[True],
     axis: AxisSelector | None = None,
     fill_value: ArrayLike | None = None,
-) -> tuple[NamedArray, NamedArray]:
-    ...
+) -> tuple[NamedArray, NamedArray]: ...
 
 
 @typing.overload
@@ -275,8 +274,7 @@ def unique(
     return_counts: bool = False,
     axis: AxisSelector | None = None,
     fill_value: ArrayLike | None = None,
-) -> NamedArray | tuple[NamedArray, ...]:
-    ...
+) -> NamedArray | tuple[NamedArray, ...]: ...
 
 
 def unique(

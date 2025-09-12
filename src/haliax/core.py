@@ -1,3 +1,8 @@
+# Copyright 2025 The Levanter Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+
 from __future__ import annotations
 
 import contextlib
@@ -129,7 +134,7 @@ NamedArrayAxesSpec = Union[
 
 
 def _parse_namedarray_axes(
-    item: NamedArrayAxesSpec | typing.Annotated["NamedArray", NamedArrayAxes]
+    item: NamedArrayAxesSpec | typing.Annotated["NamedArray", NamedArrayAxes],
 ) -> NamedArrayAxes:
     origin = typing.get_origin(item)
     if origin is typing.Annotated:
@@ -345,20 +350,16 @@ class NamedArray(metaclass=NamedArrayMeta):
             return tuple(result)
 
     @overload
-    def resolve_axis(self, axis: AxisSelector) -> Axis:
-        ...
+    def resolve_axis(self, axis: AxisSelector) -> Axis: ...
 
     @overload
-    def resolve_axis(self, axis: tuple[AxisSelector, ...]) -> tuple[Axis, ...]:
-        ...
+    def resolve_axis(self, axis: tuple[AxisSelector, ...]) -> tuple[Axis, ...]: ...
 
     @overload
-    def resolve_axis(self, axis: PartialShapeDict) -> ShapeDict:
-        ...
+    def resolve_axis(self, axis: PartialShapeDict) -> ShapeDict: ...
 
     @overload
-    def resolve_axis(self, axes: AxisSelection) -> AxisSpec:
-        ...
+    def resolve_axis(self, axes: AxisSelection) -> AxisSpec: ...
 
     def resolve_axis(self, axes: AxisSelection) -> AxisSpec:  # type: ignore[misc]
         """
@@ -417,8 +418,7 @@ class NamedArray(metaclass=NamedArrayMeta):
         ...
 
     @overload
-    def _lookup_indices(self, axis: AxisSelection) -> Tuple[Optional[int], ...]:
-        ...
+    def _lookup_indices(self, axis: AxisSelection) -> Tuple[Optional[int], ...]: ...
 
     def _lookup_indices(self, axis: AxisSelection) -> Union[Optional[int], Tuple[Optional[int], ...]]:
         """
@@ -438,12 +438,10 @@ class NamedArray(metaclass=NamedArrayMeta):
         ...
 
     @overload
-    def axis_indices(self, axis: Sequence[AxisSelector]) -> Tuple[Optional[int], ...]:
-        ...
+    def axis_indices(self, axis: Sequence[AxisSelector]) -> Tuple[Optional[int], ...]: ...
 
     @overload
-    def axis_indices(self, axis: AxisSelection) -> Tuple[Optional[int], ...]:
-        ...
+    def axis_indices(self, axis: AxisSelection) -> Tuple[Optional[int], ...]: ...
 
     def axis_indices(self, axis: AxisSelection) -> Union[Optional[int], Tuple[Optional[int], ...]]:
         """
@@ -520,14 +518,12 @@ class NamedArray(metaclass=NamedArrayMeta):
     @typing.overload
     def slice(
         self, axis: AxisSelector, new_axis: Optional[AxisSelector] = None, start: int = 0, length: Optional[int] = None
-    ) -> "NamedArray":
-        ...
+    ) -> "NamedArray": ...
 
     @typing.overload
     def slice(
         self, start: Mapping[AxisSelector, int], length: Mapping[AxisSelector, Union[int, Axis]]
-    ) -> "NamedArray":
-        ...
+    ) -> "NamedArray": ...
 
     def slice(self, *args, **kwargs) -> "NamedArray":  # pragma: no cover
         return haliax.slice(self, *args, **kwargs)
@@ -655,8 +651,7 @@ class NamedArray(metaclass=NamedArrayMeta):
     @typing.overload
     def dot(
         self, axis: Optional[AxisSelection], *b, precision: PrecisionLike = None, dot_general=jax.lax.dot_general
-    ) -> "NamedArray":
-        ...
+    ) -> "NamedArray": ...
 
     @typing.overload
     def dot(
@@ -665,8 +660,7 @@ class NamedArray(metaclass=NamedArrayMeta):
         axis: Optional[AxisSelection],
         precision: PrecisionLike = None,
         dot_general=jax.lax.dot_general,
-    ) -> "NamedArray":
-        ...
+    ) -> "NamedArray": ...
 
     def dot(self, *args, **kwargs) -> "NamedArray":
         if "axis" in kwargs or len(args) == 0:
@@ -1310,7 +1304,6 @@ def _compute_new_axes_and_slices_for_index(
     return new_axes, ordered_slices
 
 
-
 def split(a: NamedArray, axis: AxisSelector, new_axes: Sequence[Axis]) -> Sequence[NamedArray]:
     """
     Splits an array along an axis into multiple arrays, one for each element of new_axes.
@@ -1692,15 +1685,11 @@ def broadcast_to(
 
     extra_axis_names = [ax.name for ax in a.axes if ax.name not in axes_dict]
     if enforce_no_extra_axes and extra_axis_names:
-        raise ValueError(
-            f"Cannot broadcast {a.shape} to {axes_dict}: extra axes present {extra_axis_names}"
-        )
+        raise ValueError(f"Cannot broadcast {a.shape} to {axes_dict}: extra axes present {extra_axis_names}")
 
     axes_names_in_a = {ax.name for ax in a.axes}
     to_add = tuple(
-        Axis(axis_name(ax), axes_dict[axis_name(ax)])
-        for ax in axes_tuple
-        if axis_name(ax) not in axes_names_in_a
+        Axis(axis_name(ax), axes_dict[axis_name(ax)]) for ax in axes_tuple if axis_name(ax) not in axes_names_in_a
     )
 
     all_axes = to_add + a.axes
@@ -1734,15 +1723,13 @@ def _is_subsequence(needle, haystack):
 @overload
 def broadcast_arrays(
     *arrays: NamedArray, require_subset: bool = True, ensure_order: bool = True
-) -> Tuple[NamedArray, ...]:
-    ...
+) -> Tuple[NamedArray, ...]: ...
 
 
 @overload
 def broadcast_arrays(
     *arrays: Optional[NamedOrNumeric], require_subset: bool = True, ensure_order: bool = True
-) -> Tuple[Optional[NamedOrNumeric], ...]:
-    ...
+) -> Tuple[Optional[NamedOrNumeric], ...]: ...
 
 
 def broadcast_arrays(
@@ -1770,22 +1757,19 @@ def broadcast_arrays(
 @overload
 def broadcast_arrays_and_return_axes(
     *arrays: NamedArray, require_subset: bool = True, ensure_order: bool = True
-) -> Tuple[Tuple[NamedArray, ...], Tuple[Axis, ...]]:
-    ...
+) -> Tuple[Tuple[NamedArray, ...], Tuple[Axis, ...]]: ...
 
 
 @overload
 def broadcast_arrays_and_return_axes(
     *arrays: NamedOrNumeric, require_subset: bool = True, ensure_order: bool = True
-) -> Tuple[Tuple[NamedOrNumeric, ...], Tuple[Axis, ...]]:
-    ...
+) -> Tuple[Tuple[NamedOrNumeric, ...], Tuple[Axis, ...]]: ...
 
 
 @overload
 def broadcast_arrays_and_return_axes(
     *arrays: Optional[NamedOrNumeric], require_subset: bool = True, ensure_order: bool = True
-) -> Tuple[Tuple[Optional[NamedOrNumeric], ...], Tuple[Axis, ...]]:
-    ...
+) -> Tuple[Tuple[Optional[NamedOrNumeric], ...], Tuple[Axis, ...]]: ...
 
 
 def broadcast_arrays_and_return_axes(
@@ -1816,7 +1800,7 @@ def broadcast_arrays_and_return_axes(
             return (None,), ()
         if isinstance(a, NamedArray):
             return (a,), a.axes
-        return (named(jnp.asarray(a), ()), ), ()
+        return (named(jnp.asarray(a), ()),), ()
 
     # sort the arrays by size, so that we use the biggest ones to broadcast the others
     # need to hold on to the order so we can return the arrays in the same order

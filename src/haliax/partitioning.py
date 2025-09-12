@@ -1,3 +1,8 @@
+# Copyright 2025 The Levanter Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+
 import contextlib
 import dataclasses
 import functools
@@ -22,6 +27,7 @@ try:  # jax>=0.4.26
     from jax.sharding import AbstractMesh, get_abstract_mesh
 except Exception:  # pragma: no cover - older JAX versions
     AbstractMesh = Mesh  # type: ignore[misc,assignment]
+
     def get_abstract_mesh():  # type: ignore[dead-code]
         try:
             from jax.interpreters.pxla import thread_resources
@@ -29,6 +35,8 @@ except Exception:  # pragma: no cover - older JAX versions
             from jax.experimental.maps import thread_resources
 
         return thread_resources.env.physical_mesh
+
+
 from jaxtyping import PyTree
 
 import haliax.tree_util as htu
@@ -39,7 +47,6 @@ from .core import NamedArray
 from .jax_utils import Static, is_in_jit, is_jax_array_like, is_on_mac_metal
 from .tree_util import hashable_combine, hashable_partition
 from .util import StringHolderEnum
-
 
 PhysicalAxisSpec = Union[(str), Sequence[str]]
 ResourceMapping = Mapping[(str), PhysicalAxisSpec]
@@ -221,9 +228,7 @@ def pspec_for(
                 value = getattr(node, field.name)
                 axis_names = field.metadata.get("axis_names") if field.metadata is not None else None
                 if axis_names is not None and is_jax_array_like(value):
-                    current_sharding = (
-                        getattr(value, "sharding", None) if preserve_existing_shardings else None
-                    )
+                    current_sharding = getattr(value, "sharding", None) if preserve_existing_shardings else None
                     if current_sharding is not None:
                         updates[field.name] = None
                     else:
@@ -429,8 +434,7 @@ def named_jit(
     keep_unused: bool = False,
     backend: Optional[str] = None,
     inline: Optional[bool] = None,
-) -> WrappedCallable[Args, R]:
-    ...
+) -> WrappedCallable[Args, R]: ...
 
 
 @typing.overload
@@ -445,8 +449,7 @@ def named_jit(
     keep_unused: bool = False,
     backend: Optional[str] = None,
     inline: Optional[bool] = None,
-) -> typing.Callable[[Callable[Args, R]], WrappedCallable[Args, R]]:
-    ...
+) -> typing.Callable[[Callable[Args, R]], WrappedCallable[Args, R]]: ...
 
 
 def named_jit(
@@ -530,13 +533,11 @@ def named_jit(
 
 
 @typing.overload
-def fsdp(fn: F, parameter_mapping: ResourceMapping, compute_mapping: ResourceMapping) -> F:
-    ...
+def fsdp(fn: F, parameter_mapping: ResourceMapping, compute_mapping: ResourceMapping) -> F: ...
 
 
 @typing.overload
-def fsdp(parameter_mapping: ResourceMapping, compute_mapping: ResourceMapping) -> typing.Callable[[F], F]:
-    ...
+def fsdp(parameter_mapping: ResourceMapping, compute_mapping: ResourceMapping) -> typing.Callable[[F], F]: ...
 
 
 def fsdp(*args, **kwargs):
