@@ -83,6 +83,8 @@ from .ops import (
     unique_counts,
     unique_inverse,
     unique_all,
+    packbits,
+    unpackbits,
     searchsorted,
     bincount,
     where,
@@ -335,6 +337,14 @@ def arctanh(a: A) -> A:
 
 def around(a: A) -> A:
     return wrap_elemwise_unary(jnp.around, a)
+
+
+def bitwise_count(a: A) -> A:
+    return wrap_elemwise_unary(jnp.bitwise_count, a)
+
+
+def bitwise_invert(a: A) -> A:
+    return wrap_elemwise_unary(jnp.bitwise_invert, a)
 
 
 def bitwise_not(a: A) -> A:
@@ -817,11 +827,27 @@ def bitwise_and(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
 
 
 @wrap_elemwise_binary
+def bitwise_left_shift(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    """
+    Named version of [jax.numpy.bitwise_left_shift](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.bitwise_left_shift.html)
+    """
+    return jnp.bitwise_left_shift(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
 def bitwise_or(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
     """
     Named version of [jax.numpy.bitwise_or](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.bitwise_or.html)
     """
     return jnp.bitwise_or(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def bitwise_right_shift(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    """
+    Named version of [jax.numpy.bitwise_right_shift](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.bitwise_right_shift.html)
+    """
+    return jnp.bitwise_right_shift(x1, x2)  # type: ignore
 
 
 @wrap_elemwise_binary
@@ -1080,6 +1106,8 @@ __all__ = [
     "arctan",
     "arctanh",
     "around",
+    "bitwise_count",
+    "bitwise_invert",
     "bitwise_not",
     "cbrt",
     "ceil",
@@ -1171,6 +1199,8 @@ __all__ = [
     "unique_counts",
     "unique_inverse",
     "unique_all",
+    "packbits",
+    "unpackbits",
     "searchsorted",
     "bincount",
     "clip",
@@ -1179,7 +1209,9 @@ __all__ = [
     "add",
     "arctan2",
     "bitwise_and",
+    "bitwise_left_shift",
     "bitwise_or",
+    "bitwise_right_shift",
     "bitwise_xor",
     "divide",
     "divmod",

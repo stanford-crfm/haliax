@@ -176,6 +176,8 @@ These are all more or less directly from JAX's NumPy API.
 ::: haliax.arctan
 ::: haliax.arctanh
 ::: haliax.around
+::: haliax.bitwise_count
+::: haliax.bitwise_invert
 ::: haliax.bitwise_not
 ::: haliax.cbrt
 ::: haliax.ceil
@@ -233,7 +235,9 @@ These are all more or less directly from JAX's NumPy API.
 ::: haliax.add
 ::: haliax.arctan2
 ::: haliax.bitwise_and
+::: haliax.bitwise_left_shift
 ::: haliax.bitwise_or
+::: haliax.bitwise_right_shift
 ::: haliax.bitwise_xor
 ::: haliax.divide
 ::: haliax.divmod
@@ -270,6 +274,8 @@ These are all more or less directly from JAX's NumPy API.
 
 ::: haliax.bincount
 ::: haliax.clip
+::: haliax.packbits
+::: haliax.unpackbits
 ::: haliax.isclose
 ::: haliax.allclose
 ::: haliax.array_equal
