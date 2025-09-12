@@ -15,7 +15,7 @@ import numpy as np
 
 import haliax
 import haliax.axis
-from haliax.jax_utils import is_jax_array_like, is_pallas_dslice
+from haliax.jax_utils import ensure_scalar, is_jax_array_like, is_pallas_dslice
 from haliax.util import ensure_tuple
 
 from ._src.util import index_where, py_slice, slice_t
@@ -1115,9 +1115,7 @@ def updated_slice(
         if axis_index is None:
             raise ValueError(f"axis {axis} not found in {array}")
         if isinstance(s, NamedArray):  # this can happen in the vmap case
-            if s.ndim != 0:
-                raise ValueError(f"NamedArray {s} must be a scalar for axis {axis} in updated_slice")
-            s = s.scalar()
+            s = ensure_scalar(s, name=str(axis))
 
         array_slice_indices[axis_index] = s
         total_length = array.axes[axis_index].size
@@ -1361,13 +1359,23 @@ def unbind(array: NamedArray, axis: AxisSelector) -> list[NamedArray]:
     return [haliax.auto_sharded(NamedArray(a, new_axes)) for a in arrays]
 
 
-def roll(array: NamedArray, shift: int | tuple[int, ...], axis: AxisSelection) -> NamedArray:
+def roll(
+    array: NamedArray,
+    shift: IntScalar | tuple[int, ...] | "NamedArray",
+    axis: AxisSelection,
+) -> NamedArray:
+    """Roll an array along an axis or axes.
+
+    ``shift`` may be a scalar ``NamedArray`` in addition to an ``int`` or tuple of
+    integers. Analogous to np.roll
     """
-    Roll an array along an axis or axes. Analogous to np.roll
-    """
+
     axis_indices = array.axis_indices(axis)
     if axis_indices is None:
         raise ValueError(f"axis {axis} not found in {array}")
+
+    shift = ensure_scalar(shift, name="shift")
+
     return NamedArray(jnp.roll(array.array, shift, axis_indices), array.axes)
 
 

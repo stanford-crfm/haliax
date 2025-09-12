@@ -128,12 +128,22 @@ You can convert it to a [jax.numpy.ndarray][] with [haliax.NamedArray.scalar][],
 
 ::: haliax.all
 ::: haliax.amax
+::: haliax.amin
 ::: haliax.any
 ::: haliax.argmax
 ::: haliax.argmin
 ::: haliax.max
 ::: haliax.mean
 ::: haliax.min
+::: haliax.nanargmax
+::: haliax.nanargmin
+::: haliax.nanmax
+::: haliax.nanmean
+::: haliax.nanmin
+::: haliax.nanprod
+::: haliax.nanstd
+::: haliax.nansum
+::: haliax.nanvar
 ::: haliax.prod
 ::: haliax.ptp
 ::: haliax.std
@@ -146,6 +156,8 @@ don't reduce it.
 
 ::: haliax.cumsum
 ::: haliax.cumprod
+::: haliax.nancumprod
+::: haliax.nancumsum
 ::: haliax.sort
 ::: haliax.argsort
 
@@ -164,6 +176,8 @@ These are all more or less directly from JAX's NumPy API.
 ::: haliax.arctan
 ::: haliax.arctanh
 ::: haliax.around
+::: haliax.bitwise_count
+::: haliax.bitwise_invert
 ::: haliax.bitwise_not
 ::: haliax.cbrt
 ::: haliax.ceil
@@ -221,7 +235,9 @@ These are all more or less directly from JAX's NumPy API.
 ::: haliax.add
 ::: haliax.arctan2
 ::: haliax.bitwise_and
+::: haliax.bitwise_left_shift
 ::: haliax.bitwise_or
+::: haliax.bitwise_right_shift
 ::: haliax.bitwise_xor
 ::: haliax.divide
 ::: haliax.divmod
@@ -256,9 +272,16 @@ These are all more or less directly from JAX's NumPy API.
 
 ### Other Operations
 
+::: haliax.bincount
 ::: haliax.clip
+::: haliax.packbits
+::: haliax.unpackbits
 ::: haliax.isclose
+::: haliax.allclose
+::: haliax.array_equal
+::: haliax.array_equiv
 ::: haliax.pad
+::: haliax.searchsorted
 ::: haliax.top_k
 ::: haliax.trace
 ::: haliax.tril

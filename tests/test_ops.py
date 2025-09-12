@@ -407,3 +407,70 @@ def test_unique_shortcuts():
     assert jnp.all(ia.array == ia_exp.array)
     assert jnp.all(ina.array == ina_exp.array)
     assert jnp.all(ca.array == ca_exp.array)
+
+
+def test_bincount():
+    X = Axis("X", 6)
+    x = hax.named([0, 1, 1, 2, 3, 1], (X,))
+    B = Axis("B", 5)
+
+    out = hax.bincount(x, B)
+    expected = jnp.bincount(x.array, length=B.size)
+    assert out.axes == (B,)
+    assert jnp.all(out.array == expected)
+
+    w = hax.arange((X,), dtype=jnp.float32)
+    out_w = hax.bincount(x, B, weights=w)
+    expected_w = jnp.bincount(x.array, weights=w.array, length=B.size)
+    assert jnp.allclose(out_w.array, expected_w)
+
+
+def test_allclose_array_equal_equiv():
+    A = Axis("A", 2)
+    B = Axis("B", 3)
+    x = hax.random.uniform(PRNGKey(0), (A, B))
+    y = x + 1e-6
+
+    assert hax.allclose(x, y)
+    assert not hax.allclose(x, x + 1.0)
+
+    x1 = hax.ones((A, B))
+    y_reordered = x1.rearrange((B, A))
+    assert hax.array_equal(x1, y_reordered)
+
+    scalar = hax.ones(())
+    assert hax.array_equiv(x1, scalar)
+    assert not hax.array_equal(x1, scalar)
+
+    y_vec = hax.ones((B,))
+    assert hax.array_equiv(x1, y_vec)
+    assert not hax.array_equal(x1, y_vec)
+
+    C = Axis("C", 4)
+    z = hax.ones((C,))
+    assert not hax.array_equiv(x1, z)
+
+
+def test_roll_scalar_named_shift():
+    H = Axis("H", 4)
+    W = Axis("W", 3)
+
+    arr = hax.arange((H, W))
+    shift = hax.named(jnp.array(1), ())
+
+    rolled = hax.roll(arr, shift, H)
+    expected = jnp.roll(arr.array, shift.array, axis=0)
+
+    assert rolled.axes == arr.axes
+    assert jnp.all(rolled.array == expected)
+
+
+def test_roll_bad_named_shift():
+    H = Axis("H", 4)
+    W = Axis("W", 3)
+
+    arr = hax.arange((H, W))
+    shift = hax.arange((Axis("dummy", 2),))
+
+    with pytest.raises(TypeError):
+        hax.roll(arr, shift, H)

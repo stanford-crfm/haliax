@@ -7,7 +7,13 @@ from jaxtyping import Array
 
 import haliax as hax
 from haliax import Axis, NamedArray
-from haliax.partitioning import ResourceAxis, axis_mapping, infer_resource_partitions, named_jit
+from haliax.partitioning import (
+    ResourceAxis,
+    axis_mapping,
+    infer_resource_partitions,
+    named_jit,
+    pspec_for,
+)
 from test_utils import skip_if_not_enough_devices
 
 
@@ -38,6 +44,47 @@ def test_infer_named_axes():
 
         assert axes.named == NamedSharding(mesh, spec)
         assert axes.unnamed1.is_fully_replicated
+
+
+def test_pspec_for_named_axes():
+    mesh = Mesh(np.array(jax.devices()).reshape(-1, 1), (ResourceAxis.DATA, ResourceAxis.MODEL))
+    with axis_mapping(resource_map), mesh:
+        mod = MyModule(named=hax.ones((Dim1, Dim2, Dim3)), unnamed1=jnp.ones(Dim2.size), static_field=1)
+
+        specs: MyModule = pspec_for(mod, preserve_existing_shardings=False)
+
+        spec = PartitionSpec(None, ResourceAxis.DATA, ResourceAxis.MODEL)
+
+        assert specs.named == spec
+        assert specs.unnamed1 == PartitionSpec(None)
+
+
+class ArrayModule(eqx.Module):
+    arr: Array = hax.field(axis_names=("dim2", "dim3"))
+
+
+def test_pspec_for_plain_array_axis_names():
+    mesh = Mesh(np.array(jax.devices()).reshape(-1, 1), (ResourceAxis.DATA, ResourceAxis.MODEL))
+    with axis_mapping(resource_map), mesh:
+        mod = ArrayModule(jnp.ones((Dim2.size, Dim3.size)))
+
+        specs: ArrayModule = pspec_for(mod, preserve_existing_shardings=False)
+
+        assert specs.arr == PartitionSpec(ResourceAxis.DATA, ResourceAxis.MODEL)
+
+
+class NestedArrayModule(eqx.Module):
+    inner: ArrayModule
+
+
+def test_pspec_for_plain_array_axis_names_nested_module():
+    mesh = Mesh(np.array(jax.devices()).reshape(-1, 1), (ResourceAxis.DATA, ResourceAxis.MODEL))
+    with axis_mapping(resource_map), mesh:
+        mod = NestedArrayModule(ArrayModule(jnp.ones((Dim2.size, Dim3.size))))
+
+        specs: NestedArrayModule = pspec_for(mod, preserve_existing_shardings=False)
+
+        assert specs.inner.arr == PartitionSpec(ResourceAxis.DATA, ResourceAxis.MODEL)
 
 
 class MyModuleInit(eqx.Module):

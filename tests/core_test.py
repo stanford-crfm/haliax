@@ -238,6 +238,26 @@ def test_cumsum_etc():
     assert hax.argsort(named1, axis=Width).axes == (Height, Width, Depth)
 
 
+def test_searchsorted():
+    A = hax.Axis("a", 5)
+    V = hax.Axis("v", 4)
+
+    a = hax.named([1, 3, 5, 7, 9], axis=A)
+    v = hax.named([0, 3, 6, 10], axis=V)
+
+    result = hax.searchsorted(a, v)
+    assert jnp.all(result.array == jnp.searchsorted(a.array, v.array))
+    assert result.axes == (V,)
+
+    unsorted = hax.named([5, 1, 3, 7, 4], axis=A)
+    sorter = hax.argsort(unsorted, axis=A)
+    result = hax.searchsorted(unsorted, v, sorter=sorter, side="right")
+    assert jnp.all(
+        result.array == jnp.searchsorted(unsorted.array, v.array, sorter=sorter.array, side="right")
+    )
+    assert result.axes == (V,)
+
+
 def test_rearrange():
     H, W, D, C = hax.make_axes(H=2, W=3, D=4, C=5)
 

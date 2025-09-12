@@ -1,5 +1,5 @@
 import typing as t
-from typing import Sequence
+from typing import Optional, Sequence
 
 import jax
 import jax.numpy as jnp
@@ -17,6 +17,7 @@ import haliax.random as random
 import haliax.state_dict as state_dict
 import haliax.tree_util as tree_util
 import haliax.util as util
+from .field import field
 
 from ._src.dot import dot
 from ._src.einsum import einsum
@@ -68,6 +69,9 @@ from .hof import fold, map, scan, vmap
 from .jax_utils import tree_checkpoint_name
 from .ops import (
     clip,
+    allclose,
+    array_equal,
+    array_equiv,
     isclose,
     pad_left,
     pad,
@@ -79,6 +83,10 @@ from .ops import (
     unique_counts,
     unique_inverse,
     unique_all,
+    packbits,
+    unpackbits,
+    searchsorted,
+    bincount,
     where,
 )
 from .partitioning import auto_sharded, axis_mapping, fsdp, named_jit, shard, shard_with_axis_mapping
@@ -331,6 +339,14 @@ def around(a: A) -> A:
     return wrap_elemwise_unary(jnp.around, a)
 
 
+def bitwise_count(a: A) -> A:
+    return wrap_elemwise_unary(jnp.bitwise_count, a)
+
+
+def bitwise_invert(a: A) -> A:
+    return wrap_elemwise_unary(jnp.bitwise_invert, a)
+
+
 def bitwise_not(a: A) -> A:
     return wrap_elemwise_unary(jnp.bitwise_not, a)
 
@@ -554,6 +570,13 @@ def amax(array: NamedArray, axis: AxisSelection | None = None, *, where: NamedAr
     return wrap_reduction_call(jnp.amax, array, axis, where, single_axis_only=False, supports_where=True)
 
 
+def amin(array: NamedArray, axis: AxisSelection | None = None, *, where: NamedArray | None = None) -> NamedArray:
+    """
+    Aliax for min. See min for details.
+    """
+    return wrap_reduction_call(jnp.amin, array, axis, where, single_axis_only=False, supports_where=True)
+
+
 def any(array: NamedArray, axis: AxisSelection | None = None, *, where: NamedArray | None = None) -> NamedArray:
     """True if any elements along a given axis or axes are True. If axis is None, any elements are True."""
     return wrap_reduction_call(jnp.any, array, axis, where, single_axis_only=False, supports_where=True)
@@ -650,6 +673,84 @@ def var(
     )
 
 
+def nanargmax(array: NamedArray, axis: Optional[AxisSelector] = None) -> NamedArray:
+    return wrap_reduction_call(jnp.nanargmax, array, axis, None, single_axis_only=True, supports_where=False)
+
+
+def nanargmin(array: NamedArray, axis: Optional[AxisSelector] = None) -> NamedArray:
+    return wrap_reduction_call(jnp.nanargmin, array, axis, None, single_axis_only=True, supports_where=False)
+
+
+def nanmax(
+    array: NamedArray,
+    axis: Optional[AxisSelection] = None,
+    *,
+    where: Optional[NamedArray] = None,
+) -> NamedArray:
+    return wrap_reduction_call(jnp.nanmax, array, axis, where, single_axis_only=False, supports_where=True)
+
+
+def nanmean(
+    array: NamedArray,
+    axis: Optional[AxisSelection] = None,
+    *,
+    where: Optional[NamedArray] = None,
+    dtype: Optional[DTypeLike] = None,
+) -> NamedArray:
+    return wrap_reduction_call(jnp.nanmean, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype)
+
+
+def nanmin(
+    array: NamedArray,
+    axis: Optional[AxisSelection] = None,
+    *,
+    where: Optional[NamedArray] = None,
+) -> NamedArray:
+    return wrap_reduction_call(jnp.nanmin, array, axis, where, single_axis_only=False, supports_where=True)
+
+
+def nanprod(
+    array: NamedArray,
+    axis: Optional[AxisSelection] = None,
+    *,
+    where: Optional[NamedArray] = None,
+    dtype: Optional[DTypeLike] = None,
+) -> NamedArray:
+    return wrap_reduction_call(jnp.nanprod, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype)
+
+
+def nanstd(
+    array: NamedArray,
+    axis: Optional[AxisSelection] = None,
+    *,
+    where: Optional[NamedArray] = None,
+    ddof: int = 0,
+    dtype: Optional[DTypeLike] = None,
+) -> NamedArray:
+    return wrap_reduction_call(jnp.nanstd, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype, ddof=ddof)
+
+
+def nansum(
+    array: NamedArray,
+    axis: Optional[AxisSelection] = None,
+    *,
+    where: Optional[NamedArray] = None,
+    dtype: Optional[DTypeLike] = None,
+) -> NamedArray:
+    return wrap_reduction_call(jnp.nansum, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype)
+
+
+def nanvar(
+    array: NamedArray,
+    axis: Optional[AxisSelection] = None,
+    *,
+    where: Optional[NamedArray] = None,
+    ddof: int = 0,
+    dtype: Optional[DTypeLike] = None,
+) -> NamedArray:
+    return wrap_reduction_call(jnp.nanvar, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype, ddof=ddof)
+
+
 # "Normalization" functions that use an axis but don't change the shape
 
 
@@ -665,6 +766,20 @@ def cumprod(a: NamedArray, axis: AxisSelector, dtype: DTypeLike | None = None) -
     Named version of [jax.numpy.cumprod](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.cumprod.html)
     """
     return wrap_axiswise_call(jnp.cumprod, a, axis, dtype=dtype, single_axis_only=True)
+
+
+def nancumsum(a: NamedArray, axis: AxisSelector, *, dtype: Optional[DTypeLike] = None) -> NamedArray:
+    """
+    Named version of [jax.numpy.nancumsum](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.nancumsum.html)
+    """
+    return wrap_axiswise_call(jnp.nancumsum, a, axis, dtype=dtype, single_axis_only=True)
+
+
+def nancumprod(a: NamedArray, axis: AxisSelector, dtype: Optional[DTypeLike] = None) -> NamedArray:
+    """
+    Named version of [jax.numpy.nancumprod](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.nancumprod.html)
+    """
+    return wrap_axiswise_call(jnp.nancumprod, a, axis, dtype=dtype, single_axis_only=True)
 
 
 def sort(a: NamedArray, axis: AxisSelector) -> NamedArray:
@@ -712,11 +827,27 @@ def bitwise_and(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
 
 
 @wrap_elemwise_binary
+def bitwise_left_shift(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    """
+    Named version of [jax.numpy.bitwise_left_shift](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.bitwise_left_shift.html)
+    """
+    return jnp.bitwise_left_shift(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
 def bitwise_or(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
     """
     Named version of [jax.numpy.bitwise_or](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.bitwise_or.html)
     """
     return jnp.bitwise_or(x1, x2)  # type: ignore
+
+
+@wrap_elemwise_binary
+def bitwise_right_shift(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
+    """
+    Named version of [jax.numpy.bitwise_right_shift](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.bitwise_right_shift.html)
+    """
+    return jnp.bitwise_right_shift(x1, x2)  # type: ignore
 
 
 @wrap_elemwise_binary
@@ -931,6 +1062,7 @@ __all__ = [
     "tree_util",
     "nn",
     "state_dict",
+    "field",
     "Axis",
     "AxisSpec",
     "AxisSelection",
@@ -974,6 +1106,8 @@ __all__ = [
     "arctan",
     "arctanh",
     "around",
+    "bitwise_count",
+    "bitwise_invert",
     "bitwise_not",
     "cbrt",
     "ceil",
@@ -1027,12 +1161,22 @@ __all__ = [
     "trunc",
     "all",
     "amax",
+    "amin",
     "any",
     "argmax",
     "argmin",
     "max",
     "mean",
     "min",
+    "nanargmax",
+    "nanargmin",
+    "nanmax",
+    "nanmean",
+    "nanmin",
+    "nanprod",
+    "nanstd",
+    "nansum",
+    "nanvar",
     "prod",
     "product",
     "ptp",
@@ -1041,6 +1185,8 @@ __all__ = [
     "var",
     "cumsum",
     "cumprod",
+    "nancumprod",
+    "nancumsum",
     "sort",
     "scan",
     "fold",
@@ -1053,13 +1199,19 @@ __all__ = [
     "unique_counts",
     "unique_inverse",
     "unique_all",
+    "packbits",
+    "unpackbits",
+    "searchsorted",
+    "bincount",
     "clip",
     "tril",
     "triu",
     "add",
     "arctan2",
     "bitwise_and",
+    "bitwise_left_shift",
     "bitwise_or",
+    "bitwise_right_shift",
     "bitwise_xor",
     "divide",
     "divmod",
@@ -1099,6 +1251,9 @@ __all__ = [
     "shard",
     "enable_shape_checks",
     "are_shape_checks_enabled",
+    "allclose",
+    "array_equal",
+    "array_equiv",
     "isclose",
     "pad_left",
     "pad",
