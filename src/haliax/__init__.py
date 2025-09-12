@@ -69,6 +69,9 @@ from .hof import fold, map, scan, vmap
 from .jax_utils import tree_checkpoint_name
 from .ops import (
     clip,
+    allclose,
+    array_equal,
+    array_equiv,
     isclose,
     pad_left,
     pad,
@@ -1105,6 +1108,9 @@ __all__ = [
     "shard",
     "enable_shape_checks",
     "are_shape_checks_enabled",
+    "allclose",
+    "array_equal",
+    "array_equiv",
     "isclose",
     "pad_left",
     "pad",

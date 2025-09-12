@@ -138,6 +138,29 @@ def isclose(a: NamedArray, b: NamedArray, rtol=1e-05, atol=1e-08, equal_nan=Fals
     return NamedArray(jnp.isclose(a.array, b.array, rtol=rtol, atol=atol, equal_nan=equal_nan), a.axes)
 
 
+def allclose(a: NamedArray, b: NamedArray, rtol=1e-05, atol=1e-08, equal_nan=False) -> bool:
+    """Returns True if two arrays are element-wise equal within a tolerance."""
+    a, b = broadcast_arrays(a, b)
+    return bool(jnp.allclose(a.array, b.array, rtol=rtol, atol=atol, equal_nan=equal_nan))
+
+
+def array_equal(a: NamedArray, b: NamedArray) -> bool:
+    """Returns True if two arrays have the same shape and elements."""
+    if set(a.axes) != set(b.axes):
+        return False
+    b = b.rearrange(a.axes)
+    return bool(jnp.array_equal(a.array, b.array))
+
+
+def array_equiv(a: NamedArray, b: NamedArray) -> bool:
+    """Returns True if two arrays are shape-consistent and equal."""
+    try:
+        a, b = broadcast_arrays(a, b)
+    except ValueError:
+        return False
+    return bool(jnp.array_equal(a.array, b.array))
+
+
 def pad_left(array: NamedArray, axis: Axis, new_axis: Axis, value=0) -> NamedArray:
     """Pad an array along named axes."""
     amount_to_pad_to = new_axis.size - axis.size

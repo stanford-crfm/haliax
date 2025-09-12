@@ -4,15 +4,15 @@ This document tracks JAX NumPy functions not yet wrapped by Haliax.
 APIs that don't translate well to named tensors are intentionally omitted here. This includes dtype constructors, raw array converters (e.g. `from_dlpack`), indexing helpers like `c_`/`r_`, and functions whose JAX counterparts already work with `NamedArray` out of the box. Basic array construction is handled by `haliax.named`, so functions such as `array` or `asarray` are not listed.
 
 ## numpy
-- [ ] `allclose`
+- [x] `allclose`
 - [ ] `amin`
 - [ ] `append`
 - [ ] `apply_along_axis`
 - [ ] `apply_over_axes`
 - [ ] `argpartition`
 - [ ] `argwhere`
-- [ ] `array_equal`
-- [ ] `array_equiv`
+- [x] `array_equal`
+- [x] `array_equiv`
 - [ ] `array_split`
 - [ ] `astype`
 - [ ] `atan2`

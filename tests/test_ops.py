@@ -425,6 +425,32 @@ def test_bincount():
     assert jnp.allclose(out_w.array, expected_w)
 
 
+def test_allclose_array_equal_equiv():
+    A = Axis("A", 2)
+    B = Axis("B", 3)
+    x = hax.random.uniform(PRNGKey(0), (A, B))
+    y = x + 1e-6
+
+    assert hax.allclose(x, y)
+    assert not hax.allclose(x, x + 1.0)
+
+    x1 = hax.ones((A, B))
+    y_reordered = x1.rearrange((B, A))
+    assert hax.array_equal(x1, y_reordered)
+
+    scalar = hax.ones(())
+    assert hax.array_equiv(x1, scalar)
+    assert not hax.array_equal(x1, scalar)
+
+    y_vec = hax.ones((B,))
+    assert hax.array_equiv(x1, y_vec)
+    assert not hax.array_equal(x1, y_vec)
+
+    C = Axis("C", 4)
+    z = hax.ones((C,))
+    assert not hax.array_equiv(x1, z)
+
+
 def test_roll_scalar_named_shift():
     H = Axis("H", 4)
     W = Axis("W", 3)
