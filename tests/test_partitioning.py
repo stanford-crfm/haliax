@@ -1,3 +1,8 @@
+# Copyright 2025 The Levanter Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+
 import equinox as eqx
 import jax
 import jax.numpy as jnp
@@ -302,7 +307,7 @@ def test_named_jit_with_donation_nested_pytrees():
 
 
 def test_jit_lower_doesnt_blow_up():
-    with ((axis_mapping(resource_map))):
+    with axis_mapping(resource_map):
 
         class MyModule(eqx.Module):
             array: jnp.ndarray
@@ -330,8 +335,9 @@ def test_cross_device_sharding():
     with jax.default_device(cpu_device):
         x = hax.ones((Dim1, Dim2))
 
-    with axis_mapping(resource_map), Mesh(
-        np.array(jax.devices()).reshape(-1, 1), (ResourceAxis.DATA, ResourceAxis.MODEL)
+    with (
+        axis_mapping(resource_map),
+        Mesh(np.array(jax.devices()).reshape(-1, 1), (ResourceAxis.DATA, ResourceAxis.MODEL)),
     ):
         x = hax.shard(x, resource_map)
         z = hax.ones((Dim1, Dim3))

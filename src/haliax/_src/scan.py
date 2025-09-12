@@ -1,3 +1,8 @@
+# Copyright 2025 The Levanter Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+
 import dataclasses
 import functools as ft
 import inspect
@@ -16,7 +21,6 @@ from haliax.core import NamedArray
 from haliax.jax_utils import is_jax_array_like, multilevel_scan, tree_checkpoint_name
 from haliax.util import is_jax_or_hax_array_like, is_named_array
 
-
 BoolAxisSpec = Union[bool, Callable[[Any], bool]]
 Carry = TypeVar("Carry")
 X = TypeVar("X", contravariant=True)
@@ -31,8 +35,7 @@ def is_named_or_shaped_array_like(x):
 class ScanFn(Protocol[Carry, Args, Y]):
     """ """
 
-    def __call__(self, carry: Carry, *args: Args.args, **kwargs: Args.kwargs) -> tuple[Carry, Y]:
-        ...
+    def __call__(self, carry: Carry, *args: Args.args, **kwargs: Args.kwargs) -> tuple[Carry, Y]: ...
 
 
 @dataclasses.dataclass(frozen=True)
@@ -262,8 +265,7 @@ def scan(
     reverse: bool = False,
     unroll: int = 1,
     is_scanned: BoolAxisSpec = is_named_or_shaped_array_like,
-) -> Callable[[Carry, PyTree[X]], tuple[Carry, PyTree[Y]]]:
-    ...
+) -> Callable[[Carry, PyTree[X]], tuple[Carry, PyTree[Y]]]: ...
 
 
 @overload
@@ -275,8 +277,7 @@ def scan(
     reverse: bool = False,
     unroll: int = 1,
     is_scanned: BoolAxisSpec = is_named_or_shaped_array_like,
-) -> Callable:
-    ...
+) -> Callable: ...
 
 
 def scan(
@@ -444,8 +445,7 @@ def fold(
     reverse: bool = False,
     unroll: int = 1,
     is_scanned: BoolAxisSpec = is_named_or_shaped_array_like,
-) -> Callable[[Carry, PyTree[X]], Carry]:
-    ...
+) -> Callable[[Carry, PyTree[X]], Carry]: ...
 
 
 @overload
@@ -457,8 +457,7 @@ def fold(
     reverse: bool = False,
     unroll: int = 1,
     is_scanned: BoolAxisSpec = is_named_or_shaped_array_like,
-) -> Callable:
-    ...
+) -> Callable: ...
 
 
 def fold(
@@ -549,9 +548,7 @@ def _zero_if_array_else_none(x: Any) -> ResolvedUnnamedAxisSpec:
     return 0 if is_jax_array_like(x) else None
 
 
-def _format_tree_path(
-    path: tuple[jtu.KeyEntry, ...], arg_pos_names: dict[int, str] | None = None
-) -> str:
+def _format_tree_path(path: tuple[jtu.KeyEntry, ...], arg_pos_names: dict[int, str] | None = None) -> str:
     parts: list[str] = []
     i = 0
     if len(path) >= 2 and isinstance(path[0], jtu.SequenceKey):
