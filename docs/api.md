@@ -277,6 +277,7 @@ These are all more or less directly from JAX's NumPy API.
 ::: haliax.pad
 ::: haliax.searchsorted
 ::: haliax.top_k
+::: haliax.nonzero
 ::: haliax.trace
 ::: haliax.tril
 ::: haliax.triu
