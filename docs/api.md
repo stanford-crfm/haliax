@@ -259,6 +259,9 @@ These are all more or less directly from JAX's NumPy API.
 ::: haliax.bincount
 ::: haliax.clip
 ::: haliax.isclose
+::: haliax.allclose
+::: haliax.array_equal
+::: haliax.array_equiv
 ::: haliax.pad
 ::: haliax.searchsorted
 ::: haliax.top_k
