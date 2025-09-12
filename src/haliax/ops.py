@@ -508,6 +508,42 @@ def bincount(
     return NamedArray(result, (Counts,))
 
 
+def packbits(a: NamedArray, axis: AxisSelector, *, bitorder: str = "big") -> NamedArray:
+    """Named version of `jax.numpy.packbits`."""
+
+    axis_index = a.axis_indices(axis)
+    if not isinstance(axis_index, int):
+        raise ValueError("packbits only supports a single existing axis")
+
+    result = jnp.packbits(a.array, axis=axis_index, bitorder=bitorder)
+    old_axis = a.axes[axis_index]
+    new_size = (old_axis.size + 7) // 8
+    new_axis = old_axis.resize(new_size)
+    new_axes = a.axes[:axis_index] + (new_axis,) + a.axes[axis_index + 1 :]
+    return NamedArray(result, new_axes)
+
+
+def unpackbits(
+    a: NamedArray,
+    axis: AxisSelector,
+    *,
+    count: int | None = None,
+    bitorder: str = "big",
+) -> NamedArray:
+    """Named version of `jax.numpy.unpackbits`."""
+
+    axis_index = a.axis_indices(axis)
+    if not isinstance(axis_index, int):
+        raise ValueError("unpackbits only supports a single existing axis")
+
+    result = jnp.unpackbits(a.array, axis=axis_index, count=count, bitorder=bitorder)
+    old_axis = a.axes[axis_index]
+    new_size = count if count is not None else old_axis.size * 8
+    new_axis = old_axis.resize(new_size)
+    new_axes = a.axes[:axis_index] + (new_axis,) + a.axes[axis_index + 1 :]
+    return NamedArray(result, new_axes)
+
+
 __all__ = [
     "trace",
     "where",
@@ -517,6 +553,8 @@ __all__ = [
     "pad_left",
     "pad",
     "clip",
+    "packbits",
+    "unpackbits",
     "unique",
     "unique_values",
     "unique_counts",

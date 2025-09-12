@@ -18,10 +18,10 @@ APIs that don't translate well to named tensors are intentionally omitted here. 
 - [ ] `atan2`
 - [ ] `average`
 - [ ] `bartlett`
-- [ ] `bitwise_count`
-- [ ] `bitwise_invert`
-- [ ] `bitwise_left_shift`
-- [ ] `bitwise_right_shift`
+- [x] `bitwise_count`
+- [x] `bitwise_invert`
+- [x] `bitwise_left_shift`
+- [x] `bitwise_right_shift`
 - [ ] `blackman`
 - [ ] `block`
 - [ ] `broadcast_shapes`
@@ -109,7 +109,7 @@ APIs that don't translate well to named tensors are intentionally omitted here. 
 - [ ] `nanvar`
 - [ ] `nonzero`
 - [ ] `ogrid`
-- [ ] `packbits`
+- [x] `packbits`
 - [ ] `partition`
 - [ ] `percentile`
 - [ ] `permute_dims`
@@ -152,7 +152,7 @@ APIs that don't translate well to named tensors are intentionally omitted here. 
 - [ ] `triu_indices`
 - [ ] `triu_indices_from`
 - [ ] `union1d`
-- [ ] `unpackbits`
+- [x] `unpackbits`
 - [ ] `unravel_index`
 - [ ] `unstack`
 - [ ] `unwrap`
