@@ -1,3 +1,5 @@
+from typing import Any, Callable
+
 import jax.numpy as jnp
 import haliax as hax
 
@@ -21,7 +23,7 @@ def test_amin_alias():
 def test_nan_reductions():
     Height, Width, data, arr = _sample_array()
 
-    funcs = [
+    funcs: list[tuple[Callable[..., Any], Callable[..., Any]]] = [
         (hax.nanmin, jnp.nanmin),
         (hax.nanmax, jnp.nanmax),
         (hax.nanmean, jnp.nanmean),
@@ -36,7 +38,7 @@ def test_nan_reductions():
         assert jnp.allclose(hfunc(arr, axis=Height).array, jfunc(data, axis=0), equal_nan=True)
         assert hfunc(arr, axis=Height).axes == (Width,)
 
-    arg_funcs = [
+    arg_funcs: list[tuple[Callable[..., Any], Callable[..., Any]]] = [
         (hax.nanargmax, jnp.nanargmax),
         (hax.nanargmin, jnp.nanargmin),
     ]
@@ -46,7 +48,7 @@ def test_nan_reductions():
         assert jnp.array_equal(out.array, jfunc(data, axis=0))
         assert out.axes == (Width,)
 
-    axiswise_funcs = [
+    axiswise_funcs: list[tuple[Callable[..., Any], Callable[..., Any]]] = [
         (hax.nancumsum, jnp.nancumsum),
         (hax.nancumprod, jnp.nancumprod),
     ]
