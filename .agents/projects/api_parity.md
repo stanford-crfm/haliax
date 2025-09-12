@@ -5,7 +5,7 @@ APIs that don't translate well to named tensors are intentionally omitted here. 
 
 ## numpy
 - [x] `allclose`
-- [ ] `amin`
+- [x] `amin`
 - [ ] `append`
 - [ ] `apply_along_axis`
 - [ ] `apply_over_axes`
@@ -93,20 +93,20 @@ APIs that don't translate well to named tensors are intentionally omitted here. 
 - [ ] `modf`
 - [ ] `moveaxis`
 - [ ] `nan_to_num`
-- [ ] `nanargmax`
-- [ ] `nanargmin`
-- [ ] `nancumprod`
-- [ ] `nancumsum`
-- [ ] `nanmax`
-- [ ] `nanmean`
+- [x] `nanargmax`
+- [x] `nanargmin`
+- [x] `nancumprod`
+- [x] `nancumsum`
+- [x] `nanmax`
+- [x] `nanmean`
 - [ ] `nanmedian`
-- [ ] `nanmin`
+- [x] `nanmin`
 - [ ] `nanpercentile`
-- [ ] `nanprod`
+- [x] `nanprod`
 - [ ] `nanquantile`
-- [ ] `nanstd`
-- [ ] `nansum`
-- [ ] `nanvar`
+- [x] `nanstd`
+- [x] `nansum`
+- [x] `nanvar`
 - [ ] `nonzero`
 - [ ] `ogrid`
 - [ ] `packbits`

@@ -560,6 +560,13 @@ def amax(array: NamedArray, axis: Optional[AxisSelection] = None, *, where: Opti
     return wrap_reduction_call(jnp.amax, array, axis, where, single_axis_only=False, supports_where=True)
 
 
+def amin(array: NamedArray, axis: Optional[AxisSelection] = None, *, where: Optional[NamedArray] = None) -> NamedArray:
+    """
+    Aliax for min. See min for details.
+    """
+    return wrap_reduction_call(jnp.amin, array, axis, where, single_axis_only=False, supports_where=True)
+
+
 def any(array: NamedArray, axis: Optional[AxisSelection] = None, *, where: Optional[NamedArray] = None) -> NamedArray:
     """True if any elements along a given axis or axes are True. If axis is None, any elements are True."""
     return wrap_reduction_call(jnp.any, array, axis, where, single_axis_only=False, supports_where=True)
@@ -656,6 +663,84 @@ def var(
     )
 
 
+def nanargmax(array: NamedArray, axis: Optional[AxisSelector] = None) -> NamedArray:
+    return wrap_reduction_call(jnp.nanargmax, array, axis, None, single_axis_only=True, supports_where=False)
+
+
+def nanargmin(array: NamedArray, axis: Optional[AxisSelector] = None) -> NamedArray:
+    return wrap_reduction_call(jnp.nanargmin, array, axis, None, single_axis_only=True, supports_where=False)
+
+
+def nanmax(
+    array: NamedArray,
+    axis: Optional[AxisSelection] = None,
+    *,
+    where: Optional[NamedArray] = None,
+) -> NamedArray:
+    return wrap_reduction_call(jnp.nanmax, array, axis, where, single_axis_only=False, supports_where=True)
+
+
+def nanmean(
+    array: NamedArray,
+    axis: Optional[AxisSelection] = None,
+    *,
+    where: Optional[NamedArray] = None,
+    dtype: Optional[DTypeLike] = None,
+) -> NamedArray:
+    return wrap_reduction_call(jnp.nanmean, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype)
+
+
+def nanmin(
+    array: NamedArray,
+    axis: Optional[AxisSelection] = None,
+    *,
+    where: Optional[NamedArray] = None,
+) -> NamedArray:
+    return wrap_reduction_call(jnp.nanmin, array, axis, where, single_axis_only=False, supports_where=True)
+
+
+def nanprod(
+    array: NamedArray,
+    axis: Optional[AxisSelection] = None,
+    *,
+    where: Optional[NamedArray] = None,
+    dtype: Optional[DTypeLike] = None,
+) -> NamedArray:
+    return wrap_reduction_call(jnp.nanprod, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype)
+
+
+def nanstd(
+    array: NamedArray,
+    axis: Optional[AxisSelection] = None,
+    *,
+    where: Optional[NamedArray] = None,
+    ddof: int = 0,
+    dtype: Optional[DTypeLike] = None,
+) -> NamedArray:
+    return wrap_reduction_call(jnp.nanstd, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype, ddof=ddof)
+
+
+def nansum(
+    array: NamedArray,
+    axis: Optional[AxisSelection] = None,
+    *,
+    where: Optional[NamedArray] = None,
+    dtype: Optional[DTypeLike] = None,
+) -> NamedArray:
+    return wrap_reduction_call(jnp.nansum, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype)
+
+
+def nanvar(
+    array: NamedArray,
+    axis: Optional[AxisSelection] = None,
+    *,
+    where: Optional[NamedArray] = None,
+    ddof: int = 0,
+    dtype: Optional[DTypeLike] = None,
+) -> NamedArray:
+    return wrap_reduction_call(jnp.nanvar, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype, ddof=ddof)
+
+
 # "Normalization" functions that use an axis but don't change the shape
 
 
@@ -671,6 +756,20 @@ def cumprod(a: NamedArray, axis: AxisSelector, dtype: Optional[DTypeLike] = None
     Named version of [jax.numpy.cumprod](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.cumprod.html)
     """
     return wrap_axiswise_call(jnp.cumprod, a, axis, dtype=dtype, single_axis_only=True)
+
+
+def nancumsum(a: NamedArray, axis: AxisSelector, *, dtype: Optional[DTypeLike] = None) -> NamedArray:
+    """
+    Named version of [jax.numpy.nancumsum](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.nancumsum.html)
+    """
+    return wrap_axiswise_call(jnp.nancumsum, a, axis, dtype=dtype, single_axis_only=True)
+
+
+def nancumprod(a: NamedArray, axis: AxisSelector, dtype: Optional[DTypeLike] = None) -> NamedArray:
+    """
+    Named version of [jax.numpy.nancumprod](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.nancumprod.html)
+    """
+    return wrap_axiswise_call(jnp.nancumprod, a, axis, dtype=dtype, single_axis_only=True)
 
 
 def sort(a: NamedArray, axis: AxisSelector) -> NamedArray:
@@ -1034,12 +1133,22 @@ __all__ = [
     "trunc",
     "all",
     "amax",
+    "amin",
     "any",
     "argmax",
     "argmin",
     "max",
     "mean",
     "min",
+    "nanargmax",
+    "nanargmin",
+    "nanmax",
+    "nanmean",
+    "nanmin",
+    "nanprod",
+    "nanstd",
+    "nansum",
+    "nanvar",
     "prod",
     "product",
     "ptp",
@@ -1048,6 +1157,8 @@ __all__ = [
     "var",
     "cumsum",
     "cumprod",
+    "nancumprod",
+    "nancumsum",
     "sort",
     "scan",
     "fold",
