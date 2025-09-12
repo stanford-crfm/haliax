@@ -128,12 +128,22 @@ You can convert it to a [jax.numpy.ndarray][] with [haliax.NamedArray.scalar][],
 
 ::: haliax.all
 ::: haliax.amax
+::: haliax.amin
 ::: haliax.any
 ::: haliax.argmax
 ::: haliax.argmin
 ::: haliax.max
 ::: haliax.mean
 ::: haliax.min
+::: haliax.nanargmax
+::: haliax.nanargmin
+::: haliax.nanmax
+::: haliax.nanmean
+::: haliax.nanmin
+::: haliax.nanprod
+::: haliax.nanstd
+::: haliax.nansum
+::: haliax.nanvar
 ::: haliax.prod
 ::: haliax.ptp
 ::: haliax.std
@@ -146,6 +156,8 @@ don't reduce it.
 
 ::: haliax.cumsum
 ::: haliax.cumprod
+::: haliax.nancumprod
+::: haliax.nancumsum
 ::: haliax.sort
 ::: haliax.argsort
 
