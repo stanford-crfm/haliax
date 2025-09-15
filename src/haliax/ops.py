@@ -127,9 +127,7 @@ def nonzero(array: NamedArray, *, size: Axis, fill_value: int = 0) -> tuple[Name
     if not isinstance(array, NamedArray):
         raise ValueError("array must be a NamedArray")
 
-    return tuple(
-        NamedArray(idx, (size,)) for idx in jnp.nonzero(array.array, size=size.size, fill_value=fill_value)
-    )
+    return tuple(NamedArray(idx, (size,)) for idx in jnp.nonzero(array.array, size=size.size, fill_value=fill_value))
 
 
 def clip(array: NamedOrNumeric, a_min: NamedOrNumeric, a_max: NamedOrNumeric) -> NamedArray:

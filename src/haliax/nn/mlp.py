@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 
-from typing import Callable, Optional, Sequence
+from typing import Callable, Sequence
 
 import equinox as eqx
 import jax

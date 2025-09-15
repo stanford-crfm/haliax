@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 
-from typing import Any, Callable, Literal, Protocol, Tuple, TypeAlias, Union
+from typing import Any, Callable, Literal, Protocol, TypeAlias
 
 import jax.numpy as jnp
 import numpy as np

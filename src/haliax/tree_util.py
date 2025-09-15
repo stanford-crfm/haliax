@@ -5,6 +5,7 @@
 
 import dataclasses
 import functools
+
 # Removed unused import
 
 import equinox as eqx

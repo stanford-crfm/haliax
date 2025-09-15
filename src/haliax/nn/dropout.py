@@ -3,8 +3,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 
-from typing import Optional
-
 import equinox as eqx
 import jax
 from jaxtyping import PRNGKeyArray

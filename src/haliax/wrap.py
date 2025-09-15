@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 
-from typing import Optional, Protocol
+from typing import Protocol
 
 import jax
 
@@ -149,7 +149,7 @@ class ReductionFunction(Protocol):
 
 
 class SimpleReductionFunction(Protocol):
-    def __call__(self, array: NamedArray, axis: Optional[AxisSelector] = None, **kwargs) -> NamedArray: ...
+    def __call__(self, array: NamedArray, axis: AxisSelector | None = None, **kwargs) -> NamedArray: ...
 
 
 __all__ = [

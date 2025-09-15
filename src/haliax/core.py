@@ -12,7 +12,7 @@ import warnings
 from dataclasses import dataclass
 from math import prod
 from types import EllipsisType
-from typing import Any, Callable, Mapping, Sequence, Union, overload
+from typing import Any, Callable, Mapping, Sequence, TypeAlias, overload
 
 import jax
 import jax.numpy as jnp
@@ -41,8 +41,12 @@ from .axis import (
 )
 from .types import GatherScatterModeStr, IntScalar, PrecisionLike, Scalar
 
-NamedOrNumeric = Union[Scalar, "NamedArray"]
-NamedIndex = Union[int, slice_t, "NamedArray", dslice, list[int], jnp.ndarray]
+if typing.TYPE_CHECKING:
+    NamedOrNumeric: TypeAlias = Scalar | "NamedArray"
+    NamedIndex: TypeAlias = int | slice_t | "NamedArray" | dslice | list[int] | jnp.ndarray
+else:  # pragma: no cover - runtime fallback to avoid evaluating forward refs
+    NamedOrNumeric = typing.Any  # type: ignore[assignment]
+    NamedIndex = typing.Any  # type: ignore[assignment]
 
 SliceSpec = (
     tuple[AxisSelector, NamedIndex]
@@ -125,12 +129,7 @@ class NamedArrayAxes:
 
 
 # a specification for NamedArray axes used in type annotations
-NamedArrayAxesSpec = (
-    NamedArrayAxes
-    | str
-    | Sequence[str | EllipsisType]
-    | set[str | EllipsisType]
-)
+NamedArrayAxesSpec = NamedArrayAxes | str | Sequence[str | EllipsisType] | set[str | EllipsisType]
 
 
 def _parse_namedarray_axes(
@@ -418,7 +417,7 @@ class NamedArray(metaclass=NamedArrayMeta):
         ...
 
     @overload
-    def _lookup_indices(self, axis: AxisSelection) -> Tuple[Optional[int], ...]: ...
+    def _lookup_indices(self, axis: AxisSelection) -> tuple[int | None, ...]: ...
 
     def _lookup_indices(self, axis: AxisSelection) -> int | None | tuple[int | None, ...]:
         """
@@ -438,10 +437,10 @@ class NamedArray(metaclass=NamedArrayMeta):
         ...
 
     @overload
-    def axis_indices(self, axis: Sequence[AxisSelector]) -> Tuple[Optional[int], ...]: ...
+    def axis_indices(self, axis: Sequence[AxisSelector]) -> tuple[int | None, ...]: ...
 
     @overload
-    def axis_indices(self, axis: AxisSelection) -> Tuple[Optional[int], ...]: ...
+    def axis_indices(self, axis: AxisSelection) -> tuple[int | None, ...]: ...
 
     def axis_indices(self, axis: AxisSelection) -> int | None | tuple[int | None, ...]:
         """
@@ -517,13 +516,11 @@ class NamedArray(metaclass=NamedArrayMeta):
     # slicing
     @typing.overload
     def slice(
-        self, axis: AxisSelector, new_axis: Optional[AxisSelector] = None, start: int = 0, length: Optional[int] = None
+        self, axis: AxisSelector, new_axis: AxisSelector | None = None, start: int = 0, length: int | None = None
     ) -> "NamedArray": ...
 
     @typing.overload
-    def slice(
-        self, start: Mapping[AxisSelector, int], length: Mapping[AxisSelector, Union[int, Axis]]
-    ) -> "NamedArray": ...
+    def slice(self, start: Mapping[AxisSelector, int], length: Mapping[AxisSelector, int | Axis]) -> "NamedArray": ...
 
     def slice(self, *args, **kwargs) -> "NamedArray":  # pragma: no cover
         return haliax.slice(self, *args, **kwargs)
@@ -650,7 +647,7 @@ class NamedArray(metaclass=NamedArrayMeta):
     # Deprecated overload
     @typing.overload
     def dot(
-        self, axis: Optional[AxisSelection], *b, precision: PrecisionLike = None, dot_general=jax.lax.dot_general
+        self, axis: AxisSelection | None, *b, precision: PrecisionLike = None, dot_general=jax.lax.dot_general
     ) -> "NamedArray": ...
 
     @typing.overload
@@ -1723,13 +1720,13 @@ def _is_subsequence(needle, haystack):
 @overload
 def broadcast_arrays(
     *arrays: NamedArray, require_subset: bool = True, ensure_order: bool = True
-) -> Tuple[NamedArray, ...]: ...
+) -> tuple[NamedArray, ...]: ...
 
 
 @overload
 def broadcast_arrays(
-    *arrays: Optional[NamedOrNumeric], require_subset: bool = True, ensure_order: bool = True
-) -> Tuple[Optional[NamedOrNumeric], ...]: ...
+    *arrays: NamedOrNumeric | None, require_subset: bool = True, ensure_order: bool = True
+) -> tuple[NamedOrNumeric | None, ...]: ...
 
 
 def broadcast_arrays(
@@ -1757,19 +1754,19 @@ def broadcast_arrays(
 @overload
 def broadcast_arrays_and_return_axes(
     *arrays: NamedArray, require_subset: bool = True, ensure_order: bool = True
-) -> Tuple[Tuple[NamedArray, ...], Tuple[Axis, ...]]: ...
+) -> tuple[tuple[NamedArray, ...], tuple[Axis, ...]]: ...
 
 
 @overload
 def broadcast_arrays_and_return_axes(
     *arrays: NamedOrNumeric, require_subset: bool = True, ensure_order: bool = True
-) -> Tuple[Tuple[NamedOrNumeric, ...], Tuple[Axis, ...]]: ...
+) -> tuple[tuple[NamedOrNumeric, ...], tuple[Axis, ...]]: ...
 
 
 @overload
 def broadcast_arrays_and_return_axes(
-    *arrays: Optional[NamedOrNumeric], require_subset: bool = True, ensure_order: bool = True
-) -> Tuple[Tuple[Optional[NamedOrNumeric], ...], Tuple[Axis, ...]]: ...
+    *arrays: NamedOrNumeric | None, require_subset: bool = True, ensure_order: bool = True
+) -> tuple[tuple[NamedOrNumeric | None, ...], tuple[Axis, ...]]: ...
 
 
 def broadcast_arrays_and_return_axes(

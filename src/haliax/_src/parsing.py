@@ -253,6 +253,7 @@ class AliasTable:
         else:
             self.bindings[alias] = axis
 
+
 def _resolve_bindings(array, bindings: Mapping[str, Axis | str | int]) -> AliasTable:
     b: dict[str, AxisSelector] = {}
     for name, selector in bindings.items():

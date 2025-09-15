@@ -18,7 +18,7 @@ from haliax.util import is_jax_or_hax_array_like
 
 from ._src.util import IdentityMap
 
-ArrayLike = Union[jnp.ndarray, NamedArray]
+ArrayLike: TypeAlias = jnp.ndarray | NamedArray
 
 
 def describe_array(arr):
@@ -30,7 +30,7 @@ def describe_array(arr):
 
 class ModuleProblems(Exception):
     def __init__(self):
-        self.reused_arrays: list[tuple[ArrayLike, list]] = []
+        self.reused_arrays: list[tuple[ArrayLike, list[str]]] = []
         self.static_arrays: list[str] = []
 
     def __bool__(self):

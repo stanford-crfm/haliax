@@ -3,8 +3,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 
-from typing import Optional, Tuple
-
 import jax
 import jax.numpy as jnp
 

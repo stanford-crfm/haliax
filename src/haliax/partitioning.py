@@ -10,7 +10,7 @@ import threading
 import typing
 import warnings
 from math import prod
-from typing import Callable, ContextManager, Mapping, Optional, ParamSpec, Sequence, TypeVar
+from typing import Callable, ContextManager, Mapping, ParamSpec, Sequence, TypeAlias, TypeVar
 
 import equinox as eqx
 import jax
@@ -48,8 +48,8 @@ from .jax_utils import Static, is_in_jit, is_jax_array_like, is_on_mac_metal
 from .tree_util import hashable_combine, hashable_partition
 from .util import StringHolderEnum
 
-PhysicalAxisSpec = Union[(str), Sequence[str]]
-ResourceMapping = Mapping[(str), PhysicalAxisSpec]
+PhysicalAxisSpec: TypeAlias = str | Sequence[str]
+ResourceMapping: TypeAlias = Mapping[str, PhysicalAxisSpec]
 """Mapping from logical axis names to physical axis names"""
 
 F = typing.TypeVar("F", bound=typing.Callable)
@@ -187,7 +187,7 @@ def shard_with_axis_mapping(x: T, mapping: ResourceMapping, mesh: Mesh | None = 
 
 def pspec_for(
     tree: PyTree,
-    resource_mapping: Optional[ResourceMapping] = None,
+    resource_mapping: ResourceMapping | None = None,
     preserve_existing_shardings: bool = True,
     use_auto_sharding: bool = True,
 ) -> PyTree:
@@ -432,8 +432,8 @@ def named_jit(
     donate_kwargs: PyTree | None = None,
     # args from jit
     keep_unused: bool = False,
-    backend: Optional[str] = None,
-    inline: Optional[bool] = None,
+    backend: str | None = None,
+    inline: bool | None = None,
 ) -> WrappedCallable[Args, R]: ...
 
 
@@ -447,8 +447,8 @@ def named_jit(
     donate_kwargs: PyTree | None = None,
     # args from jit
     keep_unused: bool = False,
-    backend: Optional[str] = None,
-    inline: Optional[bool] = None,
+    backend: str | None = None,
+    inline: bool | None = None,
 ) -> typing.Callable[[Callable[Args, R]], WrappedCallable[Args, R]]: ...
 
 

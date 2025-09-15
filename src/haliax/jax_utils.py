@@ -110,11 +110,11 @@ def _UNSPECIFIED():
 
 
 @typing.overload
-def named_call(f: F, name: Optional[str] = None) -> F: ...
+def named_call(f: F, name: str | None = None) -> F: ...
 
 
 @typing.overload
-def named_call(*, name: Optional[str] = None) -> Callable[[F], F]: ...
+def named_call(*, name: str | None = None) -> Callable[[F], F]: ...
 
 
 def named_call(f=_UNSPECIFIED, name: str | None = None):

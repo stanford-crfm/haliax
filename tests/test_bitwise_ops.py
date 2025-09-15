@@ -1,3 +1,7 @@
+# Copyright 2025 The Levanter Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
 import jax.numpy as jnp
 import haliax as hax
 from haliax import Axis
