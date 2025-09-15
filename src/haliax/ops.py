@@ -1,3 +1,8 @@
+# Copyright 2025 The Levanter Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+
 import typing
 from typing import Mapping
 
@@ -36,8 +41,7 @@ def where(
     condition: NamedOrNumeric | bool,
     x: NamedOrNumeric,
     y: NamedOrNumeric,
-) -> NamedArray:
-    ...
+) -> NamedArray: ...
 
 
 @typing.overload
@@ -46,8 +50,7 @@ def where(
     *,
     fill_value: int,
     new_axis: Axis,
-) -> tuple[NamedArray, ...]:
-    ...
+) -> tuple[NamedArray, ...]: ...
 
 
 def where(
@@ -103,6 +106,30 @@ def where(
 
     raw = jnp.where(condition.array, _array_if_named(x), _array_if_named(y))
     return NamedArray(raw, condition.axes)
+
+
+def nonzero(array: NamedArray, *, size: Axis, fill_value: int = 0) -> tuple[NamedArray, ...]:
+    """Like :func:`jax.numpy.nonzero`, but with named axes.
+
+    Args:
+        array: The input array to test for nonzero values. Must be a :class:`NamedArray`.
+        size: Axis specifying the size of the output axis. This is required because
+            JAX requires the size of the result at tracing time.
+        fill_value: Value used to fill the output when fewer than ``size`` elements are
+            nonzero. Defaults to ``0``.
+
+    Returns:
+        A tuple of :class:`NamedArray` objects, one for each axis of ``array``. Each
+        returned array has ``size`` as its only axis and contains the indices of the
+        nonzero elements along the corresponding input axis.
+    """
+
+    if not isinstance(array, NamedArray):
+        raise ValueError("array must be a NamedArray")
+
+    return tuple(
+        NamedArray(idx, (size,)) for idx in jnp.nonzero(array.array, size=size.size, fill_value=fill_value)
+    )
 
 
 def clip(array: NamedOrNumeric, a_min: NamedOrNumeric, a_max: NamedOrNumeric) -> NamedArray:
@@ -225,8 +252,7 @@ def raw_array_or_scalar(x: NamedOrNumeric):
 @typing.overload
 def unique(
     array: NamedArray, Unique: Axis, *, axis: AxisSelector | None = None, fill_value: ArrayLike | None = None
-) -> NamedArray:
-    ...
+) -> NamedArray: ...
 
 
 @typing.overload
@@ -237,8 +263,7 @@ def unique(
     return_index: typing.Literal[True],
     axis: AxisSelector | None = None,
     fill_value: ArrayLike | None = None,
-) -> tuple[NamedArray, NamedArray]:
-    ...
+) -> tuple[NamedArray, NamedArray]: ...
 
 
 @typing.overload
@@ -249,8 +274,7 @@ def unique(
     return_inverse: typing.Literal[True],
     axis: AxisSelector | None = None,
     fill_value: ArrayLike | None = None,
-) -> tuple[NamedArray, NamedArray]:
-    ...
+) -> tuple[NamedArray, NamedArray]: ...
 
 
 @typing.overload
@@ -261,8 +285,7 @@ def unique(
     return_counts: typing.Literal[True],
     axis: AxisSelector | None = None,
     fill_value: ArrayLike | None = None,
-) -> tuple[NamedArray, NamedArray]:
-    ...
+) -> tuple[NamedArray, NamedArray]: ...
 
 
 @typing.overload
@@ -275,8 +298,7 @@ def unique(
     return_counts: bool = False,
     axis: AxisSelector | None = None,
     fill_value: ArrayLike | None = None,
-) -> NamedArray | tuple[NamedArray, ...]:
-    ...
+) -> NamedArray | tuple[NamedArray, ...]: ...
 
 
 def unique(

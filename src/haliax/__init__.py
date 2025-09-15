@@ -1,9 +1,13 @@
+# Copyright 2025 The Levanter Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+
 import typing as t
 from typing import Optional, Sequence
 
 import jax
 import jax.numpy as jnp
-
 
 try:
     from jax.typing import DTypeLike
@@ -44,7 +48,9 @@ from .axis import (
 )
 from .core import (
     NamedArray,
-    NamedArrayAxes, NamedArrayAxesSpec, NamedOrNumeric,
+    NamedArrayAxes,
+    NamedArrayAxesSpec,
+    NamedOrNumeric,
     are_shape_checks_enabled,
     broadcast_arrays,
     broadcast_axis,
@@ -78,6 +84,7 @@ from .ops import (
     trace,
     tril,
     triu,
+    nonzero,
     unique,
     unique_values,
     unique_counts,
@@ -101,7 +108,6 @@ from .wrap import (
     wrap_elemwise_unary,
     wrap_reduction_call,
 )
-
 
 T = t.TypeVar("T")
 A = t.TypeVar("A", Scalar, NamedArray, jnp.ndarray)
@@ -801,6 +807,7 @@ def argsort(a: NamedArray, axis: AxisSelector) -> NamedArray:
 
 # elemwise binary ops
 
+
 # Note that all the heavy lifting is done by the `wrap_elemwise_binary` decorator
 @wrap_elemwise_binary
 def add(x1: NamedOrNumeric, x2: NamedOrNumeric, /) -> NamedOrNumeric:
@@ -1193,6 +1200,7 @@ __all__ = [
     "map",
     "vmap",
     "trace",
+    "nonzero",
     "where",
     "unique",
     "unique_values",

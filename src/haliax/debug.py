@@ -1,3 +1,8 @@
+# Copyright 2025 The Levanter Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+
 import dataclasses
 from typing import Sequence, TypeAlias
 
@@ -13,8 +18,7 @@ from haliax.util import is_jax_or_hax_array_like
 
 from ._src.util import IdentityMap
 
-
-ArrayLike: TypeAlias = jnp.ndarray | NamedArray
+ArrayLike = Union[jnp.ndarray, NamedArray]
 
 
 def describe_array(arr):

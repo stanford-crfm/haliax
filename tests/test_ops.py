@@ -1,3 +1,8 @@
+# Copyright 2025 The Levanter Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+
 from typing import Callable
 import typing
 
@@ -154,6 +159,29 @@ def test_where(use_jit):
     unnamed_7 = named7.array
     unnamed_8, unnamed_9, unnamed_10 = jnp.where(unnamed_7 > 0.5, size=Volume.size, fill_value=-1)
     assert jnp.all(unnamed_8 == named8.array)
+
+
+@pytest.mark.parametrize("use_jit", [False, True])
+def test_nonzero(use_jit):
+    Height = Axis("Height", 3)
+    Width = Axis("Width", 4)
+
+    data = jnp.array([[0, 1, 0, 2], [3, 0, 4, 0], [0, 0, 5, 6]])
+    named = hax.named(data, (Height, Width))
+
+    Nonzero = Axis("Nonzero", Height.size * Width.size)
+
+    hax_nonzero: Callable = hax.nonzero
+    if use_jit:
+        hax_nonzero = hax.named_jit(hax_nonzero)
+
+    i, j = hax_nonzero(named, size=Nonzero, fill_value=-1)
+    ui, uj = jnp.nonzero(data, size=Nonzero.size, fill_value=-1)
+
+    assert i.axes == (Nonzero,)
+    assert j.axes == (Nonzero,)
+    assert jnp.all(i.array == ui)
+    assert jnp.all(j.array == uj)
 
 
 def test_clip():

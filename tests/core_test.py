@@ -1,3 +1,8 @@
+# Copyright 2025 The Levanter Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -252,9 +257,7 @@ def test_searchsorted():
     unsorted = hax.named([5, 1, 3, 7, 4], axis=A)
     sorter = hax.argsort(unsorted, axis=A)
     result = hax.searchsorted(unsorted, v, sorter=sorter, side="right")
-    assert jnp.all(
-        result.array == jnp.searchsorted(unsorted.array, v.array, sorter=sorter.array, side="right")
-    )
+    assert jnp.all(result.array == jnp.searchsorted(unsorted.array, v.array, sorter=sorter.array, side="right"))
     assert result.axes == (V,)
 
 

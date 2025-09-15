@@ -1,3 +1,8 @@
+# Copyright 2025 The Levanter Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+
 import typing
 import warnings
 
@@ -18,8 +23,7 @@ def cross_entropy_loss(
     reduction: ReductionFunction | None | Unspecified = UNSPECIFIED,
     where: NamedArray | None = None,
     reduction_axis: None = None,
-) -> jnp.ndarray | NamedArray:
-    ...
+) -> jnp.ndarray | NamedArray: ...
 
 
 @typing.overload
@@ -30,8 +34,7 @@ def cross_entropy_loss(
     reduction: ReductionFunction | None | Unspecified = UNSPECIFIED,
     where: NamedArray | None = None,
     reduction_axis: AxisSelection = ...,
-) -> NamedArray:
-    ...
+) -> NamedArray: ...
 
 
 def cross_entropy_loss(
@@ -62,8 +65,7 @@ def binary_cross_entropy_loss(
     reduction: ReductionFunction | None | Unspecified = UNSPECIFIED,
     where: NamedArray | None = None,
     reduction_axis: None = None,
-) -> jnp.ndarray | NamedArray:
-    ...
+) -> jnp.ndarray | NamedArray: ...
 
 
 @typing.overload
@@ -73,8 +75,7 @@ def binary_cross_entropy_loss(
     reduction: ReductionFunction | None | Unspecified = UNSPECIFIED,
     where: NamedArray | None = None,
     reduction_axis: AxisSelection = ...,
-) -> NamedArray:
-    ...
+) -> NamedArray: ...
 
 
 def binary_cross_entropy_loss(

@@ -1,3 +1,8 @@
+# Copyright 2025 The Levanter Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+
 import functools as ft
 import typing
 import warnings
@@ -15,7 +20,6 @@ from jaxtyping import PRNGKeyArray
 
 import haliax
 from haliax.types import PrecisionLike
-
 
 try:
     # jax v0.5.1 or newer
@@ -106,13 +110,11 @@ def _UNSPECIFIED():
 
 
 @typing.overload
-def named_call(f: F, name: str | None = None) -> F:
-    ...
+def named_call(f: F, name: Optional[str] = None) -> F: ...
 
 
 @typing.overload
-def named_call(*, name: str | None = None) -> Callable[[F], F]:
-    ...
+def named_call(*, name: Optional[str] = None) -> Callable[[F], F]: ...
 
 
 def named_call(f=_UNSPECIFIED, name: str | None = None):

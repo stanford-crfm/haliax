@@ -107,7 +107,7 @@ APIs that don't translate well to named tensors are intentionally omitted here. 
 - [x] `nanstd`
 - [x] `nansum`
 - [x] `nanvar`
-- [ ] `nonzero`
+- [x] `nonzero`
 - [ ] `ogrid`
 - [x] `packbits`
 - [ ] `partition`
