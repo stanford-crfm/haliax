@@ -108,6 +108,30 @@ def where(
     return NamedArray(raw, condition.axes)
 
 
+def nonzero(array: NamedArray, *, size: Axis, fill_value: int = 0) -> tuple[NamedArray, ...]:
+    """Like :func:`jax.numpy.nonzero`, but with named axes.
+
+    Args:
+        array: The input array to test for nonzero values. Must be a :class:`NamedArray`.
+        size: Axis specifying the size of the output axis. This is required because
+            JAX requires the size of the result at tracing time.
+        fill_value: Value used to fill the output when fewer than ``size`` elements are
+            nonzero. Defaults to ``0``.
+
+    Returns:
+        A tuple of :class:`NamedArray` objects, one for each axis of ``array``. Each
+        returned array has ``size`` as its only axis and contains the indices of the
+        nonzero elements along the corresponding input axis.
+    """
+
+    if not isinstance(array, NamedArray):
+        raise ValueError("array must be a NamedArray")
+
+    return tuple(
+        NamedArray(idx, (size,)) for idx in jnp.nonzero(array.array, size=size.size, fill_value=fill_value)
+    )
+
+
 def clip(array: NamedOrNumeric, a_min: NamedOrNumeric, a_max: NamedOrNumeric) -> NamedArray:
     """Like jnp.clip, but with named axes. This version currently only accepts the three argument form."""
     (array, a_min, a_max), axes = broadcast_arrays_and_return_axes(array, a_min, a_max)
