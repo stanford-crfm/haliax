@@ -270,6 +270,23 @@ These are all more or less directly from JAX's NumPy API.
 ::: haliax.triu
 ::: haliax.where
 
+### FFT
+
+All FFT helpers accept an ``axis`` argument which may be a single axis, its
+name, or an ordered mapping from axes to output sizes.  Passing a mapping
+dispatches to the ``n``‑dimensional variants in :mod:`jax.numpy.fft`.
+
+::: haliax.fft
+::: haliax.ifft
+::: haliax.hfft
+::: haliax.ihfft
+::: haliax.rfft
+::: haliax.irfft
+::: haliax.fftfreq
+::: haliax.rfftfreq
+::: haliax.fftshift
+::: haliax.ifftshift
+
 
 
 ## Named Array Reference

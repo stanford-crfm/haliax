@@ -161,24 +161,19 @@ APIs that don't translate well to named tensors are intentionally omitted here. 
 - [ ] `vstack`
 
 ## fft
-- [ ] `fft`
-- [ ] `fft2`
-- [ ] `fftfreq`
-- [ ] `fftn`
-- [ ] `fftshift`
-- [ ] `hfft`
-- [ ] `ifft`
-- [ ] `ifft2`
-- [ ] `ifftn`
-- [ ] `ifftshift`
-- [ ] `ihfft`
-- [ ] `irfft`
-- [ ] `irfft2`
-- [ ] `irfftn`
-- [ ] `rfft`
-- [ ] `rfft2`
-- [ ] `rfftfreq`
-- [ ] `rfftn`
+Multi-dimensional transforms like `fftn` or `rfft2` are handled by passing a
+mapping of axes to :func:`haliax.fft` and friends.
+
+- [x] `fft`
+- [x] `fftfreq`
+- [x] `fftshift`
+- [x] `hfft`
+- [x] `ifft`
+- [x] `ifftshift`
+- [x] `ihfft`
+- [x] `irfft`
+- [x] `rfft`
+- [x] `rfftfreq`
 
 ## linalg
 - [ ] `cholesky`
