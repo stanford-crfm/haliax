@@ -289,6 +289,49 @@ These are all more or less directly from JAX's NumPy API.
 ::: haliax.triu
 ::: haliax.where
 
+### FFT
+
+All FFT helpers accept an ``axis`` argument which may be a single axis, its
+name, or an ordered mapping from axes to output sizes.  Passing a mapping
+dispatches to the ``n``‑dimensional variants in :mod:`jax.numpy.fft`.
+
+For example::
+
+    import jax.numpy as jnp
+    import haliax as hax
+
+    T = hax.Axis("time", 8)
+    signal = hax.arange(T, dtype=jnp.float32)
+
+    # operate along a single axis specified by name
+    hax.fft(signal, axis="time")
+
+    # resize by passing an Axis object
+    hax.fft(signal, axis=hax.Axis("time", 16))
+
+    X, Y = hax.make_axes(X=4, Y=6)
+    image = hax.arange((X, Y), dtype=jnp.float32)
+
+    # transform across several axes in order by passing a sequence
+    hax.fft(image, axis=("X", "Y"))
+
+    # selectively resize axes by providing a mapping
+    hax.fft(image, axis={"X": None, "Y": hax.Axis("Y", 10)})
+
+    # mappings can cover just a subset of axes when only partial resizing is needed
+    hax.fft(image, axis={"Y": 10})
+
+::: haliax.fft
+::: haliax.ifft
+::: haliax.hfft
+::: haliax.ihfft
+::: haliax.rfft
+::: haliax.irfft
+::: haliax.fftfreq
+::: haliax.rfftfreq
+::: haliax.fftshift
+::: haliax.ifftshift
+
 
 
 ## Named Array Reference

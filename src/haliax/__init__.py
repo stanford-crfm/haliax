@@ -96,6 +96,18 @@ from .ops import (
     bincount,
     where,
 )
+from .fft import (
+    fft,
+    fftfreq,
+    fftshift,
+    hfft,
+    ifft,
+    ifftshift,
+    ihfft,
+    irfft,
+    rfft,
+    rfftfreq,
+)
 from .partitioning import auto_sharded, axis_mapping, fsdp, named_jit, shard, shard_with_axis_mapping
 from .specialized_fns import top_k
 from .types import Scalar
@@ -1214,6 +1226,16 @@ __all__ = [
     "clip",
     "tril",
     "triu",
+    "fft",
+    "ifft",
+    "hfft",
+    "ihfft",
+    "rfft",
+    "irfft",
+    "fftfreq",
+    "rfftfreq",
+    "fftshift",
+    "ifftshift",
     "add",
     "arctan2",
     "bitwise_and",
