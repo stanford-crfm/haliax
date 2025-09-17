@@ -1183,6 +1183,26 @@ def index(array: NamedArray, slices: Mapping[AxisSelector, NamedIndex]) -> Named
 def _compute_new_axes_and_slices_for_index(
     array, slices
 ) -> tuple[AxisSpec, list[py_slice | dslice | jnp.ndarray | int | list[int]]]:
+    def _is_integer_like_scalar_index(value: Any) -> bool:
+        if isinstance(value, (int, np.integer)):
+            return True
+        if not is_jax_array_like(value):
+            return False
+        shape = getattr(value, "shape", None)
+        if shape != ():
+            return False
+        dtype = getattr(value, "dtype", None)
+        if dtype is None:
+            return False
+        return jnp.issubdtype(dtype, jnp.integer)
+
+    def _coerce_integer_like_index(value: Any):
+        if isinstance(value, np.integer):
+            return int(value)
+        if type(value) is np.ndarray and value.shape == () and jnp.issubdtype(value.dtype, jnp.integer):
+            return int(value.item())
+        return value
+
     ordered_slices: list = [py_slice(None, None, None)] * len(array.axes)  # type: ignore
     kept_axes = [True] * len(array.axes)
     array_slice_indices = []
@@ -1205,8 +1225,8 @@ def _compute_new_axes_and_slices_for_index(
             kept_axes[axis_index] = False
             array_slice_indices.append(axis_index)
             index_axis_names.add(orig_axis.name)
-        elif isinstance(slice_, int):
-            ordered_slices[axis_index] = slice_
+        elif _is_integer_like_scalar_index(slice_):
+            ordered_slices[axis_index] = _coerce_integer_like_index(slice_)
             kept_axes[axis_index] = False
         elif isinstance(slice_, NamedArray):
             ordered_slices[axis_index] = slice_

@@ -548,6 +548,33 @@ def test_index_with_tracer():
     assert jnp.all(jnp.equal(f(idx).array, named1.array[0, :, :]))
 
 
+def test_index_with_numpy_integer_scalars():
+    (H,) = hax.make_axes(H=6)
+    arr = hax.arange(H)
+
+    np_int = np.int64(3)
+    result = arr[{H: np_int}]
+    assert isinstance(result, NamedArray)
+    assert result.axes == ()
+    assert jnp.all(jnp.equal(result.array, arr.array[int(np_int)]))
+
+    np_scalar_array = np.array(4, dtype=np.int32)
+    result = arr[{H: np_scalar_array}]
+    assert isinstance(result, NamedArray)
+    assert result.axes == ()
+    assert jnp.all(jnp.equal(result.array, arr.array[int(np_scalar_array)]))
+
+    class _FakeJaxScalar(np.ndarray):
+        def item(self, *args, **kwargs):  # pragma: no cover - exercised via test assertions
+            raise AssertionError("item should not be called on tracer-like indices")
+
+    fake_scalar = np.array(5, dtype=np.int32).view(_FakeJaxScalar)
+    result = arr[{H: fake_scalar}]
+    assert isinstance(result, NamedArray)
+    assert result.axes == ()
+    assert jnp.all(jnp.equal(result.array, arr[{H: 5}].array))
+
+
 def test_index_array_slices():
     # fancier tests with array slices with named array args
     H, W, D, C, Q, I0 = hax.make_axes(H=10, W=20, D=30, C=40, Q=50, I0=10)
