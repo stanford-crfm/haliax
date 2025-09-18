@@ -96,6 +96,22 @@ from .ops import (
     bincount,
     where,
 )
+
+from .poly import (
+    poly,
+    polyadd,
+    polysub,
+    polymul,
+    polydiv,
+    polyint,
+    polyder,
+    polyval,
+    polyfit,
+    roots,
+    trim_zeros,
+    vander,
+)
+
 from .fft import (
     fft,
     fftfreq,
@@ -1239,6 +1255,18 @@ __all__ = [
     "clip",
     "tril",
     "triu",
+    "poly",
+    "polyadd",
+    "polysub",
+    "polymul",
+    "polydiv",
+    "polyint",
+    "polyder",
+    "polyval",
+    "polyfit",
+    "roots",
+    "trim_zeros",
+    "vander",
     "fft",
     "ifft",
     "hfft",

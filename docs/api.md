@@ -340,6 +340,21 @@ These are all more or less directly from JAX's NumPy API.
 ::: haliax.subtract
 ::: haliax.true_divide
 
+### Polynomial Operations
+
+::: haliax.poly
+::: haliax.polyadd
+::: haliax.polysub
+::: haliax.polymul
+::: haliax.polydiv
+::: haliax.polyint
+::: haliax.polyder
+::: haliax.polyval
+::: haliax.polyfit
+::: haliax.roots
+::: haliax.trim_zeros
+::: haliax.vander
+
 ### Other Operations
 
 ::: haliax.bincount
