@@ -5,8 +5,6 @@ import numpy as np
 import pytest
 from jax.sharding import Mesh, NamedSharding, PartitionSpec
 from jaxtyping import Array
-from jax._src.named_sharding import DuplicateSpecError
-
 import haliax as hax
 import haliax.nn as hnn
 from haliax import Axis, NamedArray
