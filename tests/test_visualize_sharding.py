@@ -9,7 +9,7 @@ import jax.numpy as jnp
 
 import haliax as hax
 from haliax import Axis
-from haliax.partitioning import ResourceAxis, axis_mapping, named_jit
+from haliax.partitioning import ResourceAxis, axis_mapping
 from test_utils import skip_if_not_enough_devices
 from haliax.debug import visualize_shardings
 
@@ -40,13 +40,13 @@ def test_visualize_shardings_runs(capsys):
 def test_visualize_shardings_inside_jit(capsys):
     mesh = jax.sharding.Mesh(np.array(jax.devices()).reshape(-1, 1), (ResourceAxis.DATA, ResourceAxis.MODEL))
 
-    @named_jit(out_axis_resources={"dim1": ResourceAxis.DATA})
     def fn(x):
         visualize_shardings(x)
         return x
 
     with axis_mapping({"dim1": ResourceAxis.DATA}), mesh:
         x = hax.ones(Dim1)
+        x = hax.shard(x)
         fn(x)
 
     out = capsys.readouterr().out

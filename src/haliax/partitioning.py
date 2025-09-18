@@ -10,7 +10,7 @@ import threading
 import typing
 import warnings
 from math import prod
-from typing import Callable, ContextManager, Mapping, Optional, ParamSpec, Sequence, TypeVar, Union
+from typing import Callable, ContextManager, Mapping, ParamSpec, Sequence, TypeAlias, TypeVar
 
 import equinox as eqx
 import jax
@@ -48,8 +48,8 @@ from .jax_utils import Static, is_in_jit, is_jax_array_like, is_on_mac_metal
 from .tree_util import hashable_combine, hashable_partition
 from .util import StringHolderEnum
 
-PhysicalAxisSpec = Union[(str), Sequence[str]]
-ResourceMapping = Mapping[(str), PhysicalAxisSpec]
+PhysicalAxisSpec: TypeAlias = str | Sequence[str]
+ResourceMapping: TypeAlias = Mapping[str, PhysicalAxisSpec]
 """Mapping from logical axis names to physical axis names"""
 
 F = typing.TypeVar("F", bound=typing.Callable)
@@ -109,7 +109,7 @@ def current_thread_local_mapping():
     return _mapping_holder.thread_data.resource_mapping
 
 
-def auto_sharded(x: T, mesh: Optional[Mesh] = None) -> T:
+def auto_sharded(x: T, mesh: Mesh | None = None) -> T:
     """
     Shard a PyTree using the global axis mapping. NamedArrays in the PyTree are sharded using the axis mapping
      and the names in the tree.
@@ -124,7 +124,7 @@ def auto_sharded(x: T, mesh: Optional[Mesh] = None) -> T:
     return shard(x, mapping=mapping, mesh=mesh)
 
 
-def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] = None) -> T:
+def shard(x: T, mapping: ResourceMapping | None = None, mesh: Mesh | None = None) -> T:
     """
     Shard a PyTree using the provided axis mapping. NamedArrays in the PyTree are sharded using the axis mapping.
     Other arrays (i.e. plain JAX arrays) are left alone.
@@ -180,14 +180,14 @@ def shard(x: T, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] 
 
 
 @functools.wraps(shard)
-def shard_with_axis_mapping(x: T, mapping: ResourceMapping, mesh: Optional[Mesh] = None) -> T:
+def shard_with_axis_mapping(x: T, mapping: ResourceMapping, mesh: Mesh | None = None) -> T:
     # warnings.warn("`shard_with_axis_mapping` is deprecated. Use `shard` instead", DeprecationWarning)
     return shard(x, mapping, mesh)
 
 
 def pspec_for(
     tree: PyTree,
-    resource_mapping: Optional[ResourceMapping] = None,
+    resource_mapping: ResourceMapping | None = None,
     preserve_existing_shardings: bool = True,
     use_auto_sharding: bool = True,
 ) -> PyTree:
@@ -274,10 +274,10 @@ def pspec_for(
 
 def infer_resource_partitions(
     tree: PyTree,
-    resource_mapping: Optional[ResourceMapping] = None,
+    resource_mapping: ResourceMapping | None = None,
     preserve_existing_shardings: bool = True,
     use_auto_sharding: bool = True,
-    mesh: Optional[Mesh] = None,
+    mesh: Mesh | None = None,
 ) -> PyTree:
     """
     Infer the sharding for a module, to be used with ``named_jit``.
@@ -327,11 +327,11 @@ class _NamedJitWrapper(eqx.Module):
     _fn: Callable  # [Args, R]
     _dynamic_fun: PyTree
     _static_fun: typing.Any
-    _axis_resources: Optional[ResourceMapping]
-    _in_axis_resources: Optional[ResourceMapping]
-    _out_axis_resources: Optional[ResourceMapping]
-    _donate_args: Optional[PyTree]
-    _donate_kwargs: Optional[PyTree]
+    _axis_resources: ResourceMapping | None
+    _in_axis_resources: ResourceMapping | None
+    _out_axis_resources: ResourceMapping | None
+    _donate_args: PyTree | None
+    _donate_kwargs: PyTree | None
     _pjit_args: Mapping[str, typing.Any]
 
     @property
@@ -424,44 +424,44 @@ class _NamedJitWrapper(eqx.Module):
 @typing.overload
 def named_jit(
     fn: Callable[Args, R],
-    axis_resources: Optional[ResourceMapping] = None,
+    axis_resources: ResourceMapping | None = None,
     *,
-    in_axis_resources: Optional[ResourceMapping] = None,
-    out_axis_resources: Optional[ResourceMapping] = None,
-    donate_args: Optional[PyTree] = None,
-    donate_kwargs: Optional[PyTree] = None,
+    in_axis_resources: ResourceMapping | None = None,
+    out_axis_resources: ResourceMapping | None = None,
+    donate_args: PyTree | None = None,
+    donate_kwargs: PyTree | None = None,
     # args from jit
     keep_unused: bool = False,
-    backend: Optional[str] = None,
-    inline: Optional[bool] = None,
+    backend: str | None = None,
+    inline: bool | None = None,
 ) -> WrappedCallable[Args, R]: ...
 
 
 @typing.overload
 def named_jit(
     *,
-    axis_resources: Optional[ResourceMapping] = None,
-    in_axis_resources: Optional[ResourceMapping] = None,
-    out_axis_resources: Optional[ResourceMapping] = None,
-    donate_args: Optional[PyTree] = None,
-    donate_kwargs: Optional[PyTree] = None,
+    axis_resources: ResourceMapping | None = None,
+    in_axis_resources: ResourceMapping | None = None,
+    out_axis_resources: ResourceMapping | None = None,
+    donate_args: PyTree | None = None,
+    donate_kwargs: PyTree | None = None,
     # args from jit
     keep_unused: bool = False,
-    backend: Optional[str] = None,
-    inline: Optional[bool] = None,
+    backend: str | None = None,
+    inline: bool | None = None,
 ) -> typing.Callable[[Callable[Args, R]], WrappedCallable[Args, R]]: ...
 
 
 def named_jit(
-    fn: Optional[Callable[Args, R]] = None,
-    axis_resources: Optional[ResourceMapping] = None,
+    fn: Callable[Args, R] | None = None,
+    axis_resources: ResourceMapping | None = None,
     *,
-    in_axis_resources: Optional[ResourceMapping] = None,
-    out_axis_resources: Optional[ResourceMapping] = None,
-    donate_args: Optional[PyTree] = None,
-    donate_kwargs: Optional[PyTree] = None,
+    in_axis_resources: ResourceMapping | None = None,
+    out_axis_resources: ResourceMapping | None = None,
+    donate_args: PyTree | None = None,
+    donate_kwargs: PyTree | None = None,
     **pjit_args,
-) -> typing.Union[WrappedCallable[Args, R], typing.Callable[[Callable[Args, R]], WrappedCallable[Args, R]]]:
+) -> WrappedCallable[Args, R] | typing.Callable[[Callable[Args, R]], WrappedCallable[Args, R]]:
     """
     A version of pjit that uses NamedArrays and the provided resource mapping to infer resource partitions for
     sharded computation for.
@@ -627,7 +627,7 @@ def _cached_filter_eval_shape(fun, *args, **kwargs):
     return _eval_shape_cache[static]
 
 
-def physical_axis_name(axis: AxisSelector, mapping: Optional[ResourceMapping] = None) -> Optional[PhysicalAxisSpec]:
+def physical_axis_name(axis: AxisSelector, mapping: ResourceMapping | None = None) -> PhysicalAxisSpec | None:
     """Get the physical axis name for a logical axis from the mapping. Returns none if the axis is not mapped."""
     if mapping is None:
         mapping = current_thread_local_mapping()
@@ -639,7 +639,7 @@ def physical_axis_name(axis: AxisSelector, mapping: Optional[ResourceMapping] = 
         return mapping.get(axis.name, None)
 
 
-def physical_axis_size(axis: AxisSelector, mapping: Optional[ResourceMapping] = None) -> Optional[int]:
+def physical_axis_size(axis: AxisSelector, mapping: ResourceMapping | None = None) -> int | None:
     """Get the physical axis size for a logical axis. This is the product of the size of all physical axes
     that this logical axis is mapped to."""
     mesh = _get_mesh()
@@ -649,7 +649,7 @@ def physical_axis_size(axis: AxisSelector, mapping: Optional[ResourceMapping] = 
 
     mesh_shape = mesh.shape
 
-    name: Union[None, str, Sequence[str]] = physical_axis_name(axis, mapping)
+    name: None | str | Sequence[str] = physical_axis_name(axis, mapping)
     if name is None:
         return None
     elif isinstance(name, str):
@@ -659,19 +659,19 @@ def physical_axis_size(axis: AxisSelector, mapping: Optional[ResourceMapping] = 
 
 
 def sharding_for_axis(
-    axis: AxisSelection, mapping: Optional[ResourceMapping] = None, mesh: Optional[Mesh] = None
+    axis: AxisSelection, mapping: ResourceMapping | None = None, mesh: Mesh | None = None
 ) -> NamedSharding:
     """Get the sharding for a single axis"""
     return NamedSharding(mesh or _get_mesh(), pspec_for_axis(axis, mapping))
 
 
-def pspec_for_axis(axis: AxisSelection, mapping: Optional[ResourceMapping] = None) -> PartitionSpec:
+def pspec_for_axis(axis: AxisSelection, mapping: ResourceMapping | None = None) -> PartitionSpec:
     """Get the PartitionSpec for a single axis"""
     axis = axis_spec_to_shape_dict(axis)
     return PartitionSpec(*(physical_axis_name(a, mapping) for a in axis))
 
 
-def round_axis_for_partitioning(axis: Axis, mapping: Optional[ResourceMapping] = None) -> Axis:
+def round_axis_for_partitioning(axis: Axis, mapping: ResourceMapping | None = None) -> Axis:
     """Round an axis so that it's divisible by the size of the partition it's on"""
     size = physical_axis_size(axis, mapping)
     if size is None:
