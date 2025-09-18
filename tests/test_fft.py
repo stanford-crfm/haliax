@@ -1,3 +1,7 @@
+# Copyright 2025 The Levanter Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
 import jax.numpy as jnp
 import jax.numpy.fft as jfft
 
@@ -71,9 +75,7 @@ def test_fft_multi_axis():
     assert jnp.allclose(rf.array, jfft.rfftn(arr.array, axes=(1, 2)))
 
     irf = hax.irfft(rf, axis={"y": None, "z": Z})
-    assert jnp.allclose(
-        irf.array, jfft.irfftn(jfft.rfftn(arr.array, axes=(1, 2)), s=(Y.size, Z.size), axes=(1, 2))
-    )
+    assert jnp.allclose(irf.array, jfft.irfftn(jfft.rfftn(arr.array, axes=(1, 2)), s=(Y.size, Z.size), axes=(1, 2)))
 
     # resizing via dict values
     f2 = hax.fft(arr, axis={"y": 4, "z": None})

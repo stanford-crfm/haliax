@@ -242,6 +242,25 @@ def test_cumsum_etc():
     assert jnp.all(jnp.equal(hax.argsort(named1, axis=Width).array, jnp.argsort(named1.array, axis=1)))
     assert hax.argsort(named1, axis=Width).axes == (Height, Width, Depth)
 
+    assert jnp.all(
+        jnp.equal(
+            hax.argsort(named1, axis=Height, stable=True).array,
+            jnp.argsort(named1.array, axis=0, stable=True),
+        )
+    )
+    assert jnp.all(
+        jnp.equal(
+            hax.argsort(named1, axis=Width, stable=True).array,
+            jnp.argsort(named1.array, axis=1, stable=True),
+        )
+    )
+    assert jnp.all(
+        jnp.equal(
+            hax.argsort(named1, axis=None, stable=True),
+            jnp.argsort(named1.array, axis=None, stable=True),
+        )
+    )
+
 
 def test_searchsorted():
     A = hax.Axis("a", 5)
