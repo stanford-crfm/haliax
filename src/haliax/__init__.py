@@ -715,7 +715,9 @@ def nanmean(
     where: Optional[NamedArray] = None,
     dtype: Optional[DTypeLike] = None,
 ) -> NamedArray:
-    return wrap_reduction_call(jnp.nanmean, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype)
+    return wrap_reduction_call(
+        jnp.nanmean, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype
+    )
 
 
 def nanmin(
@@ -734,7 +736,9 @@ def nanprod(
     where: Optional[NamedArray] = None,
     dtype: Optional[DTypeLike] = None,
 ) -> NamedArray:
-    return wrap_reduction_call(jnp.nanprod, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype)
+    return wrap_reduction_call(
+        jnp.nanprod, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype
+    )
 
 
 def nanstd(
@@ -745,7 +749,9 @@ def nanstd(
     ddof: int = 0,
     dtype: Optional[DTypeLike] = None,
 ) -> NamedArray:
-    return wrap_reduction_call(jnp.nanstd, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype, ddof=ddof)
+    return wrap_reduction_call(
+        jnp.nanstd, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype, ddof=ddof
+    )
 
 
 def nansum(
@@ -755,7 +761,9 @@ def nansum(
     where: Optional[NamedArray] = None,
     dtype: Optional[DTypeLike] = None,
 ) -> NamedArray:
-    return wrap_reduction_call(jnp.nansum, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype)
+    return wrap_reduction_call(
+        jnp.nansum, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype
+    )
 
 
 def nanvar(
@@ -766,7 +774,9 @@ def nanvar(
     ddof: int = 0,
     dtype: Optional[DTypeLike] = None,
 ) -> NamedArray:
-    return wrap_reduction_call(jnp.nanvar, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype, ddof=ddof)
+    return wrap_reduction_call(
+        jnp.nanvar, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype, ddof=ddof
+    )
 
 
 # "Normalization" functions that use an axis but don't change the shape
@@ -807,14 +817,17 @@ def sort(a: NamedArray, axis: AxisSelector) -> NamedArray:
     return wrap_axiswise_call(jnp.sort, a, axis, single_axis_only=True)
 
 
-def argsort(a: NamedArray, axis: AxisSelector) -> NamedArray:
+def argsort(a: NamedArray, axis: AxisSelector | None, *, stable: bool = False) -> NamedArray:
     """
     Named version of [jax.numpy.argsort](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.argsort.html).
 
     If `axis` is None, the returned array will be a 1D array of indices that would sort the flattened array,
     identical to `jax.numpy.argsort(a.array)`.
+
+    Args:
+        stable: If ``True``, ensures that the indices of equal elements preserve their relative order.
     """
-    return wrap_axiswise_call(jnp.argsort, a, axis, single_axis_only=True)
+    return wrap_axiswise_call(jnp.argsort, a, axis, single_axis_only=True, stable=stable)
 
 
 # elemwise binary ops

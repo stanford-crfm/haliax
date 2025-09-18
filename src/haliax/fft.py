@@ -1,3 +1,7 @@
+# Copyright 2025 The Levanter Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Named wrappers around :mod:`jax.numpy.fft`.
 
 These functions mirror the behaviour of their :mod:`jax.numpy.fft` counterparts
@@ -42,7 +46,6 @@ import jax.numpy.fft as jfft
 
 from .axis import Axis, AxisSelector, AxisSelection
 from .core import NamedArray
-
 
 AxisSizeLike = int | Axis | None
 AxisMapping = Mapping[AxisSelector, AxisSizeLike]

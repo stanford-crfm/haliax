@@ -623,8 +623,8 @@ class NamedArray(metaclass=NamedArrayMeta):
     def argmin(self, axis: Optional[AxisSelector]) -> "NamedArray":  # pragma: no cover
         return haliax.argmin(self, axis=axis)
 
-    def argsort(self, axis: AxisSelector) -> "NamedArray":  # pragma: no cover
-        return haliax.argsort(self, axis=axis)
+    def argsort(self, axis: AxisSelector | None, *, stable: bool = False) -> "NamedArray":  # pragma: no cover
+        return haliax.argsort(self, axis=axis, stable=stable)
 
     def astype(self, dtype) -> "NamedArray":  # pragma: no cover
         return NamedArray(self.array.astype(dtype), self.axes)
