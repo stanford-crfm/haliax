@@ -1,9 +1,13 @@
+# Copyright 2025 The Levanter Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+
 import typing as t
 from typing import Optional, Sequence
 
 import jax
 import jax.numpy as jnp
-
 
 try:
     from jax.typing import DTypeLike
@@ -44,7 +48,9 @@ from .axis import (
 )
 from .core import (
     NamedArray,
-    NamedArrayAxes, NamedArrayAxesSpec, NamedOrNumeric,
+    NamedArrayAxes,
+    NamedArrayAxesSpec,
+    NamedOrNumeric,
     are_shape_checks_enabled,
     broadcast_arrays,
     broadcast_axis,
@@ -78,6 +84,7 @@ from .ops import (
     trace,
     tril,
     triu,
+    nonzero,
     unique,
     unique_values,
     unique_counts,
@@ -89,6 +96,7 @@ from .ops import (
     bincount,
     where,
 )
+
 from .poly import (
     poly,
     polyadd,
@@ -103,6 +111,19 @@ from .poly import (
     trim_zeros,
     vander,
 )
+
+from .fft import (
+    fft,
+    fftfreq,
+    fftshift,
+    hfft,
+    ifft,
+    ifftshift,
+    ihfft,
+    irfft,
+    rfft,
+    rfftfreq,
+)
 from .partitioning import auto_sharded, axis_mapping, fsdp, named_jit, shard, shard_with_axis_mapping
 from .specialized_fns import top_k
 from .types import Scalar
@@ -115,7 +136,6 @@ from .wrap import (
     wrap_elemwise_unary,
     wrap_reduction_call,
 )
-
 
 T = t.TypeVar("T")
 A = t.TypeVar("A", Scalar, NamedArray, jnp.ndarray)
@@ -711,7 +731,9 @@ def nanmean(
     where: Optional[NamedArray] = None,
     dtype: Optional[DTypeLike] = None,
 ) -> NamedArray:
-    return wrap_reduction_call(jnp.nanmean, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype)
+    return wrap_reduction_call(
+        jnp.nanmean, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype
+    )
 
 
 def nanmin(
@@ -730,7 +752,9 @@ def nanprod(
     where: Optional[NamedArray] = None,
     dtype: Optional[DTypeLike] = None,
 ) -> NamedArray:
-    return wrap_reduction_call(jnp.nanprod, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype)
+    return wrap_reduction_call(
+        jnp.nanprod, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype
+    )
 
 
 def nanstd(
@@ -741,7 +765,9 @@ def nanstd(
     ddof: int = 0,
     dtype: Optional[DTypeLike] = None,
 ) -> NamedArray:
-    return wrap_reduction_call(jnp.nanstd, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype, ddof=ddof)
+    return wrap_reduction_call(
+        jnp.nanstd, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype, ddof=ddof
+    )
 
 
 def nansum(
@@ -751,7 +777,9 @@ def nansum(
     where: Optional[NamedArray] = None,
     dtype: Optional[DTypeLike] = None,
 ) -> NamedArray:
-    return wrap_reduction_call(jnp.nansum, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype)
+    return wrap_reduction_call(
+        jnp.nansum, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype
+    )
 
 
 def nanvar(
@@ -762,7 +790,9 @@ def nanvar(
     ddof: int = 0,
     dtype: Optional[DTypeLike] = None,
 ) -> NamedArray:
-    return wrap_reduction_call(jnp.nanvar, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype, ddof=ddof)
+    return wrap_reduction_call(
+        jnp.nanvar, array, axis, where, single_axis_only=False, supports_where=True, dtype=dtype, ddof=ddof
+    )
 
 
 # "Normalization" functions that use an axis but don't change the shape
@@ -803,17 +833,21 @@ def sort(a: NamedArray, axis: AxisSelector) -> NamedArray:
     return wrap_axiswise_call(jnp.sort, a, axis, single_axis_only=True)
 
 
-def argsort(a: NamedArray, axis: AxisSelector) -> NamedArray:
+def argsort(a: NamedArray, axis: AxisSelector | None, *, stable: bool = False) -> NamedArray:
     """
     Named version of [jax.numpy.argsort](https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.argsort.html).
 
     If `axis` is None, the returned array will be a 1D array of indices that would sort the flattened array,
     identical to `jax.numpy.argsort(a.array)`.
+
+    Args:
+        stable: If ``True``, ensures that the indices of equal elements preserve their relative order.
     """
-    return wrap_axiswise_call(jnp.argsort, a, axis, single_axis_only=True)
+    return wrap_axiswise_call(jnp.argsort, a, axis, single_axis_only=True, stable=stable)
 
 
 # elemwise binary ops
+
 
 # Note that all the heavy lifting is done by the `wrap_elemwise_binary` decorator
 @wrap_elemwise_binary
@@ -1207,6 +1241,7 @@ __all__ = [
     "map",
     "vmap",
     "trace",
+    "nonzero",
     "where",
     "unique",
     "unique_values",
@@ -1232,6 +1267,16 @@ __all__ = [
     "roots",
     "trim_zeros",
     "vander",
+    "fft",
+    "ifft",
+    "hfft",
+    "ihfft",
+    "rfft",
+    "irfft",
+    "fftfreq",
+    "rfftfreq",
+    "fftshift",
+    "ifftshift",
     "add",
     "arctan2",
     "bitwise_and",

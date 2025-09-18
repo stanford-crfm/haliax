@@ -1,3 +1,8 @@
+# Copyright 2025 The Levanter Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+
 from typing import Optional, Protocol
 
 import jax
@@ -140,13 +145,11 @@ class ReductionFunction(Protocol):
         axis: Optional[AxisSelection] = None,
         where: Optional[NamedArray] = None,
         **kwargs,
-    ) -> NamedArray:
-        ...
+    ) -> NamedArray: ...
 
 
 class SimpleReductionFunction(Protocol):
-    def __call__(self, array: NamedArray, axis: Optional[AxisSelector] = None, **kwargs) -> NamedArray:
-        ...
+    def __call__(self, array: NamedArray, axis: Optional[AxisSelector] = None, **kwargs) -> NamedArray: ...
 
 
 __all__ = [
