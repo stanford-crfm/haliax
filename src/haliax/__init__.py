@@ -89,6 +89,20 @@ from .ops import (
     bincount,
     where,
 )
+from .poly import (
+    poly,
+    polyadd,
+    polysub,
+    polymul,
+    polydiv,
+    polyint,
+    polyder,
+    polyval,
+    polyfit,
+    roots,
+    trim_zeros,
+    vander,
+)
 from .partitioning import auto_sharded, axis_mapping, fsdp, named_jit, shard, shard_with_axis_mapping
 from .specialized_fns import top_k
 from .types import Scalar
@@ -1206,6 +1220,18 @@ __all__ = [
     "clip",
     "tril",
     "triu",
+    "poly",
+    "polyadd",
+    "polysub",
+    "polymul",
+    "polydiv",
+    "polyint",
+    "polyder",
+    "polyval",
+    "polyfit",
+    "roots",
+    "trim_zeros",
+    "vander",
     "add",
     "arctan2",
     "bitwise_and",
