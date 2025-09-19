@@ -1,3 +1,7 @@
+# Copyright 2025 The Levanter Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
 import jax.numpy as jnp
 from typing import cast, no_type_check
 import haliax as hax
@@ -101,7 +105,6 @@ def test_polyval_polyfit():
     exp_coeffs, exp_cov = jnp.polyfit(x.array, y.array, 3, cov=True)
     _assert_coefficients(coeffs_cov, exp_coeffs, X)  # type: ignore[union-attr]
     _assert_covariance_matrix(cov, coeffs_cov.axes[0], exp_cov)  # type: ignore[union-attr]
-
 
 
 def test_poly_roots_trim_vander():
