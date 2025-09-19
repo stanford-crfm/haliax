@@ -1,3 +1,7 @@
+# Copyright 2025 The Levanter Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Polynomial helpers for :mod:`haliax`.
 
 This module provides NamedArray-aware wrappers around :mod:`jax.numpy`'s
@@ -151,8 +155,7 @@ def polyfit(
     full: Literal[False] = ...,
     w: NamedArray | ArrayLike | None = ...,
     cov: Literal[False] = ...,
-) -> NamedArray:
-    ...
+) -> NamedArray: ...
 
 
 @overload
@@ -164,8 +167,7 @@ def polyfit(
     full: Literal[True] = ...,
     w: NamedArray | ArrayLike | None = ...,
     cov: Literal[False] = ...,
-) -> tuple[NamedArray, Array, Array, Array, Array]:
-    ...
+) -> tuple[NamedArray, Array, Array, Array, Array]: ...
 
 
 @overload
@@ -177,8 +179,7 @@ def polyfit(
     full: Literal[False] = ...,
     w: NamedArray | ArrayLike | None = ...,
     cov: Literal[True] = ...,
-) -> tuple[NamedArray, NamedArray]:
-    ...
+) -> tuple[NamedArray, NamedArray]: ...
 
 
 @overload
@@ -190,8 +191,7 @@ def polyfit(
     full: Literal[True] = ...,
     w: NamedArray | ArrayLike | None = ...,
     cov: Literal[True] = ...,
-) -> tuple[NamedArray, Array, Array, Array, Array]:
-    ...
+) -> tuple[NamedArray, Array, Array, Array, Array]: ...
 
 
 def polyfit(
